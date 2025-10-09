@@ -236,7 +236,7 @@ describe('Logger', () => {
       logger.banner();
       expect(consoleLogSpy).toHaveBeenCalled();
       const output = consoleLogSpy.mock.calls[0][0];
-      expect(output).toContain('CLAUDIOMIRO v1.1');
+      expect(output).toContain('CLAUDIOMIRO v1.3');
       expect(output).toContain('AI-Powered Development Agent');
     });
 

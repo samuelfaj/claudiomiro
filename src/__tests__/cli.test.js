@@ -732,7 +732,7 @@ describe('CLI - Error handling', () => {
     expect(processExitSpy).toHaveBeenCalledWith(1);
   });
 
-  test('should exit when dependency graph is incomplete', async () => {
+  test('should regenerate dependencies when dependency graph is incomplete', async () => {
     process.argv = ['node', 'cli.js', '--steps=2'];
 
     state.folder = '/test/folder';
@@ -753,7 +753,6 @@ describe('CLI - Error handling', () => {
 
     await init();
 
-    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('no dependency graph'));
-    expect(processExitSpy).toHaveBeenCalledWith(1);
+    expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Dependency graph incomplete or invalid. Regenerating dependencies'));
   });
 });
