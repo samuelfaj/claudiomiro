@@ -4,7 +4,7 @@ const os = require('os');
 const { spawn } = require('child_process');
 const logger = require('../../logger');
 const state = require('../config/state');
-const { processClaudeMessage } = require('./claude-logger');
+const { processGeminiMessage } = require('./gemini-logger');
 const { ParallelStateManager } = require('./parallel-state-manager');
 
 const overwriteBlock = (lines) => {
@@ -18,34 +18,34 @@ const overwriteBlock = (lines) => {
     process.stdout.write(`\x1b[${lines}A`);
   }
 
-const runClaude = (text, taskName = null) => {
+const runGemini = (text, taskName = null) => {
     return new Promise((resolve, reject) => {
         const stateManager = taskName ? ParallelStateManager.getInstance() : null;
         const suppressStreamingLogs = Boolean(taskName) && stateManager && typeof stateManager.isUIRendererActive === 'function' && stateManager.isUIRendererActive();
         // Create temporary file for the prompt
-        const tmpFile = path.join(os.tmpdir(), `claudiomiro-prompt-${Date.now()}.txt`);
+        const tmpFile = path.join(os.tmpdir(), `claudiomiro-gemini-${Date.now()}.txt`);
         fs.writeFileSync(tmpFile, text, 'utf-8');
 
         // Use sh to execute command with cat substitution
-        const command = `claude --dangerously-skip-permissions -p "$(cat '${tmpFile}')" --output-format stream-json --verbose`;
+        const command = `gemini --prompt "$(cat '${tmpFile}')" --output-format json`;
 
         logger.stopSpinner();
-        logger.command(`claude --dangerously-skip-permissions ...`);
+        logger.command(`gemini --prompt ... --output-format json`);
         logger.separator();
         logger.newline();
 
-        const claude = spawn('sh', ['-c', command], {
+        const gemini = spawn('sh', ['-c', command], {
             cwd: state.folder,
             stdio: ['ignore', 'pipe', 'pipe']
         });
 
-        const logFilePath = path.join(state.claudiomiroFolder, 'log.txt');
+        const logFilePath = path.join(state.claudiomiroFolder, 'gemini-log.txt');
         const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
 
         // Log separator with timestamp
         const timestamp = new Date().toISOString();
         logStream.write(`\n\n${'='.repeat(80)}\n`);
-        logStream.write(`[${timestamp}] Claude execution started\n`);
+        logStream.write(`[${timestamp}] Gemini execution started\n`);
         logStream.write(`${'='.repeat(80)}\n\n`);
 
         let buffer = '';
@@ -53,7 +53,7 @@ const runClaude = (text, taskName = null) => {
         let overwriteBlockLines = 0;
 
         // Captura stdout e processa JSON streaming
-        claude.stdout.on('data', (data) => {
+        gemini.stdout.on('data', (data) => {
             const output = data.toString();
             // Adiciona ao buffer
             buffer += output;
@@ -79,7 +79,7 @@ const runClaude = (text, taskName = null) => {
                 }
 
                 // Imprime cabeçalho
-                console.log(`💬 Claude:`);
+                console.log(`🤖 Gemini:`);
                 lineCount++;
 
                 // Processa e imprime o texto linha por linha
@@ -102,10 +102,10 @@ const runClaude = (text, taskName = null) => {
             }
 
             for (const line of lines) {
-                const text = processClaudeMessage(line);
+                const text = processGeminiMessage(line);
                 if(text){
                     log(text);
-                    // Update state manager with Claude message if taskName provided
+                    // Update state manager with Gemini message if taskName provided
                     if (stateManager && taskName) {
                         stateManager.updateClaudeMessage(taskName, text);
                     }
@@ -117,14 +117,14 @@ const runClaude = (text, taskName = null) => {
         });
 
         // Captura stderr
-        claude.stderr.on('data', (data) => {
+        gemini.stderr.on('data', (data) => {
             const output = data.toString();
             // process.stderr.write(output);
             logStream.write('[STDERR] ' + output);
         });
 
         // Quando o processo terminar
-        claude.on('close', (code) => {
+        gemini.on('close', (code) => {
             // Clean up temporary file
             try {
                 if (fs.existsSync(tmpFile)) {
@@ -136,25 +136,24 @@ const runClaude = (text, taskName = null) => {
 
             logger.newline();
             logger.newline();
-            
-            logStream.write(`\n\n[${new Date().toISOString()}] Claude execution completed with code ${code}\n`);
-            logStream.end();
 
+            logStream.write(`\n\n[${new Date().toISOString()}] Gemini execution completed with code ${code}\n`);
+            logStream.end();
 
             logger.newline();
             logger.separator();
 
             if (code !== 0) {
-                logger.error(`Claude exited with code ${code}`);
-                reject(new Error(`Claude exited with code ${code}`));
+                logger.error(`Gemini exited with code ${code}`);
+                reject(new Error(`Gemini exited with code ${code}`));
             } else {
-                logger.success('Claude execution completed');
+                logger.success('Gemini execution completed');
                 resolve();
             }
         });
 
         // Tratamento de erro
-        claude.on('error', (error) => {
+        gemini.on('error', (error) => {
             // Clean up temporary file on error
             try {
                 if (fs.existsSync(tmpFile)) {
@@ -166,29 +165,14 @@ const runClaude = (text, taskName = null) => {
 
             logStream.write(`\n\nERROR: ${error.message}\n`);
             logStream.end();
-            logger.error(`Failed to execute Claude: ${error.message}`);
+            logger.error(`Failed to execute Gemini: ${error.message}`);
             reject(error);
         });
     });
 };
 
-const executeClaude = (text, taskName = null) => {
-    if (state.executorType === 'codex') {
-        const { executeCodex } = require('./codex-executor');
-        return executeCodex(text, taskName);
-    }
-
-    if (state.executorType === 'deep-seek') {
-        const { executeDeepSeek } = require('./deep-seek-executor');
-        return executeDeepSeek(text, taskName);
-    }
-
-    if (state.executorType === 'gemini') {
-        const { executeGemini } = require('./gemini-executor');
-        return executeGemini(text, taskName);
-    }
-
-    return runClaude(text, taskName);
+const executeGemini = (text, taskName = null) => {
+    return runGemini(text, taskName);
 };
 
-module.exports = { executeClaude };
+module.exports = { executeGemini };

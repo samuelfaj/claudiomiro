@@ -11,6 +11,7 @@ Turn days of complex development into a fully automated process — without sacr
 - ✅ `claudiomiro --claude`
 - ✅ `claudiomiro --codex`
 - ✅ `claudiomiro --deep-seek` [(how to)](./DEEPSEEK.md)
+- ✅ `claudiomiro --gemini`
 
 **Examples:**
 - 💬 [“Implement Express.js with some basic routes and JWT.”](https://github.com/samuelfaj/claudiomiro-express-example) - Claude
@@ -165,6 +166,7 @@ claudiomiro --prompt="Add feature" --mode=auto     # Default: parallelism-focuse
 # Choose AI executor (default: Claude)
 claudiomiro --prompt="Migrate to microfrontends" --codex
 claudiomiro --prompt="Run security audit" --claude
+claudiomiro --prompt="Build web application" --gemini
 
 # Run only specific steps
 claudiomiro --steps=2,3,4  # Skip planning, only implement
