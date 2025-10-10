@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 
-const logger = require('./logger');
-const { init } = require('./src/cli');
+const logger = require('./logger.js');
+const { init } = require('./dist/cli.js');
 
-init().catch((error) => {
-    logger.newline();
-    logger.failSpinner('An error occurred');
-    logger.error(error.message);
-    logger.newline();
+init().catch(async (error) => {
+    await logger.newline();
+    await logger.failSpinner('An error occurred');
+    await logger.error(error.message);
+    await logger.newline();
     process.exit(1);
 });

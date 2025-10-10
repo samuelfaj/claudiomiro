@@ -351,6 +351,42 @@ Traditional AI assistants:
 
 Issues and PRs welcome! Please check the [issues page](https://github.com/yourusername/claudiomiro/issues).
 
+## TypeScript Migration
+
+This project has been configured for gradual TypeScript migration. The current setup supports:
+
+### Current Configuration
+- **TypeScript** with strict mode enabled
+- **ESLint** with TypeScript support
+- **Jest** configured for TypeScript testing
+- **Build scripts** for TypeScript compilation
+
+### Migration Strategy
+1. **Incremental Migration**: Existing `.js` files can be gradually converted to `.ts`
+2. **Type Safety**: Strict TypeScript configuration ensures type safety
+3. **Mixed Codebase**: Both `.js` and `.ts` files can coexist during migration
+
+### Available Commands
+```bash
+# Build TypeScript
+npm run build
+
+# Type checking only
+npm run typecheck
+
+# Lint TypeScript/JavaScript
+npm run lint
+
+# Auto-fix linting issues
+npm run lint:fix
+```
+
+### Next Steps for Migration
+1. Convert individual `.js` files to `.ts` incrementally
+2. Run `npm run typecheck` to identify type issues
+3. Use `npm run lint` to maintain code quality
+4. Update tests to work with TypeScript
+
 ## License
 
 ISC

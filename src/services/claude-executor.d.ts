@@ -1,0 +1,1 @@
+export declare function executeClaude(text: string, taskName?: string | null): Promise<void>;

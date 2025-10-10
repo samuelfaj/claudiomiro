@@ -1,13 +1,19 @@
 {
   "name": "claudiomiro",
   "version": "1.4.0",
-  "main": "index.js",
+  "main": "dist/cli.js",
   "bin": {
-    "claudiomiro": "./index.js"
+    "claudiomiro": "./dist/cli.js"
   },
   "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "typecheck": "tsc --noEmit",
     "test": "npx jest",
-    "test:coverage": "jest --coverage"
+    "test:coverage": "jest --coverage",
+    "dev": "npm run build:watch"
   },
   "keywords": [
     "cli",
@@ -29,7 +35,14 @@
     "prompts": "^2.4.2"
   },
   "devDependencies": {
+    "@eslint/js": "^9.37.0",
     "@types/jest": "^30.0.0",
-    "jest": "^29.7.0"
+    "@types/node": "^24.7.1",
+    "@typescript-eslint/eslint-plugin": "^8.46.0",
+    "@typescript-eslint/parser": "^8.46.0",
+    "eslint": "^9.37.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.4.4",
+    "typescript": "^5.9.3"
   }
 }

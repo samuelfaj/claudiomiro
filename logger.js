@@ -1,8 +1,8 @@
-const chalk = require('chalk');
-const ora = require('ora');
-const logSymbols = require('log-symbols');
-const boxen = require('boxen');
-const gradient = require('gradient-string');
+import chalk from 'chalk';
+import ora from 'ora';
+import logSymbols from 'log-symbols';
+import boxen from 'boxen';
+import gradient from 'gradient-string';
 
 class Logger {
     constructor() {
@@ -10,9 +10,9 @@ class Logger {
         this.indentLevel = 0;
     }
 
-    shouldSuppressOutput() {
+    async shouldSuppressOutput() {
         try {
-            const managerModule = require('./src/services/parallel-state-manager');
+            const managerModule = await import('./src/services/parallel-state-manager');
             const ParallelStateManager = managerModule.ParallelStateManager || managerModule;
             const instance = ParallelStateManager && ParallelStateManager.instance;
             return Boolean(instance && typeof instance.isUIRendererActive === 'function' && instance.isUIRendererActive());
@@ -21,8 +21,8 @@ class Logger {
         }
     }
 
-    withOutput(action) {
-        if (this.shouldSuppressOutput()) {
+    async withOutput(action) {
+        if (await this.shouldSuppressOutput()) {
             return;
         }
         action();
@@ -33,7 +33,7 @@ class Logger {
     }
 
     // Banner inicial
-    banner() {
+    async banner() {
         const title = gradient.pastel.multiline([
             '╔═══════════════════════════════════════╗',
             '║                                       ║',
@@ -42,49 +42,49 @@ class Logger {
             '║                                       ║',
             '╚═══════════════════════════════════════╝'
         ].join('\n'));
-        this.withOutput(() => {
+        await this.withOutput(() => {
             console.log('\n' + title + '\n');
         });
     }
 
     // Logs básicos
-    info(message) {
-        this.withOutput(() => {
+    async info(message) {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}${logSymbols.info} ${chalk.cyan(message)}`);
         });
     }
 
-    success(message) {
-        this.withOutput(() => {
+    async success(message) {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}${logSymbols.success} ${chalk.green(message)}`);
         });
     }
 
-    warning(message) {
-        this.withOutput(() => {
+    async warning(message) {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}${logSymbols.warning} ${chalk.yellow(message)}`);
         });
     }
 
-    error(message) {
-        this.withOutput(() => {
+    async error(message) {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}${logSymbols.error} ${chalk.red(message)}`);
         });
     }
 
     // Log de step/fase
-    step(task, tasks, number, message) {
+    async step(task, tasks, number, message) {
         const tasksText = chalk.bold.white(`[TASK ${task}/${tasks}]`);
 
         const stepText = chalk.bold.white(`[STEP ${number}]`);
         const arrow = chalk.gray('→');
-        this.withOutput(() => {
+        await this.withOutput(() => {
             console.log(`\n${tasksText} ${stepText} ${arrow} ${chalk.cyan(message)}\n`);
         });
     }
 
     // Box para mensagens importantes
-    box(message, options = {}) {
+    async box(message, options = {}) {
         const boxConfig = {
             padding: 1,
             margin: 1,
@@ -92,14 +92,14 @@ class Logger {
             borderColor: 'cyan',
             ...options
         };
-        this.withOutput(() => {
+        await this.withOutput(() => {
             console.log(boxen(message, boxConfig));
         });
     }
 
     // Spinner para operações em progresso
-    startSpinner(text) {
-        if (this.shouldSuppressOutput()) {
+    async startSpinner(text) {
+        if (await this.shouldSuppressOutput()) {
             this.stopSpinner();
             return;
         }
@@ -113,8 +113,8 @@ class Logger {
         }).start();
     }
 
-    updateSpinner(text) {
-        if (this.shouldSuppressOutput()) {
+    async updateSpinner(text) {
+        if (await this.shouldSuppressOutput()) {
             return;
         }
         if (this.spinner) {
@@ -122,9 +122,9 @@ class Logger {
         }
     }
 
-    succeedSpinner(text) {
+    async succeedSpinner(text) {
         if (this.spinner) {
-            if (this.shouldSuppressOutput()) {
+            if (await this.shouldSuppressOutput()) {
                 this.spinner.stop();
             } else {
                 this.spinner.succeed(chalk.green(text));
@@ -133,9 +133,9 @@ class Logger {
         }
     }
 
-    failSpinner(text) {
+    async failSpinner(text) {
         if (this.spinner) {
-            if (this.shouldSuppressOutput()) {
+            if (await this.shouldSuppressOutput()) {
                 this.spinner.stop();
             } else {
                 this.spinner.fail(chalk.red(text));
@@ -152,22 +152,22 @@ class Logger {
     }
 
     // Log de diretório/arquivo
-    path(message) {
-        this.withOutput(() => {
+    async path(message) {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}${chalk.gray('📁')} ${chalk.blue(message)}`);
         });
     }
 
     // Log de comando executado
-    command(cmd) {
-        this.withOutput(() => {
+    async command(cmd) {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}${chalk.gray('$')} ${chalk.magenta(cmd)}`);
         });
     }
 
     // Separador visual
-    separator() {
-        this.withOutput(() => {
+    async separator() {
+        await this.withOutput(() => {
             console.log(chalk.gray('─'.repeat(50)));
         });
     }
@@ -188,25 +188,25 @@ class Logger {
     }
 
     // Log de tarefa
-    task(message) {
-        this.withOutput(() => {
+    async task(message) {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}${chalk.gray('▸')} ${chalk.white(message)}`);
         });
     }
 
     // Log de subtarefa
-    subtask(message) {
-        this.withOutput(() => {
+    async subtask(message) {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}  ${chalk.gray('•')} ${chalk.gray(message)}`);
         });
     }
 
     // Log de progresso
-    progress(current, total, message = '') {
+    async progress(current, total, message = '') {
         const percentage = Math.round((current / total) * 100);
         const bar = this.createProgressBar(percentage);
         const msg = message ? ` ${chalk.gray(message)}` : '';
-        this.withOutput(() => {
+        await this.withOutput(() => {
             console.log(`${this.getIndent()}${bar} ${chalk.cyan(`${percentage}%`)}${msg}`);
         });
     }
@@ -219,19 +219,19 @@ class Logger {
     }
 
     // Limpar console
-    clear() {
-        if (this.shouldSuppressOutput()) {
+    async clear() {
+        if (await this.shouldSuppressOutput()) {
             return;
         }
         console.clear();
     }
 
     // Nova linha
-    newline() {
-        this.withOutput(() => {
+    async newline() {
+        await this.withOutput(() => {
             console.log();
         });
     }
 }
 
-module.exports = new Logger();
+export default new Logger();

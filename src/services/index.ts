@@ -1,0 +1,30 @@
+// Service exports for TypeScript migration
+// Re-export all services with proper TypeScript syntax
+
+// Executors
+export { ClaudeExecutor, executeClaude } from './claude-executor';
+export { GeminiExecutor, executeGemini } from './gemini-executor';
+export { CodexExecutor, executeCodex } from './codex-executor';
+export { DeepSeekExecutor, executeDeepSeek } from './deep-seek-executor';
+export { DAGExecutor } from './dag-executor';
+export type { DAGExecutorConfig, TaskConfig, TaskState } from './dag-executor';
+
+// Loggers
+export { ClaudeLogger } from './claude-logger';
+export type { ClaudeMessage, MessageContent as ClaudeMessageContent, ToolInput as ClaudeToolInput } from './claude-logger';
+export { GeminiLogger } from './gemini-logger';
+export { CodexLogger } from './codex-logger';
+export type { CodexEvent, CodexItem } from './codex-logger';
+export { DeepSeekLogger } from './deep-seek-logger';
+export type { DeepSeekMessage, MessageContent as DeepSeekMessageContent, ToolInput as DeepSeekToolInput } from './deep-seek-logger';
+
+// Core Services
+export { FileManager } from './file-manager';
+export type { FileManagerInterface, FileOperationResult } from './file-manager';
+export { ParallelStateManager } from './parallel-state-manager';
+export type { ParallelStateManagerInterface, TaskConfig as ParallelTaskConfig, TaskState as ParallelTaskState, TaskStatus as ParallelTaskStatus } from './parallel-state-manager';
+export { PromptReader } from './prompt-reader';
+export type { PromptReaderInterface } from './prompt-reader';
+
+// Parallel UI Renderer (mixed JS/TS)
+export { default as ParallelUIRenderer } from './parallel-ui-renderer';
