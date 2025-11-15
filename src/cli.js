@@ -41,13 +41,17 @@ function findSubtasks(mainTask, allTasks) {
 }
 
 const chooseAction = async (i) => {
+    // Verifica se --continue foi passado (para continuar após responder perguntas de clarificação)
+    const continueFlag = process.argv.includes('--continue');
+
     // Verifica se --prompt foi passado e extrai o valor
     const promptArg = process.argv.find(arg => arg.startsWith('--prompt='));
     const promptText = promptArg ? promptArg.split('=').slice(1).join('=').replace(/^["']|["']$/g, '') : null;
 
 
     // Verifica se --fresh foi passado (ou se --prompt foi usado, que automaticamente ativa --fresh)
-    const shouldStartFresh = process.argv.includes('--fresh') || promptText !== null;
+    // IMPORTANTE: --continue não deve ativar --fresh
+    const shouldStartFresh = !continueFlag && (process.argv.includes('--fresh') || promptText !== null);
 
     // Verifica se --push=false foi passado
     const shouldPush = !process.argv.some(arg => arg === '--push=false');
@@ -112,6 +116,7 @@ const chooseAction = async (i) => {
     // Filtra os argumentos para pegar apenas o diretório
     const args = process.argv.slice(2).filter(arg =>
         arg !== '--fresh' &&
+        arg !== '--continue' &&
         !arg.startsWith('--push') &&
         arg !== '--same-branch' &&
         !arg.startsWith('--prompt') &&
@@ -153,6 +158,29 @@ const chooseAction = async (i) => {
     if (allowedSteps && i === 0) {
         logger.info(`Running only steps: ${allowedSteps.join(', ')}`);
         logger.newline();
+    }
+
+    // Handle --continue flag (resuming after clarification)
+    if (continueFlag && i === 0) {
+        const pendingClarificationPath = path.join(state.claudiomiroFolder, 'PENDING_CLARIFICATION.flag');
+        const clarificationAnswersPath = path.join(state.claudiomiroFolder, 'CLARIFICATION_ANSWERS.json');
+
+        if (!fs.existsSync(pendingClarificationPath)) {
+            logger.error('No pending clarification found. Use --continue only after answering CLARIFICATION_QUESTIONS.json');
+            process.exit(1);
+        }
+
+        if (!fs.existsSync(clarificationAnswersPath)) {
+            logger.error('Please create CLARIFICATION_ANSWERS.json with your responses before continuing.');
+            logger.info(`Expected location: ${clarificationAnswersPath}`);
+            process.exit(1);
+        }
+
+        logger.info('Resuming from clarification phase...');
+        logger.newline();
+
+        // Continue with step0 - it will detect the answers and proceed to Phase 2
+        return { step: step0(sameBranch, null) };
     }
 
     if(shouldStartFresh && i === 0){
