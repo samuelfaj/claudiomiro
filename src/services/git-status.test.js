@@ -175,5 +175,174 @@ D oldfile.js
         });
       });
     });
+
+    test('should accumulate stderr and include it in error message', async () => {
+      return new Promise((resolve) => {
+        const stderrOutput = 'fatal: not a git repository\n';
+        let stderrDataHandler;
+        let closeHandler;
+
+        // Capture the stderr handler
+        mockChildProcess.stderr.on.mockImplementation((event, handler) => {
+          if (event === 'data') {
+            stderrDataHandler = handler;
+          }
+        });
+
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            closeHandler = handler;
+          }
+        });
+
+        // Simulate stderr data and error exit code
+        setTimeout(() => {
+          stderrDataHandler(stderrOutput);
+          setTimeout(() => closeHandler(128), 10);
+        }, 10);
+
+        gitStatus().catch((error) => {
+          expect(error.message).toBe(stderrOutput);
+          resolve();
+        });
+      });
+    });
+
+    test('should handle multiple stderr data events', async () => {
+      return new Promise((resolve) => {
+        const stderrChunks = ['error: ', 'fatal: not a git repository\n', 'another error\n'];
+        let stderrDataHandler;
+        let closeHandler;
+
+        // Capture the stderr handler
+        mockChildProcess.stderr.on.mockImplementation((event, handler) => {
+          if (event === 'data') {
+            stderrDataHandler = handler;
+          }
+        });
+
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            closeHandler = handler;
+          }
+        });
+
+        // Simulate multiple stderr data events
+        setTimeout(() => {
+          stderrChunks.forEach(chunk => stderrDataHandler(chunk));
+          setTimeout(() => closeHandler(1), 10);
+        }, 10);
+
+        gitStatus().catch((error) => {
+          expect(error.message).toBe(stderrChunks.join(''));
+          resolve();
+        });
+      });
+    });
+
+    test('should handle empty stderr with non-zero exit code', async () => {
+      return new Promise((resolve) => {
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            setTimeout(() => handler(1), 0);
+          }
+        });
+
+        gitStatus().catch((error) => {
+          expect(error.message).toBe('');
+          resolve();
+        });
+      });
+    });
+
+    test('should handle large stderr output', async () => {
+      return new Promise((resolve) => {
+        const largeStderr = 'x'.repeat(10000) + '\n';
+        let stderrDataHandler;
+        let closeHandler;
+
+        mockChildProcess.stderr.on.mockImplementation((event, handler) => {
+          if (event === 'data') {
+            stderrDataHandler = handler;
+          }
+        });
+
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            closeHandler = handler;
+          }
+        });
+
+        setTimeout(() => {
+          stderrDataHandler(largeStderr);
+          setTimeout(() => closeHandler(1), 10);
+        }, 10);
+
+        gitStatus().catch((error) => {
+          expect(error.message).toBe(largeStderr);
+          resolve();
+        });
+      });
+    });
+
+    test('should handle git not initialized error', async () => {
+      return new Promise((resolve) => {
+        const notGitRepoError = 'fatal: not a git repository (or any of the parent directories): .git';
+        let stderrDataHandler;
+        let closeHandler;
+
+        mockChildProcess.stderr.on.mockImplementation((event, handler) => {
+          if (event === 'data') {
+            stderrDataHandler = handler;
+          }
+        });
+
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            closeHandler = handler;
+          }
+        });
+
+        setTimeout(() => {
+          stderrDataHandler(notGitRepoError);
+          setTimeout(() => closeHandler(128), 10);
+        }, 10);
+
+        gitStatus().catch((error) => {
+          expect(error.message).toBe(notGitRepoError);
+          resolve();
+        });
+      });
+    });
+
+    test('should handle permission denied error', async () => {
+      return new Promise((resolve) => {
+        const permissionError = 'fatal: unable to access \'.git\': Permission denied';
+        let stderrDataHandler;
+        let closeHandler;
+
+        mockChildProcess.stderr.on.mockImplementation((event, handler) => {
+          if (event === 'data') {
+            stderrDataHandler = handler;
+          }
+        });
+
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            closeHandler = handler;
+          }
+        });
+
+        setTimeout(() => {
+          stderrDataHandler(permissionError);
+          setTimeout(() => closeHandler(1), 10);
+        }, 10);
+
+        gitStatus().catch((error) => {
+          expect(error.message).toBe(permissionError);
+          resolve();
+        });
+      });
+    });
   });
 });

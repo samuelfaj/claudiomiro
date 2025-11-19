@@ -1,272 +1,385 @@
-const fs = require('fs');
-const path = require('path');
+const readline = require('readline');
+const chalk = require('chalk');
 const logger = require('../utils/logger');
-const state = require('../config/state');
-const { readPrompt } = require('./prompt-reader');
+const { getMultilineInput, getSimpleInput, askClarificationQuestions } = require('./prompt-reader');
 
-// Mock modules
-jest.mock('fs');
-jest.mock('path');
+// Mock chalk comprehensively
+jest.mock('chalk', () => ({
+  bold: {
+    cyan: jest.fn((text) => `cyan-bold: ${text}`),
+    yellow: jest.fn((text) => `yellow-bold: ${text}`),
+    white: jest.fn((text) => `white-bold: ${text}`),
+    green: jest.fn((text) => `green-bold: ${text}`)
+  },
+  cyan: jest.fn((text) => `cyan: ${text}`),
+  white: jest.fn((text) => `white: ${text}`),
+  gray: jest.fn((text) => `gray: ${text}`),
+  yellow: jest.fn((text) => `yellow: ${text}`),
+  green: jest.fn((text) => `green: ${text}`),
+  blue: jest.fn((text) => `blue: ${text}`),
+  red: jest.fn((text) => `red: ${text}`),
+  magenta: jest.fn((text) => `magenta: ${text}`),
+  reset: jest.fn((text) => text)
+}));
+
+// Mock all other dependencies
+jest.mock('readline');
 jest.mock('../utils/logger');
-jest.mock('../config/state');
 
 describe('prompt-reader', () => {
+  let mockReadlineInterface;
+  let mockConsoleLog;
+  let mockProcessStdoutWrite;
+
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
 
-    // Setup default mocks
-    path.join.mockImplementation((...args) => args.join('/'));
-    state.claudiomiroFolder = '/test/.claudiomiro';
+    // Setup console mocks
+    mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
+    mockProcessStdoutWrite = jest.spyOn(process.stdout, 'write').mockImplementation();
+
+    // Setup mock readline interface
+    mockReadlineInterface = {
+      on: jest.fn(),
+      question: jest.fn(),
+      close: jest.fn()
+    };
+
+    readline.createInterface.mockReturnValue(mockReadlineInterface);
   });
 
-  describe('readPrompt', () => {
-    test('should read and return AI_PROMPT.md content when it exists', async () => {
-      const mockPromptContent = 'This is the AI prompt content';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(mockPromptContent);
+  afterEach(() => {
+    // Restore console mocks
+    mockConsoleLog.mockRestore();
+    mockProcessStdoutWrite.mockRestore();
+  });
 
-      const result = await readPrompt('testTask');
+  describe('getMultilineInput', () => {
+    test('should create readline interface with correct options', () => {
+      // Setup a basic mock that resolves immediately
+      mockReadlineInterface.on.mockImplementation((event, callback) => {
+        if (event === 'line') {
+          // Immediately trigger the double-enter condition
+          setTimeout(() => callback(''), 5);
+          setTimeout(() => callback(''), 10);
+        }
+      });
 
-      expect(fs.existsSync).toHaveBeenCalledWith('/test/.claudiomiro/testTask/AI_PROMPT.md');
-      expect(fs.readFileSync).toHaveBeenCalledWith('/test/.claudiomiro/testTask/AI_PROMPT.md', 'utf-8');
-      expect(result).toBe(mockPromptContent);
+      const promise = getMultilineInput();
+
+      expect(readline.createInterface).toHaveBeenCalledWith({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true
+      });
+      expect(mockReadlineInterface.on).toHaveBeenCalledWith('line', expect.any(Function));
+
+      return promise;
     });
 
-    test('should throw error when AI_PROMPT.md does not exist', async () => {
-      fs.existsSync.mockReturnValue(false);
+    test('should handle SIGINT cancellation', async () => {
+      const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 
-      await expect(readPrompt('testTask')).rejects.toThrow('AI_PROMPT.md not found for task: testTask');
+      mockReadlineInterface.on.mockImplementation((event, callback) => {
+        if (event === 'SIGINT') {
+          setTimeout(callback, 5);
+        }
+      });
+
+      // This test should not resolve, so we'll set a timeout
+      const promise = getMultilineInput();
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect(mockReadlineInterface.close).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Operation cancelled');
+      expect(mockProcessExit).toHaveBeenCalledWith(0);
+
+      mockProcessExit.mockRestore();
     });
 
-    test('should use correct path for task with special characters', async () => {
-      const mockPromptContent = 'Prompt content';
-      const taskName = 'task-with-special-chars_123';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(mockPromptContent);
+    test('should display formatted output', async () => {
+      mockReadlineInterface.on.mockImplementation((event, callback) => {
+        if (event === 'line') {
+          setTimeout(() => callback(''), 5);
+          setTimeout(() => callback(''), 10);
+        }
+      });
 
-      const result = await readPrompt(taskName);
+      await getMultilineInput();
 
-      expect(path.join).toHaveBeenCalledWith('/test/.claudiomiro', taskName, 'AI_PROMPT.md');
-      expect(result).toBe(mockPromptContent);
+      // Verify console output formatting was called
+      expect(mockConsoleLog).toHaveBeenCalled();
+      expect(mockProcessStdoutWrite).toHaveBeenCalled();
+    });
+  });
+
+  describe('getSimpleInput', () => {
+    test('should create readline interface and handle question', () => {
+      const mockAnswer = 'test answer';
+
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        setTimeout(() => callback(mockAnswer), 5);
+      });
+
+      const promise = getSimpleInput('Test question?');
+
+      expect(readline.createInterface).toHaveBeenCalledWith({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true
+      });
+      expect(mockReadlineInterface.question).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.any(Function)
+      );
+
+      return promise.then(result => {
+        expect(result).toBe(mockAnswer);
+      });
     });
 
-    test('should handle empty AI_PROMPT.md file', async () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue('');
+    test('should handle SIGINT cancellation', async () => {
+      const mockProcessExit = jest.spyOn(process, 'exit').mockImplementation();
 
-      const result = await readPrompt('testTask');
+      mockReadlineInterface.on.mockImplementation((event, callback) => {
+        if (event === 'SIGINT') {
+          setTimeout(callback, 5);
+        }
+      });
 
-      expect(result).toBe('');
+      const promise = getSimpleInput('Test?');
+
+      await new Promise(resolve => setTimeout(resolve, 20));
+
+      expect(mockReadlineInterface.close).toHaveBeenCalled();
+      expect(logger.error).toHaveBeenCalledWith('Operation cancelled');
+      expect(mockProcessExit).toHaveBeenCalledWith(0);
+
+      mockProcessExit.mockRestore();
     });
 
-    test('should handle AI_PROMPT.md with unicode content', async () => {
-      const unicodeContent = '🚀 Prompt with émojis and spëcial chars';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(unicodeContent);
+    test('should trim whitespace from answer', () => {
+      const mockAnswer = '  trimmed answer  ';
 
-      const result = await readPrompt('testTask');
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        setTimeout(() => callback(mockAnswer), 5);
+      });
 
-      expect(result).toBe(unicodeContent);
+      return getSimpleInput('Test?').then(result => {
+        expect(result).toBe('trimmed answer');
+      });
+    });
+  });
+
+  describe('askClarificationQuestions', () => {
+    // Mock getSimpleInput at the module level for these tests
+    let originalGetSimpleInput;
+
+    beforeEach(() => {
+      // Store original implementation
+      const promptReader = require('./prompt-reader');
+      originalGetSimpleInput = promptReader.getSimpleInput;
+
+      // Mock getSimpleInput
+      promptReader.getSimpleInput = jest.fn();
     });
 
-    test('should handle very long AI_PROMPT.md content', async () => {
-      const longContent = 'x'.repeat(100000);
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(longContent);
-
-      const result = await readPrompt('testTask');
-
-      expect(result).toBe(longContent);
-      expect(result.length).toBe(100000);
+    afterEach(() => {
+      // Restore original implementation
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput = originalGetSimpleInput;
     });
 
-    test('should handle task names with different formats', async () => {
-      const taskNames = [
-        'simple-task',
-        'task_with_underscores',
-        'task-with-dashes',
-        'Task123',
-        'TASK-NAME',
-        'task.with.dots',
-        'task with spaces'
+    test('should process JSON string questions and collect answers', async () => {
+      const questionsJson = JSON.stringify([
+        {
+          id: 1,
+          title: 'Test Question 1',
+          question: 'What is your preference?',
+          category: 'General'
+        }
+      ]);
+
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput.mockResolvedValue('Test answer');
+
+      const result = await askClarificationQuestions(questionsJson);
+
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.timestamp).toBeDefined();
+      expect(parsedResult.answers).toHaveLength(1);
+      expect(parsedResult.answers[0]).toEqual({
+        questionId: 1,
+        question: 'Test Question 1',
+        category: 'General',
+        answer: 'Test answer'
+      });
+      expect(promptReader.getSimpleInput).toHaveBeenCalledTimes(1);
+    });
+
+    test('should process object questions and collect answers', async () => {
+      const questionsObject = [
+        {
+          title: 'Object Question',
+          question: 'What should we do?'
+        }
       ];
 
-      const mockContent = 'Test prompt';
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput.mockResolvedValue('Object Answer');
 
-      for (const taskName of taskNames) {
-        fs.existsSync.mockReturnValue(true);
-        fs.readFileSync.mockReturnValue(mockContent);
+      const result = await askClarificationQuestions(questionsObject);
 
-        const result = await readPrompt(taskName);
-
-        expect(path.join).toHaveBeenCalledWith('/test/.claudiomiro', taskName, 'AI_PROMPT.md');
-        expect(result).toBe(mockContent);
-
-        // Reset mocks for next iteration
-        jest.clearAllMocks();
-        path.join.mockImplementation((...args) => args.join('/'));
-        state.claudiomiroFolder = '/test/.claudiomiro';
-      }
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.answers).toHaveLength(1);
+      expect(parsedResult.answers[0].questionId).toBe(1);
+      expect(parsedResult.answers[0].answer).toBe('Object Answer');
     });
 
-    test('should handle file system read errors', async () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockImplementation(() => {
-        throw new Error('Permission denied');
-      });
+    test('should handle multiple questions', async () => {
+      const questions = [
+        { title: 'Question 1', question: 'First?' },
+        { title: 'Question 2', question: 'Second?' }
+      ];
 
-      await expect(readPrompt('testTask')).rejects.toThrow('Permission denied');
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput
+        .mockResolvedValueOnce('Answer 1')
+        .mockResolvedValueOnce('Answer 2');
+
+      const result = await askClarificationQuestions(questions);
+
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.answers).toHaveLength(2);
+      expect(parsedResult.answers[0].answer).toBe('Answer 1');
+      expect(parsedResult.answers[1].answer).toBe('Answer 2');
+      expect(promptReader.getSimpleInput).toHaveBeenCalledTimes(2);
     });
 
-    test('should propagate fs.readFileSync errors with original message', async () => {
-      fs.existsSync.mockReturnValue(true);
-      const errorMessage = 'ENOENT: no such file or directory';
-      fs.readFileSync.mockImplementation(() => {
-        const error = new Error(errorMessage);
-        error.code = 'ENOENT';
-        throw error;
-      });
+    test('should throw error for malformed JSON string', async () => {
+      const malformedJson = '{ invalid json }';
 
-      await expect(readPrompt('testTask')).rejects.toThrow(errorMessage);
-    });
-
-    test('should use utf-8 encoding by default', async () => {
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue('content');
-
-      await readPrompt('testTask');
-
-      expect(fs.readFileSync).toHaveBeenCalledWith(
-        '/test/.claudiomiro/testTask/AI_PROMPT.md',
-        'utf-8'
+      await expect(askClarificationQuestions(malformedJson)).rejects.toThrow();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to parse CLARIFICATION_QUESTIONS.json')
       );
     });
 
-    test('should handle undefined claudiomiroFolder', async () => {
-      state.claudiomiroFolder = undefined;
+    test('should throw error when questions is not an array', async () => {
+      const notAnArray = { question: 'Not an array' };
 
-      await expect(readPrompt('testTask')).rejects.toThrow();
+      await expect(askClarificationQuestions(notAnArray)).rejects.toThrow();
+      expect(logger.error).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to parse CLARIFICATION_QUESTIONS.json')
+      );
     });
 
-    test('should handle null claudiomiroFolder', async () => {
-      state.claudiomiroFolder = null;
+    test('should handle empty questions array', async () => {
+      const emptyQuestions = [];
 
-      await expect(readPrompt('testTask')).rejects.toThrow();
+      const result = await askClarificationQuestions(emptyQuestions);
+
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.answers).toHaveLength(0);
+      expect(parsedResult.timestamp).toBeDefined();
     });
 
-    test('should construct correct path for nested task directories', async () => {
-      const nestedTask = 'parent/child/task';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue('nested prompt');
-
-      const result = await readPrompt(nestedTask);
-
-      expect(path.join).toHaveBeenCalledWith('/test/.claudiomiro', nestedTask, 'AI_PROMPT.md');
-      expect(result).toBe('nested prompt');
-    });
-
-    test('should handle task name with leading/trailing slashes', async () => {
-      const taskWithSlashes = '/testTask/';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue('prompt content');
-
-      const result = await readPrompt(taskWithSlashes);
-
-      expect(path.join).toHaveBeenCalledWith('/test/.claudiomiro', taskWithSlashes, 'AI_PROMPT.md');
-      expect(result).toBe('prompt content');
-    });
-
-    test('should handle AI_PROMPT.md with markdown formatting', async () => {
-      const markdownContent = `# AI Prompt
-
-## Task Description
-This is a **formatted** prompt with:
-- Lists
-- **Bold text**
-- *Italic text*
-
-\`\`\`javascript
-// Code blocks
-console.log('Hello');
-\`\`\``;
-
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(markdownContent);
-
-      const result = await readPrompt('testTask');
-
-      expect(result).toBe(markdownContent);
-      expect(result).toContain('# AI Prompt');
-      expect(result).toContain('**Bold text**');
-      expect(result).toContain('```javascript');
-    });
-
-    test('should handle AI_PROMPT.md with JSON content', async () => {
-      const jsonPrompt = JSON.stringify({
-        task: "Test task",
-        instructions: ["Step 1", "Step 2"],
-        requirements: {
-          language: "javascript",
-          framework: "react"
+    test('should handle questions with options', async () => {
+      const questionsWithOption = [
+        {
+          title: 'Choice Question',
+          question: 'Choose an option:',
+          options: [
+            { key: 'a', label: 'Option A', description: 'Description A' }
+          ]
         }
-      }, null, 2);
-
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(jsonPrompt);
-
-      const result = await readPrompt('testTask');
-
-      expect(result).toBe(jsonPrompt);
-      expect(() => JSON.parse(result)).not.toThrow();
-    });
-
-    test('should handle different state.claudiomiroFolder paths', async () => {
-      const folders = [
-        '/custom/path/.claudiomiro',
-        '/home/user/project/.claudiomiro',
-        'C:\\Users\\User\\Project\\.claudiomiro',
-        './.claudiomiro',
-        '../project/.claudiomiro'
       ];
 
-      for (const folder of folders) {
-        state.claudiomiroFolder = folder;
-        fs.existsSync.mockReturnValue(true);
-        fs.readFileSync.mockReturnValue('content');
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput.mockResolvedValue('a');
 
-        const result = await readPrompt('testTask');
+      const result = await askClarificationQuestions(questionsWithOption);
 
-        expect(path.join).toHaveBeenCalledWith(folder, 'testTask', 'AI_PROMPT.md');
-        expect(result).toBe('content');
-
-        // Reset for next iteration
-        jest.clearAllMocks();
-        path.join.mockImplementation((...args) => args.join('/'));
-      }
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.answers[0].answer).toBe('a');
+      expect(mockConsoleLog).toHaveBeenCalled(); // Should display options
     });
 
-    test('should handle extremely long task names', async () => {
-      const longTaskName = 'task-'.repeat(100) + 'very-long-name';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue('prompt');
+    test('should handle questions with currentPatterns', async () => {
+      const questionsWithPatterns = [
+        {
+          title: 'Pattern Question',
+          question: 'Which pattern to use?',
+          currentPatterns: 'Existing pattern in codebase'
+        }
+      ];
 
-      const result = await readPrompt(longTaskName);
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput.mockResolvedValue('New pattern');
 
-      expect(path.join).toHaveBeenCalledWith('/test/.claudiomiro', longTaskName, 'AI_PROMPT.md');
-      expect(result).toBe('prompt');
+      const result = await askClarificationQuestions(questionsWithPatterns);
+
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.answers[0].answer).toBe('New pattern');
+      expect(mockConsoleLog).toHaveBeenCalled(); // Should display current patterns
     });
 
-    test('should maintain original prompt formatting including line endings', async () => {
-      const promptWithLineEndings = 'Line 1\r\nLine 2\nLine 3\r\n';
-      fs.existsSync.mockReturnValue(true);
-      fs.readFileSync.mockReturnValue(promptWithLineEndings);
+    test('should handle Unicode content in questions and answers', async () => {
+      const unicodeQuestions = [
+        {
+          title: 'Question avec émojis 🎉',
+          question: 'Réponse avec caractères spéciaux?',
+          category: 'Catégorie spéciale'
+        }
+      ];
 
-      const result = await readPrompt('testTask');
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput.mockResolvedValue('Réponse avec émojis ✨');
 
-      expect(result).toBe(promptWithLineEndings);
-      expect(result).toContain('\r\n');
-      expect(result).toContain('\n');
+      const result = await askClarificationQuestions(unicodeQuestions);
+
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.answers[0].answer).toBe('Réponse avec émojis ✨');
+      expect(parsedResult.answers[0].question).toBe('Question avec émojis 🎉');
+      expect(parsedResult.answers[0].category).toBe('Catégorie spéciale');
+    });
+
+    test('should verify timestamp format in response', async () => {
+      const questions = [{ title: 'Time Question', question: 'What time is it?' }];
+
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput.mockResolvedValue('Now');
+
+      const result = await askClarificationQuestions(questions);
+
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.timestamp).toBeDefined();
+      expect(new Date(parsedResult.timestamp)).toBeInstanceOf(Date);
+    });
+
+    test('should handle questions with missing required fields', async () => {
+      const questionsWithMissingFields = [
+        {
+          // Missing title
+          question: 'Question without title'
+        },
+        {
+          title: 'Title without question'
+          // Missing question
+        }
+      ];
+
+      const promptReader = require('./prompt-reader');
+      promptReader.getSimpleInput
+        .mockResolvedValueOnce('Answer 1')
+        .mockResolvedValueOnce('Answer 2');
+
+      const result = await askClarificationQuestions(questionsWithMissingFields);
+
+      const parsedResult = JSON.parse(result);
+      expect(parsedResult.answers).toHaveLength(2);
     });
   });
 });

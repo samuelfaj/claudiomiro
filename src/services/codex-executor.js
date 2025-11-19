@@ -20,6 +20,10 @@ const executeCodex = (text, taskName = null) => {
     return new Promise((resolve, reject) => {
         const stateManager = taskName ? ParallelStateManager.getInstance() : null;
         const suppressStreamingLogs = Boolean(taskName) && stateManager && typeof stateManager.isUIRendererActive === 'function' && stateManager.isUIRendererActive();
+
+        if(!text){
+            throw new Error('no prompt');
+        }
         const tmpFile = path.join(os.tmpdir(), `claudiomiro-codex-${Date.now()}.txt`);
         fs.writeFileSync(tmpFile, text, 'utf-8');
 

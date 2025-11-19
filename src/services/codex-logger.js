@@ -132,7 +132,7 @@ const processCodexEvent = (line) => {
     }
 
     if(json.msg && json.msg.text){
-        return json.msg.tex;
+        return json.msg.text;
     }
 
     if(json.msg && json.msg.type){

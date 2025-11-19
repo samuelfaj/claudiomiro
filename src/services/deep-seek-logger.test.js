@@ -551,4 +551,390 @@ describe('DeepSeek Logger', () => {
       });
     });
   });
+
+  describe('Chinese/Multilingual Support', () => {
+    test('should process Chinese text messages correctly', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '你好！我是DeepSeek助手，我可以帮助您处理编程任务。' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('你好！我是DeepSeek助手，我可以帮助您处理编程任务。');
+    });
+
+    test('should handle mixed Chinese-English text', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '我将帮助您完成这个 task，请稍等 a moment...' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('我将帮助您完成这个 task，请稍等 a moment...');
+    });
+
+    test('should handle Chinese characters in tool descriptions', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Bash', input: { description: '运行测试脚本' } }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('🔧 Bash: 运行测试脚本');
+    });
+
+    test('should process code with Chinese comments', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '```javascript\n// 这是一个计算函数\nconst calculate = (x, y) => x + y;\n```' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('这是一个计算函数');
+    });
+
+    test('should handle Chinese filenames in tool operations', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Read', input: { file_path: '/src/组件/用户管理.js' } }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('📖 Read: Reading 用户管理.js');
+    });
+
+    test('should handle mixed language tool workflows', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '开始处理文件:' },
+            { type: 'tool_use', name: 'Read', input: { file_path: '配置文件.json' } },
+            { type: 'text', text: 'File processing completed successfully!' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('开始处理文件:');
+      expect(result).toContain('📖 Read: Reading 配置文件.json');
+      expect(result).toContain('File processing completed successfully!');
+    });
+
+    test('should handle Chinese error messages in results', () => {
+      const input = JSON.stringify({
+        type: 'result',
+        subtype: 'error',
+        error: '文件不存在或无法访问'
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('\n❌ Error: 文件不存在或无法访问');
+    });
+
+    test('should handle mixed language error context', () => {
+      const input = JSON.stringify({
+        type: 'result',
+        subtype: 'error',
+        error: 'API limit exceeded. 请稍后再试'
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('\n❌ Error: API limit exceeded. 请稍后再试');
+    });
+
+    test('should handle Unicode edge cases in malformed content', () => {
+      const malformedWithChinese = '{"type": "assistant", "message": {"content": [{"type": "text", "text": "测试"}';
+
+      expect(processDeepSeekMessage(malformedWithChinese)).toBeNull();
+    });
+  });
+
+  describe('Chinese-Specific Tool Formatting Edge Cases', () => {
+    test('should handle Chinese file paths with directory extraction', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Write', input: { file_path: '/用户/文档/项目/说明文件.md' } }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('✍️ Write: Writing 说明文件.md');
+      expect(result).not.toContain('/用户/文档/项目');
+    });
+
+    test('should handle unknown tools with Chinese names', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: '中文工具', input: {} }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('🛠️ 中文工具');
+    });
+
+    test('should handle emoji and Chinese character combinations', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '🎉 任务完成！所有测试都已通过 🚀' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('🎉 任务完成！所有测试都已通过 🚀');
+    });
+
+    test('should handle complex Unicode sequences', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '德语Français Español Português 中文日本語 한국어' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('德语Français Español Português 中文日本語 한국어');
+    });
+
+    test('should handle Chinese punctuation and special characters', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '这个函数的作用是：计算两个数字的和。返回值是整数。' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('这个函数的作用是：计算两个数字的和。返回值是整数。');
+    });
+
+    test('should handle both Traditional and Simplified Chinese', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '簡體中文 vs 繁體中文 - 同樣的文字，不同的寫法' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('簡體中文 vs 繁體中文 - 同樣的文字，不同的寫法');
+    });
+
+    test('should handle Chinese whitespace correctly', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '中文空格　是全角的，和英文空格 不同' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('中文空格　是全角的，和英文空格 不同');
+    });
+  });
+
+  describe('Multilingual Content Processing', () => {
+    test('should handle complex multilingual workflows', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '开始分析这个代码库：' },
+            { type: 'tool_use', name: 'Glob', input: { pattern: '**/*.js' } },
+            { type: 'text', text: '\nFound JavaScript files. 现在检查主文件：' },
+            { type: 'tool_use', name: 'Read', input: { file_path: '/src/index.js' } },
+            { type: 'text', text: '\nThe code looks good. 让我们运行测试：' },
+            { type: 'tool_use', name: 'Bash', input: { description: 'npm test' } }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('开始分析这个代码库');
+      expect(result).toContain('🔍 Glob');
+      expect(result).toContain('Found JavaScript files. 现在检查主文件');
+      expect(result).toContain('📖 Read: Reading index.js');
+      expect(result).toContain('The code looks good. 让我们运行测试');
+      expect(result).toContain('🔧 Bash: npm test');
+    });
+
+    test('should handle Chinese characters in complex nested input objects', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              name: 'Edit',
+              input: {
+                file_path: '/src/组件/用户界面.jsx',
+                old_string: 'const [用户, 设置用户] = useState(null);',
+                new_string: 'const [用户, 设置用户] = useState(null);\nconst [加载中, 设置加载] = useState(false);'
+              }
+            }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('📝 Edit: Editing 用户界面.jsx');
+    });
+
+    test('should preserve mixed language formatting integrity', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '处理完成！Processing complete. 函数运行成功。Function executed successfully.' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('处理完成！Processing complete. 函数运行成功。Function executed successfully.');
+    });
+  });
+
+  describe('Encoding and Performance Edge Cases', () => {
+    test('should handle extremely long Chinese text content gracefully', () => {
+      const longChineseText = '你好世界'.repeat(1000);
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: longChineseText }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe(longChineseText);
+    });
+
+    test('should handle Unicode and special characters in Chinese tool descriptions', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Bash', input: { description: '测试使用特殊字符：émojis 🚀 🎉 和中文：测试成功' } }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toContain('🔧 Bash: 测试使用特殊字符：émojis 🚀 🎉 和中文：测试成功');
+    });
+
+    test('should handle content with mixed language newline characters and whitespace', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '第一行\nSecond line\n  第三行缩进\t制表符内容' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('第一行\nSecond line\n  第三行缩进\t制表符内容');
+    });
+
+    test('should handle messages with null or undefined multilingual content blocks', () => {
+      const input = JSON.stringify({
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: '有效内容 Valid content' },
+            { type: 'text', text: null },
+            { type: 'text', text: undefined },
+            { type: 'text', text: '更多有效内容 More valid content' }
+          ]
+        }
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('有效内容 Valid contentnullundefined更多有效内容 More valid content');
+    });
+  });
+
+  describe('Chinese Model-Specific Error Handling', () => {
+    test('should handle Chinese error messages in system messages', () => {
+      const input = JSON.stringify({
+        type: 'system',
+        subtype: 'init',
+        message: '系统初始化中... System initializing...'
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('🚀 Starting DeepSeek...');
+    });
+
+    test('should handle result success messages with Chinese cost tracking', () => {
+      const input = JSON.stringify({
+        type: 'result',
+        subtype: 'success',
+        duration_ms: 2500,
+        total_cost_usd: 0.0142
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('\n✅ Completed in 2.5s ($0.0142)');
+    });
+
+    test('should handle mixed language error context gracefully', () => {
+      const input = JSON.stringify({
+        type: 'result',
+        subtype: 'error',
+        error: '网络连接失败 Network connection failed'
+      });
+
+      const result = processDeepSeekMessage(input);
+      expect(result).toBe('\n❌ Error: 网络连接失败 Network connection failed');
+    });
+
+    test('should handle Unicode characters in malformed JSON safely', () => {
+      const maliciousWithChinese = '{"type": "assistant", "message": {"content": [{"type": "text", "text": "正常内容"}]}, "注入": "恶意数据"}';
+      const result = processDeepSeekMessage(maliciousWithChinese);
+      expect(result).toContain('正常内容');
+      expect(result).not.toContain('注入');
+    });
+  });
 });
