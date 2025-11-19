@@ -83,11 +83,20 @@ describe('Codex Executor', () => {
       configurable: true
     });
 
-    // Mock Date.now using spyOn
-    jest.spyOn(Date, 'now').mockReturnValue(1234567890);
+    // Mock Date.now with a stable implementation
+    const originalDateNow = Date.now;
+    Date.now = jest.fn(() => 1234567890);
+
+    // Store for cleanup
+    this._originalDateNow = originalDateNow;
   });
 
   afterEach(() => {
+    // Restore Date.now if it was stored
+    if (this._originalDateNow) {
+      Date.now = this._originalDateNow;
+      this._originalDateNow = null;
+    }
     jest.restoreAllMocks();
   });
 
@@ -145,11 +154,14 @@ describe('Codex Executor', () => {
     });
 
     test('should write log headers with timestamp', async () => {
-      // Mock Date constructor but preserve Date.now functionality
+      // Mock Date constructor to return specific date for logging,
+      // but preserve Date.now for filename generation
       const mockDate = new Date('2024-01-01T00:00:00.000Z');
-      const mockDateImplementation = jest.fn(() => mockDate);
-      mockDateImplementation.now = jest.fn(() => 1234567890);
-      jest.spyOn(global, 'Date').mockImplementation(mockDateImplementation);
+      const originalDateNow = Date.now;
+
+      jest.spyOn(global, 'Date').mockImplementation(() => mockDate);
+      // Ensure Date.now still works for the filename
+      global.Date.now = originalDateNow;
 
       mockChildProcess.on.mockImplementation((event, handler) => {
         if (event === 'close') {
@@ -162,6 +174,9 @@ describe('Codex Executor', () => {
       expect(mockLogStream.write).toHaveBeenCalledWith(
         expect.stringContaining('[2024-01-01T00:00:00.000Z] Codex execution started')
       );
+
+      // Clean up Date mock
+      global.Date.mockRestore();
     });
 
     test('should handle stdout data processing', async () => {

@@ -117,7 +117,7 @@ const processCodexEvent = (line) => {
         return null;
     }
 
-    // Return null for empty JSON objects, arrays, primitives, and non-objects
+    // Return null for empty JSON objects only
     if (!json || typeof json !== 'object' || Array.isArray(json) || Object.keys(json).length === 0) {
         return null;
     }
@@ -130,8 +130,7 @@ const processCodexEvent = (line) => {
         if(json.item.command !== undefined){
             return `> ` + json.item.command;
         }
-        // If item exists but has no text or command, return null instead of truncating
-        return null;
+        // If item exists but has no text or command, fall through to truncation
     }
 
     if(json.prompt !== undefined){
@@ -142,18 +141,18 @@ const processCodexEvent = (line) => {
         if(json.msg.text !== undefined){
             return json.msg.text;
         }
-        if(json.msg.type){
+        if(json.msg.type !== undefined && json.msg.type !== null){
             const type = json.msg.type;
 
-            if(type.includes('token_count')){
+            if(type && type.includes('token_count')){
                 return null;
             }
 
-            if(type.includes('exec_command')){
+            if(type && type.includes('exec_command')){
                 return `Executing command...`;
             }
 
-            if(type.includes('agent_reasoning')){
+            if(type && type.includes('agent_reasoning')){
                 return `Agent reasoning...`;
             }
 
@@ -163,7 +162,7 @@ const processCodexEvent = (line) => {
         return null;
     }
 
-    // Only truncate for valid, unrecognized JSON objects with content
+    // Truncate for valid, unrecognized JSON objects with content
     return JSON.stringify(json).substring(0, 160) + '...';
 };
 

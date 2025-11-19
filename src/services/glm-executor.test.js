@@ -394,6 +394,9 @@ describe('GLM Executor', () => {
     test('should implement timeout mechanism', (done) => {
       jest.useFakeTimers();
 
+      // Ensure Date.now is available with fake timers
+      jest.spyOn(Date, 'now').mockReturnValue(1234567890);
+
       mockChildProcess.stdout.on.mockImplementation((event, handler) => {
         if (event === 'data') {
           // Don't send any data to trigger timeout
@@ -404,6 +407,7 @@ describe('GLM Executor', () => {
         expect(error.message).toContain('GLM stuck - timeout');
         expect(mockChildProcess.kill).toHaveBeenCalledWith('SIGKILL');
         jest.useRealTimers();
+        jest.restoreAllMocks();
         done();
       });
 
@@ -413,6 +417,9 @@ describe('GLM Executor', () => {
 
     test('should reset timeout on data received', () => {
       jest.useFakeTimers();
+
+      // Ensure Date.now is available with fake timers
+      jest.spyOn(Date, 'now').mockReturnValue(1234567890);
       const clearTimeoutSpy = jest.spyOn(global, 'clearTimeout');
 
       mockChildProcess.stdout.on.mockImplementation((event, handler) => {
@@ -432,6 +439,7 @@ describe('GLM Executor', () => {
       expect(clearTimeoutSpy).toHaveBeenCalled();
 
       jest.useRealTimers();
+      jest.restoreAllMocks();
     });
 
     test('should handle long text wrapping', async () => {

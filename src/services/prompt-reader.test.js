@@ -2,41 +2,12 @@ const readline = require('readline');
 const chalk = require('chalk');
 const logger = require('../utils/logger');
 
-// Get the original module for testing getSimpleInput when needed
-const originalPromptReader = jest.requireActual('./prompt-reader');
+// Mock dependencies first
+jest.mock('readline');
+jest.mock('../utils/logger');
 
-// Mock the entire module with factory function to override getSimpleInput internally
-jest.mock('./prompt-reader', () => {
-  const originalModule = jest.requireActual('./prompt-reader');
-
-  // Create a mock function for getSimpleInput
-  const mockGetSimpleInput = jest.fn();
-
-  // Create a wrapped version of askClarificationQuestions that uses our mock
-  const askClarificationQuestionsWithMock = async (questionsJson) => {
-    // Temporarily replace getSimpleInput in the original module
-    const originalGetSimpleInput = originalModule.getSimpleInput;
-    originalModule.getSimpleInput = mockGetSimpleInput;
-
-    try {
-      return await originalModule.askClarificationQuestions(questionsJson);
-    } finally {
-      // Restore the original function
-      originalModule.getSimpleInput = originalGetSimpleInput;
-    }
-  };
-
-  return {
-    getMultilineInput: originalModule.getMultilineInput,
-    getSimpleInput: originalModule.getSimpleInput,
-    askClarificationQuestions: askClarificationQuestionsWithMock,
-    // Expose the mock for testing
-    _mockGetSimpleInput: mockGetSimpleInput
-  };
-});
-
-// Now import the mocked functions
-const { getMultilineInput, askClarificationQuestions, _mockGetSimpleInput } = require('./prompt-reader');
+// Import the actual module for testing
+const promptReader = require('./prompt-reader');
 
 // Mock chalk comprehensively
 jest.mock('chalk', () => ({
@@ -57,25 +28,15 @@ jest.mock('chalk', () => ({
   reset: jest.fn((text) => text)
 }));
 
-// Mock all other dependencies
-jest.mock('readline');
-jest.mock('../utils/logger');
 
 describe('prompt-reader', () => {
   let mockReadlineInterface;
   let mockConsoleLog;
   let mockProcessStdoutWrite;
-  let mockGetSimpleInput;
 
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
-
-    // Reset the getSimpleInput mock
-    mockGetSimpleInput = _mockGetSimpleInput;
-    if (mockGetSimpleInput) {
-      mockGetSimpleInput.mockReset();
-    }
 
     // Setup console mocks
     mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -108,7 +69,7 @@ describe('prompt-reader', () => {
         }
       });
 
-      const promise = getMultilineInput();
+      const promise = promptReader.getMultilineInput();
 
       expect(readline.createInterface).toHaveBeenCalledWith({
         input: process.stdin,
@@ -130,7 +91,7 @@ describe('prompt-reader', () => {
       });
 
       // This test should not resolve, so we'll set a timeout
-      const promise = getMultilineInput();
+      const promise = promptReader.getMultilineInput();
 
       await new Promise(resolve => setTimeout(resolve, 20));
 
@@ -149,7 +110,7 @@ describe('prompt-reader', () => {
         }
       });
 
-      await getMultilineInput();
+      await promptReader.getMultilineInput();
 
       // Verify console output formatting was called
       expect(mockConsoleLog).toHaveBeenCalled();
@@ -158,6 +119,13 @@ describe('prompt-reader', () => {
   });
 
   describe('getSimpleInput', () => {
+    let originalGetSimpleInput;
+
+    beforeEach(() => {
+      // Store the original function
+      originalGetSimpleInput = promptReader.getSimpleInput;
+    });
+
     test('should create readline interface and handle question', () => {
       const mockAnswer = 'test answer';
 
@@ -165,7 +133,7 @@ describe('prompt-reader', () => {
         setTimeout(() => callback(mockAnswer), 5);
       });
 
-      const promise = originalPromptReader.getSimpleInput('Test question?');
+      const promise = originalGetSimpleInput('Test question?');
 
       expect(readline.createInterface).toHaveBeenCalledWith({
         input: process.stdin,
@@ -191,7 +159,7 @@ describe('prompt-reader', () => {
         }
       });
 
-      const promise = originalPromptReader.getSimpleInput('Test?');
+      const promise = originalGetSimpleInput('Test?');
 
       await new Promise(resolve => setTimeout(resolve, 20));
 
@@ -209,13 +177,37 @@ describe('prompt-reader', () => {
         setTimeout(() => callback(mockAnswer), 5);
       });
 
-      return originalPromptReader.getSimpleInput('Test?').then(result => {
+      return originalGetSimpleInput('Test?').then(result => {
         expect(result).toBe('trimmed answer');
       });
     });
   });
 
   describe('askClarificationQuestions', () => {
+    beforeEach(() => {
+      // Reset all mocks
+      jest.clearAllMocks();
+
+      // Setup console mocks
+      mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
+      mockProcessStdoutWrite = jest.spyOn(process.stdout, 'write').mockImplementation();
+
+      // Setup enhanced mock readline interface for askClarificationQuestions
+      mockReadlineInterface = {
+        on: jest.fn(),
+        question: jest.fn(),
+        close: jest.fn()
+      };
+
+      // Enhanced readline mock to handle all internal calls
+      readline.createInterface.mockReturnValue(mockReadlineInterface);
+
+      // Mock getSimpleInput to return mocked responses instantly
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        // Immediately call callback with a test answer
+        setTimeout(() => callback('Mocked answer'), 1);
+      });
+    });
 
     test('should process JSON string questions and collect answers', async () => {
       const questionsJson = JSON.stringify([
@@ -227,9 +219,12 @@ describe('prompt-reader', () => {
         }
       ]);
 
-      _mockGetSimpleInput.mockResolvedValue('Test answer');
+      // The question mock is already set up in beforeEach, but override for this specific test
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        setTimeout(() => callback('Test answer'), 1);
+      });
 
-      const result = await askClarificationQuestions(questionsJson);
+      const result = await promptReader.askClarificationQuestions(questionsJson);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.timestamp).toBeDefined();
@@ -240,8 +235,7 @@ describe('prompt-reader', () => {
         category: 'General',
         answer: 'Test answer'
       });
-      expect(_mockGetSimpleInput).toHaveBeenCalledTimes(1);
-      expect(_mockGetSimpleInput).toHaveBeenCalledWith('Your answer: ');
+      expect(mockReadlineInterface.question).toHaveBeenCalledWith('cyan: Your answer: ', expect.any(Function));
     });
 
     test('should process object questions and collect answers', async () => {
@@ -252,9 +246,12 @@ describe('prompt-reader', () => {
         }
       ];
 
-      mockGetSimpleInput.mockResolvedValue('Object Answer');
+      // Override the question mock for this specific test
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        setTimeout(() => callback('Object Answer'), 1);
+      });
 
-      const result = await askClarificationQuestions(questionsObject);
+      const result = await promptReader.askClarificationQuestions(questionsObject);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.answers).toHaveLength(1);
@@ -268,23 +265,27 @@ describe('prompt-reader', () => {
         { title: 'Question 2', question: 'Second?' }
       ];
 
-      mockGetSimpleInput
-        .mockResolvedValueOnce('Answer 1')
-        .mockResolvedValueOnce('Answer 2');
+      // Track call count for multiple questions
+      let callCount = 0;
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        callCount++;
+        const answer = callCount === 1 ? 'Answer 1' : 'Answer 2';
+        setTimeout(() => callback(answer), 1);
+      });
 
-      const result = await askClarificationQuestions(questions);
+      const result = await promptReader.askClarificationQuestions(questions);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.answers).toHaveLength(2);
       expect(parsedResult.answers[0].answer).toBe('Answer 1');
       expect(parsedResult.answers[1].answer).toBe('Answer 2');
-      expect(mockGetSimpleInput).toHaveBeenCalledTimes(2);
+      expect(mockReadlineInterface.question).toHaveBeenCalledTimes(2);
     });
 
     test('should throw error for malformed JSON string', async () => {
       const malformedJson = '{ invalid json }';
 
-      await expect(askClarificationQuestions(malformedJson)).rejects.toThrow();
+      await expect(promptReader.askClarificationQuestions(malformedJson)).rejects.toThrow();
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to parse CLARIFICATION_QUESTIONS.json')
       );
@@ -293,7 +294,7 @@ describe('prompt-reader', () => {
     test('should throw error when questions is not an array', async () => {
       const notAnArray = { question: 'Not an array' };
 
-      await expect(askClarificationQuestions(notAnArray)).rejects.toThrow();
+      await expect(promptReader.askClarificationQuestions(notAnArray)).rejects.toThrow();
       expect(logger.error).toHaveBeenCalledWith(
         expect.stringContaining('Failed to parse CLARIFICATION_QUESTIONS.json')
       );
@@ -302,7 +303,7 @@ describe('prompt-reader', () => {
     test('should handle empty questions array', async () => {
       const emptyQuestions = [];
 
-      const result = await askClarificationQuestions(emptyQuestions);
+      const result = await promptReader.askClarificationQuestions(emptyQuestions);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.answers).toHaveLength(0);
@@ -320,9 +321,12 @@ describe('prompt-reader', () => {
         }
       ];
 
-      mockGetSimpleInput.mockResolvedValue('a');
+      // Override the question mock for this specific test
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        setTimeout(() => callback('a'), 1);
+      });
 
-      const result = await askClarificationQuestions(questionsWithOption);
+      const result = await promptReader.askClarificationQuestions(questionsWithOption);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.answers[0].answer).toBe('a');
@@ -338,9 +342,12 @@ describe('prompt-reader', () => {
         }
       ];
 
-      mockGetSimpleInput.mockResolvedValue('New pattern');
+      // Override the question mock for this specific test
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        setTimeout(() => callback('New pattern'), 1);
+      });
 
-      const result = await askClarificationQuestions(questionsWithPatterns);
+      const result = await promptReader.askClarificationQuestions(questionsWithPatterns);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.answers[0].answer).toBe('New pattern');
@@ -356,9 +363,12 @@ describe('prompt-reader', () => {
         }
       ];
 
-      mockGetSimpleInput.mockResolvedValue('Réponse avec émojis ✨');
+      // Override the question mock for this specific test
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        setTimeout(() => callback('Réponse avec émojis ✨'), 1);
+      });
 
-      const result = await askClarificationQuestions(unicodeQuestions);
+      const result = await promptReader.askClarificationQuestions(unicodeQuestions);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.answers[0].answer).toBe('Réponse avec émojis ✨');
@@ -369,9 +379,12 @@ describe('prompt-reader', () => {
     test('should verify timestamp format in response', async () => {
       const questions = [{ title: 'Time Question', question: 'What time is it?' }];
 
-      mockGetSimpleInput.mockResolvedValue('Now');
+      // Override the question mock for this specific test
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        setTimeout(() => callback('Now'), 1);
+      });
 
-      const result = await askClarificationQuestions(questions);
+      const result = await promptReader.askClarificationQuestions(questions);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.timestamp).toBeDefined();
@@ -390,11 +403,15 @@ describe('prompt-reader', () => {
         }
       ];
 
-      mockGetSimpleInput
-        .mockResolvedValueOnce('Answer 1')
-        .mockResolvedValueOnce('Answer 2');
+      // Track call count for multiple questions
+      let callCount = 0;
+      mockReadlineInterface.question.mockImplementation((question, callback) => {
+        callCount++;
+        const answer = callCount === 1 ? 'Answer 1' : 'Answer 2';
+        setTimeout(() => callback(answer), 1);
+      });
 
-      const result = await askClarificationQuestions(questionsWithMissingFields);
+      const result = await promptReader.askClarificationQuestions(questionsWithMissingFields);
 
       const parsedResult = JSON.parse(result);
       expect(parsedResult.answers).toHaveLength(2);
