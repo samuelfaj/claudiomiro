@@ -22,7 +22,8 @@ const step8 = async (tasks, shouldPush = true) => {
     const prompt = `git add . and git commit ${shouldPush ? 'and git push and create pull request' : ''}`;
 
     try {
-        await commitOrFix(prompt, '8');
+        await commitOrFix(prompt, null);
+        fs.writeFileSync(path.join(state.claudiomiroFolder, 'done.txt'), '1');
     } catch (error) {
         // Log but don't block execution
         logger.warn('⚠️  Commit/PR failed in step8, continuing anyway:', error.message);

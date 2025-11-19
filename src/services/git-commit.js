@@ -23,7 +23,6 @@ const commitOrFix = async (prompt, taskName = null) => {
             taskName
         );
 
-        fs.writeFileSync(path.join(state.claudiomiroFolder, 'done.txt'), '1');
         logger.newline();
         logger.newline();
         logger.separator();
