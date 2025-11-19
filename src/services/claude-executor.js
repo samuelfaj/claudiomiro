@@ -213,6 +213,11 @@ const runClaude = (text, taskName = null) => {
 };
 
 const executeClaude = (text, taskName = null) => {
+    // Validate input before dispatching to any executor
+    if(!text){
+        return Promise.reject(new Error('no prompt'));
+    }
+
     if (state.executorType === 'codex') {
         const { executeCodex } = require('./codex-executor');
         return executeCodex(text, taskName);

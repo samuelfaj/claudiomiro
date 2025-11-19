@@ -175,15 +175,16 @@ describe('GLM Executor', () => {
     });
 
     test('should write log headers with timestamp', async () => {
+      // Mock Date constructor but preserve Date.now functionality
       const mockDate = new Date('2024-01-01T00:00:00.000Z');
-      const originalDate = global.Date;
-      jest.spyOn(global, 'Date').mockImplementation(() => mockDate);
-      // Ensure Date.now is available
-      global.Date.now = jest.fn().mockReturnValue(1704067200000);
+      const mockDateImplementation = jest.fn(() => mockDate);
+      mockDateImplementation.now = jest.fn(() => 1234567890);
+      jest.spyOn(global, 'Date').mockImplementation(mockDateImplementation);
 
       mockChildProcess.on.mockImplementation((event, handler) => {
         if (event === 'close') {
-          setTimeout(() => handler(0), 0);
+          // Call handler immediately instead of using setTimeout
+          handler(0);
         }
       });
 
@@ -192,9 +193,6 @@ describe('GLM Executor', () => {
       expect(mockLogStream.write).toHaveBeenCalledWith(
         expect.stringContaining('[2024-01-01T00:00:00.000Z]')
       );
-
-      global.Date.mockRestore();
-      global.Date = originalDate;
     });
 
     test('should handle stdout data processing', async () => {
@@ -295,52 +293,46 @@ describe('GLM Executor', () => {
     });
 
     test('should handle process close with success code', async () => {
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'close') {
-            // Call handler immediately instead of using setTimeout
-            handler(0);
-          }
-        });
-
-        executeGlm('test prompt').then(() => {
-          expect(logger.success).toHaveBeenCalledWith('Glm execution completed');
-          resolve();
-        });
+      mockChildProcess.on.mockImplementation((event, handler) => {
+        if (event === 'close') {
+          setTimeout(() => handler(0), 0);
+        }
       });
+
+      await executeGlm('test prompt');
+
+      expect(logger.success).toHaveBeenCalledWith('Glm execution completed');
     });
 
     test('should handle process close with error code', async () => {
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'close') {
-            // Call handler immediately instead of using setTimeout
-            handler(1);
-          }
-        });
-
-        executeGlm('test prompt').catch((error) => {
-          expect(error.message).toContain('Glm exited with code 1');
-          resolve();
-        });
+      mockChildProcess.on.mockImplementation((event, handler) => {
+        if (event === 'close') {
+          setTimeout(() => handler(1), 0);
+        }
       });
+
+      try {
+        await executeGlm('test prompt');
+        fail('Should have thrown an error');
+      } catch (error) {
+        expect(error.message).toContain('Glm exited with code 1');
+      }
     });
 
     test('should handle process error', async () => {
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'error') {
-            // Call handler immediately instead of using setTimeout
-            handler(new Error('Process failed'));
-          }
-        });
-
-        executeGlm('test prompt').catch((error) => {
-          expect(error.message).toBe('Process failed');
-          expect(logger.error).toHaveBeenCalledWith('Failed to execute Glm: Process failed');
-          resolve();
-        });
+      mockChildProcess.on.mockImplementation((event, handler) => {
+        if (event === 'error') {
+          setTimeout(() => handler(new Error('Process failed')), 0);
+        }
       });
+
+      try {
+        await executeGlm('test prompt');
+        fail('Should have thrown an error');
+      } catch (error) {
+        expect(error.message).toBe('Process failed');
+        expect(logger.error).toHaveBeenCalledWith('Failed to execute Glm: Process failed');
+      }
     });
 
     test('should cleanup temporary file on successful completion', async () => {
