@@ -104,12 +104,11 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('AI_PROMPT.md')
-      );
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('INITIAL_PROMPT.md')
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).toContain('AI_PROMPT.md');
+      expect(actualCall).toContain('INITIAL_PROMPT.md');
+      expect(actualCall).toContain('/test/.claudiomiro/AI_PROMPT.md');
+      expect(actualCall).toContain('/test/.claudiomiro/INITIAL_PROMPT.md');
     });
 
     test('should include RESEARCH.md when it exists', async () => {
@@ -125,9 +124,9 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('RESEARCH.md')
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).toContain('RESEARCH.md');
+      expect(actualCall).toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
     });
 
     test('should include CONTEXT.md when it exists', async () => {
