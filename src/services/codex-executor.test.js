@@ -145,7 +145,6 @@ describe('Codex Executor', () => {
     });
 
     test('should write log headers with timestamp', async () => {
-      // Mock Date constructor for log timestamp (Date.now is already mocked in beforeEach)
       const mockDate = new Date('2024-01-01T00:00:00.000Z');
       jest.spyOn(global, 'Date').mockImplementation(() => mockDate);
 
@@ -160,8 +159,6 @@ describe('Codex Executor', () => {
       expect(mockLogStream.write).toHaveBeenCalledWith(
         expect.stringContaining('[2024-01-01T00:00:00.000Z] Codex execution started')
       );
-
-      global.Date.mockRestore();
     });
 
     test('should handle stdout data processing', async () => {

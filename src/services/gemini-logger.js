@@ -118,6 +118,9 @@ const processResultMessage = (json) => {
  * @returns {string|null} - Formatted text or null if no content
  */
 const processGeminiMessage = (line) => {
+    // Handle null/undefined input
+    if (!line || typeof line !== 'string') return null;
+
     // Skip empty lines
     if (!line.trim()) return null;
 

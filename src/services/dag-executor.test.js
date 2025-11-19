@@ -378,26 +378,33 @@ describe('DAGExecutor', () => {
   });
 
   describe('executeWave', () => {
-    test('should return false when no tasks are ready', () => {
+    test('should return false when no tasks are ready', async () => {
       const getReadyTasksSpy = jest.spyOn(executor, 'getReadyTasks');
       getReadyTasksSpy.mockReturnValue([]);
 
-      const result = executor.executeWave();
+      const result = await executor.executeWave();
 
       expect(result).toBe(false);
       expect(getReadyTasksSpy).toHaveBeenCalled();
     });
 
-    test('should execute tasks up to maxConcurrent limit', () => {
+    test('should execute tasks up to maxConcurrent limit', async () => {
       executor.maxConcurrent = 2;
       executor.running = new Set();
+
+      // Set up tasks in executor.tasks
+      executor.tasks = {
+        task1: { deps: [], status: 'pending' },
+        task2: { deps: [], status: 'pending' },
+        task3: { deps: [], status: 'pending' }
+      };
 
       const mockTasks = ['task1', 'task2', 'task3'];
       jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
 
       const executeTaskSpy = jest.spyOn(executor, 'executeTask').mockResolvedValue();
 
-      const result = executor.executeWave();
+      const result = await executor.executeWave();
 
       expect(result).toBe(true);
       expect(executeTaskSpy).toHaveBeenCalledTimes(2); // Limited by maxConcurrent
@@ -442,6 +449,13 @@ describe('DAGExecutor', () => {
       executor.maxConcurrent = 1;
       executor.running = new Set();
 
+      // Set up tasks in executor.tasks
+      executor.tasks = {
+        task1: { deps: [], status: 'pending' },
+        task2: { deps: [], status: 'pending' },
+        task3: { deps: [], status: 'pending' }
+      };
+
       const mockTasks = ['task1', 'task2', 'task3'];
       jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
 
@@ -461,6 +475,12 @@ describe('DAGExecutor', () => {
     test('should handle concurrent task execution with Promise.allSettled', async () => {
       executor.maxConcurrent = 3;
       executor.running = new Set();
+
+      // Set up tasks in executor.tasks
+      executor.tasks = {
+        task1: { deps: [], status: 'pending' },
+        task2: { deps: [], status: 'pending' }
+      };
 
       const mockTasks = ['task1', 'task2'];
       jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
@@ -492,6 +512,14 @@ describe('DAGExecutor', () => {
       executor.maxConcurrent = 2;
       executor.running = new Set(['task1', 'task2']); // All slots occupied
 
+      // Set up tasks in executor.tasks
+      executor.tasks = {
+        task1: { deps: [], status: 'running' },
+        task2: { deps: [], status: 'running' },
+        task3: { deps: [], status: 'pending' },
+        task4: { deps: [], status: 'pending' }
+      };
+
       const mockTasks = ['task3', 'task4'];
       jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
 
@@ -508,6 +536,14 @@ describe('DAGExecutor', () => {
     test('should handle partial slot availability with mixed running/ready tasks', () => {
       executor.maxConcurrent = 3;
       executor.running = new Set(['existing-task']); // 1 slot occupied, 2 available
+
+      // Set up tasks in executor.tasks
+      executor.tasks = {
+        'existing-task': { deps: [], status: 'running' },
+        task1: { deps: [], status: 'pending' },
+        task2: { deps: [], status: 'pending' },
+        task3: { deps: [], status: 'pending' }
+      };
 
       const mockTasks = ['task1', 'task2', 'task3'];
       jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
@@ -572,6 +608,12 @@ describe('DAGExecutor', () => {
       executor.maxConcurrent = 1; // Start with limit 1
       executor.running = new Set();
 
+      // Set up tasks in executor.tasks
+      executor.tasks = {
+        task1: { deps: [], status: 'pending' },
+        task2: { deps: [], status: 'pending' }
+      };
+
       const mockTasks = ['task1', 'task2'];
       jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
 
@@ -584,6 +626,11 @@ describe('DAGExecutor', () => {
       // Change limit and execute another wave
       executor.maxConcurrent = 3;
       executor.running.clear();
+      executor.tasks = {
+        task2: { deps: [], status: 'pending' },
+        task3: { deps: [], status: 'pending' },
+        task4: { deps: [], status: 'pending' }
+      };
       jest.spyOn(executor, 'getReadyTasks').mockReturnValue(['task2', 'task3', 'task4']);
 
       executor.executeWave();
@@ -593,6 +640,14 @@ describe('DAGExecutor', () => {
     test('should handle execution order preservation with concurrent limits', () => {
       executor.maxConcurrent = 2;
       executor.running = new Set();
+
+      // Set up tasks in executor.tasks
+      executor.tasks = {
+        first: { deps: [], status: 'pending' },
+        second: { deps: [], status: 'pending' },
+        third: { deps: [], status: 'pending' },
+        fourth: { deps: [], status: 'pending' }
+      };
 
       const mockTasks = ['first', 'second', 'third', 'fourth'];
       jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
