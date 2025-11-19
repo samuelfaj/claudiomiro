@@ -363,9 +363,8 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.not.stringContaining('4. **')
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).not.toContain('4. **');
     });
   });
 
@@ -437,15 +436,10 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('## 📚 CONTEXT FILES FOR COMPREHENSIVE REVIEW')
-      );
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('AI_PROMPT.md')
-      );
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('INITIAL_PROMPT.md')
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).toContain('## 📚 CONTEXT FILES FOR COMPREHENSIVE REVIEW');
+      expect(actualCall).toContain('AI_PROMPT.md');
+      expect(actualCall).toContain('INITIAL_PROMPT.md');
     });
 
     test('should not include context section when no files exist', async () => {
