@@ -145,10 +145,11 @@ describe('Codex Executor', () => {
     });
 
     test('should write log headers with timestamp', async () => {
+      // Mock Date constructor but preserve Date.now functionality
       const mockDate = new Date('2024-01-01T00:00:00.000Z');
-      jest.spyOn(global, 'Date').mockImplementation(() => mockDate);
-      // Preserve Date.now functionality since it's used for tmpFile naming
-      global.Date.now = Date.now;
+      const mockDateImplementation = jest.fn(() => mockDate);
+      mockDateImplementation.now = jest.fn(() => 1234567890);
+      jest.spyOn(global, 'Date').mockImplementation(mockDateImplementation);
 
       mockChildProcess.on.mockImplementation((event, handler) => {
         if (event === 'close') {

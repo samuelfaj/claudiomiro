@@ -5,20 +5,38 @@ const logger = require('../utils/logger');
 // Get the original module for testing getSimpleInput when needed
 const originalPromptReader = jest.requireActual('./prompt-reader');
 
-// Mock getSimpleInput at module level to intercept internal calls
-const mockGetSimpleInput = jest.fn();
+// Mock the entire module with factory function to override getSimpleInput internally
 jest.mock('./prompt-reader', () => {
   const originalModule = jest.requireActual('./prompt-reader');
+
+  // Create a mock function for getSimpleInput
+  const mockGetSimpleInput = jest.fn();
+
+  // Create a wrapped version of askClarificationQuestions that uses our mock
+  const askClarificationQuestionsWithMock = async (questionsJson) => {
+    // Temporarily replace getSimpleInput in the original module
+    const originalGetSimpleInput = originalModule.getSimpleInput;
+    originalModule.getSimpleInput = mockGetSimpleInput;
+
+    try {
+      return await originalModule.askClarificationQuestions(questionsJson);
+    } finally {
+      // Restore the original function
+      originalModule.getSimpleInput = originalGetSimpleInput;
+    }
+  };
+
   return {
-    ...originalModule,
-    getSimpleInput: mockGetSimpleInput,
     getMultilineInput: originalModule.getMultilineInput,
-    askClarificationQuestions: originalModule.askClarificationQuestions
+    getSimpleInput: originalModule.getSimpleInput,
+    askClarificationQuestions: askClarificationQuestionsWithMock,
+    // Expose the mock for testing
+    _mockGetSimpleInput: mockGetSimpleInput
   };
 });
 
 // Now import the mocked functions
-const { getMultilineInput, askClarificationQuestions } = require('./prompt-reader');
+const { getMultilineInput, askClarificationQuestions, _mockGetSimpleInput } = require('./prompt-reader');
 
 // Mock chalk comprehensively
 jest.mock('chalk', () => ({
@@ -47,13 +65,17 @@ describe('prompt-reader', () => {
   let mockReadlineInterface;
   let mockConsoleLog;
   let mockProcessStdoutWrite;
+  let mockGetSimpleInput;
 
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
 
     // Reset the getSimpleInput mock
-    mockGetSimpleInput.mockReset();
+    mockGetSimpleInput = _mockGetSimpleInput;
+    if (mockGetSimpleInput) {
+      mockGetSimpleInput.mockReset();
+    }
 
     // Setup console mocks
     mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -205,7 +227,7 @@ describe('prompt-reader', () => {
         }
       ]);
 
-      mockGetSimpleInput.mockResolvedValue('Test answer');
+      _mockGetSimpleInput.mockResolvedValue('Test answer');
 
       const result = await askClarificationQuestions(questionsJson);
 
@@ -218,8 +240,8 @@ describe('prompt-reader', () => {
         category: 'General',
         answer: 'Test answer'
       });
-      expect(mockGetSimpleInput).toHaveBeenCalledTimes(1);
-      expect(mockGetSimpleInput).toHaveBeenCalledWith('Your answer: ');
+      expect(_mockGetSimpleInput).toHaveBeenCalledTimes(1);
+      expect(_mockGetSimpleInput).toHaveBeenCalledWith('Your answer: ');
     });
 
     test('should process object questions and collect answers', async () => {

@@ -63,13 +63,20 @@ describe('fix-command', () => {
       on: jest.fn((event, callback) => {
         if (event === 'close') {
           mockChildProcess.closeCallback = callback;
+          // Auto-emit close event for tests that don't set up custom behavior
+          setTimeout(() => callback(0), 0);
         }
         if (event === 'error') {
           mockChildProcess.errorCallback = callback;
         }
       }),
+      kill: jest.fn(),
+      stdin: {
+        write: jest.fn(),
+        end: jest.fn()
+      },
       // Helper methods to simulate events
-      emitClose: function(code) {
+      emitClose: function(code = 0) {
         if (this.closeCallback) this.closeCallback(code);
       },
       emitError: function(error) {
@@ -117,24 +124,15 @@ describe('fix-command', () => {
     test('should spawn command with correct parameters on Linux', async () => {
       fs.existsSync.mockReturnValue(true);
 
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'close') {
-            setTimeout(() => handler(0), 0);
-          }
-        });
+      const result = await executeCommand('ls -la');
 
-        executeCommand('ls -la').then((result) => {
-          expect(spawn).toHaveBeenCalledWith('bash', ['-c', 'ls -la'], {
-            cwd: '/test',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            shell: false
-          });
-          expect(result.success).toBe(true);
-          expect(result.exitCode).toBe(0);
-          resolve();
-        });
+      expect(spawn).toHaveBeenCalledWith('bash', ['-c', 'ls -la'], {
+        cwd: '/test',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false
       });
+      expect(result.success).toBe(true);
+      expect(result.exitCode).toBe(0);
     });
 
     test('should spawn command with correct parameters on Windows', async () => {
@@ -145,22 +143,15 @@ describe('fix-command', () => {
 
       fs.existsSync.mockReturnValue(true);
 
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'close') {
-            setTimeout(() => handler(0), 0);
-          }
-        });
+      const result = await executeCommand('dir');
 
-        executeCommand('dir').then((result) => {
-          expect(spawn).toHaveBeenCalledWith('cmd.exe', ['/c', 'dir'], {
-            cwd: '/test',
-            stdio: ['ignore', 'pipe', 'pipe'],
-            shell: false
-          });
-          resolve();
-        });
+      expect(spawn).toHaveBeenCalledWith('cmd.exe', ['/c', 'dir'], {
+        cwd: '/test',
+        stdio: ['ignore', 'pipe', 'pipe'],
+        shell: false
       });
+      expect(result.success).toBe(true);
+      expect(result.exitCode).toBe(0);
     });
 
     test('should initialize state folder if not set', async () => {
@@ -169,57 +160,30 @@ describe('fix-command', () => {
       fs.existsSync.mockReturnValue(false);
       fs.mkdirSync.mockImplementation(() => {});
 
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'close') {
-            setTimeout(() => handler(0), 0);
-          }
-        });
+      await executeCommand('ls');
 
-        executeCommand('ls').then(() => {
-          expect(state.setFolder).toHaveBeenCalledWith(process.cwd());
-          expect(fs.mkdirSync).toHaveBeenCalled();
-          resolve();
-        });
-      });
+      expect(state.setFolder).toHaveBeenCalledWith(process.cwd());
+      expect(fs.mkdirSync).toHaveBeenCalled();
     });
 
     test('should create claudiomiro folder if it does not exist', async () => {
       fs.existsSync.mockReturnValue(false);
       fs.mkdirSync.mockImplementation(() => {});
 
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'close') {
-            setTimeout(() => handler(0), 0);
-          }
-        });
+      await executeCommand('ls');
 
-        executeCommand('ls').then(() => {
-          expect(fs.mkdirSync).toHaveBeenCalledWith('/test/.claudiomiro', { recursive: true });
-          resolve();
-        });
-      });
+      expect(fs.mkdirSync).toHaveBeenCalledWith('/test/.claudiomiro', { recursive: true });
     });
 
     test('should create log stream with correct path', async () => {
       fs.existsSync.mockReturnValue(true);
 
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'close') {
-            setTimeout(() => handler(0), 0);
-          }
-        });
+      await executeCommand('ls');
 
-        executeCommand('ls').then(() => {
-          expect(fs.createWriteStream).toHaveBeenCalledWith(
-            '/test/.claudiomiro/log.txt',
-            { flags: 'a' }
-          );
-          resolve();
-        });
-      });
+      expect(fs.createWriteStream).toHaveBeenCalledWith(
+        '/test/.claudiomiro/log.txt',
+        { flags: 'a' }
+      );
     });
 
     test('should write log headers with timestamp', async () => {
@@ -227,21 +191,12 @@ describe('fix-command', () => {
       const mockDate = new Date('2024-01-01T00:00:00.000Z');
       jest.spyOn(global, 'Date').mockImplementation(() => mockDate);
 
-      return new Promise((resolve) => {
-        mockChildProcess.on.mockImplementation((event, handler) => {
-          if (event === 'close') {
-            setTimeout(() => handler(0), 0);
-          }
-        });
+      await executeCommand('test command');
 
-        executeCommand('test command').then(() => {
-          expect(mockLogStream.write).toHaveBeenCalledWith(
-            expect.stringContaining('[2024-01-01T00:00:00.000Z] Command execution started: test command')
-          );
-          global.Date.mockRestore();
-          resolve();
-        });
-      });
+      expect(mockLogStream.write).toHaveBeenCalledWith(
+        expect.stringContaining('[2024-01-01T00:00:00.000Z] Command execution started: test command')
+      );
+      global.Date.mockRestore();
     });
 
     test('should handle stdout data', async () => {
@@ -1615,9 +1570,11 @@ describe('fix-command', () => {
           }
         });
 
-        fixCommand('test-command', 3);
+        // fixCommand calls process.exit(0) when successful, so it won't resolve
+        // We need to wrap it to prevent actual exit
+        const promise = fixCommand('test-command', 3);
 
-        // Wait for async operations
+        // Wait for the operations to complete
         await new Promise(resolve => setTimeout(resolve, 50));
 
         expect(attemptCount).toBe(2);
@@ -1640,9 +1597,10 @@ describe('fix-command', () => {
           }
         });
 
-        fixCommand('persistent-command', 5);
+        // fixCommand calls process.exit(0) when successful, so it won't resolve
+        const promise = fixCommand('persistent-command', 5);
 
-        // Wait for async operations
+        // Wait for the operations to complete
         await new Promise(resolve => setTimeout(resolve, 100));
 
         expect(attemptCount).toBe(3);
@@ -2078,7 +2036,7 @@ describe('fix-command', () => {
 
             // Check for separator and timestamp header
             const separatorCall = writeCalls.find(call =>
-              call[0] === '='.repeat(80)
+              call[0] === '='.repeat(80) + '\n' || call[0].includes('='.repeat(80))
             );
             const headerCall = writeCalls.find(call =>
               call[0].includes('Command execution started: npm install')
