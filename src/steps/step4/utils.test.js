@@ -196,7 +196,7 @@ describe('step4/utils', () => {
       fs.readFileSync.mockReturnValue(`
         Fully implemented: NO
         ## Context Reference
-        Only reference to AI_PROMPT.md file
+        Only reference to PROMPT.md file
         ## Implementation Plan
         **What to do:** Implementation details here
         **Context (read-only):** Context files listed here
@@ -227,7 +227,7 @@ describe('step4/utils', () => {
       fs.readFileSync.mockReturnValue(`
         Fully implemented: NO
         ## Context Reference
-        References to AI_PROMPT.md and TASK.md files
+        References to TASK.md and PROMPT.md files
         ## Implementation Plan
         **What to do:** Implementation details here
         **Context (read-only):** Context files listed here
@@ -365,7 +365,7 @@ describe('step4/utils', () => {
       fs.readFileSync.mockReturnValue(`
         Fully implemented: NO
         ## Context Reference
-        Only reference to AI_PROMPT.md file
+        Only reference to PROMPT.md file
         ## Implementation Plan
         **What to do:** Implementation details here
         **Context (read-only):** Context files listed here
@@ -394,7 +394,7 @@ describe('step4/utils', () => {
       fs.readFileSync.mockReturnValue(`
         Fully implemented: NO
         ## Context Reference
-        References to AI_PROMPT.md and TASK.md
+        References to TASK.md and PROMPT.md files
         ## Implementation Plan
         **What to do:** Implementation details here
         **Context (read-only):** Context files listed here
