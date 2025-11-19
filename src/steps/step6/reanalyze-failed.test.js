@@ -216,16 +216,18 @@ describe('reanalyze-failed', () => {
 
       // Assert
       const actualCall = executeClaude.mock.calls[0][0];
+
       expect(actualCall).toContain('## 📊 FAILURE PATTERN ANALYSIS');
       expect(actualCall).toContain('This task has failed 5 times');
       expect(actualCall).toContain('Attempt 2 (2024-01-01T11:00:00Z):');
       expect(actualCall).toContain('Second error');
       expect(actualCall).toContain('Attempt 4 (2024-01-01T13:00:00Z):');
       expect(actualCall).toContain('Fourth error');
-      // Check for the critical message in multiple ways
+
+      // Check for the critical message with correct formatting
       expect(actualCall).toContain('**CRITICAL**: Analyze why these approaches failed and take a DIFFERENT strategy');
-      // Also check just in case the formatting is different
-      expect(actualCall).toContain('CRITICAL:');
+      // Check individual components
+      expect(actualCall).toContain('CRITICAL');
       expect(actualCall).toContain('Analyze why these approaches failed');
     });
 
