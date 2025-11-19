@@ -52,11 +52,17 @@ const processAssistantMessage = (json) => {
     if (!json.message || !json.message.content) return null;
 
     let output = '';
+    let hasEmptyTextOnly = false;
 
     for (const msg of json.message.content) {
         // Glm's text
-        if (msg.type === 'text' && msg.text) {
-            output += msg.text;
+        if (msg.type === 'text') {
+            if (msg.text) {
+                output += msg.text;
+            } else if (json.message.content.length === 1) {
+                // Single empty text message - preserve empty string
+                hasEmptyTextOnly = true;
+            }
         }
         // Tool calls
         else if (msg.type === 'tool_use') {
@@ -71,6 +77,10 @@ const processAssistantMessage = (json) => {
         }
     }
 
+    // Return appropriate result based on what was processed
+    if (hasEmptyTextOnly) {
+        return '';
+    }
     return output || null;
 };
 

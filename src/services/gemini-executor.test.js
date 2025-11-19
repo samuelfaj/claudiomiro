@@ -1,0 +1,295 @@
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { spawn } = require('child_process');
+const logger = require('../utils/logger');
+const state = require('../config/state');
+const { ParallelStateManager } = require('./parallel-state-manager');
+const { executeGemini } = require('./gemini-executor');
+
+// Mock modules
+jest.mock('fs');
+jest.mock('path');
+jest.mock('os');
+jest.mock('child_process');
+jest.mock('../utils/logger');
+jest.mock('../config/state');
+jest.mock('./parallel-state-manager');
+jest.mock('./gemini-logger', () => ({
+  processGeminiMessage: jest.fn().mockReturnValue('processed message')
+}));
+
+describe('Gemini Executor', () => {
+  let mockSpawn;
+  let mockChildProcess;
+  let mockLogStream;
+  let mockStateManager;
+
+  beforeEach(() => {
+    // Reset all mocks
+    jest.clearAllMocks();
+
+    // Setup default mocks
+    os.tmpdir.mockReturnValue('/tmp');
+    path.join.mockImplementation((...args) => args.join('/'));
+    state.claudiomiroFolder = '/test/.claudiomiro';
+    state.folder = '/test';
+    state.executorType = 'gemini';
+
+    // Mock file system operations
+    fs.writeFileSync = jest.fn();
+    fs.existsSync = jest.fn();
+    fs.unlinkSync = jest.fn();
+    fs.createWriteStream = jest.fn();
+
+    // Mock log stream
+    mockLogStream = {
+      write: jest.fn(),
+      end: jest.fn()
+    };
+    fs.createWriteStream.mockReturnValue(mockLogStream);
+
+    // Mock child process
+    mockChildProcess = {
+      stdout: {
+        on: jest.fn()
+      },
+      stderr: {
+        on: jest.fn()
+      },
+      on: jest.fn(),
+      kill: jest.fn()
+    };
+    mockSpawn = spawn;
+    mockSpawn.mockReturnValue(mockChildProcess);
+
+    // Mock state manager
+    mockStateManager = {
+      getInstance: jest.fn(() => ({
+        isUIRendererActive: jest.fn().mockReturnValue(false),
+        updateClaudeMessage: jest.fn()
+      }))
+    };
+    ParallelStateManager.getInstance = mockStateManager.getInstance;
+
+    // Mock processGeminiMessage
+    const { processGeminiMessage } = require('./gemini-logger');
+    processGeminiMessage.mockReturnValue('processed message');
+
+    // Mock console methods
+    jest.spyOn(console, 'log').mockImplementation();
+    jest.spyOn(process.stdout, 'write').mockImplementation();
+
+    // Mock process.stdout.columns
+    Object.defineProperty(process.stdout, 'columns', {
+      value: 80,
+      configurable: true
+    });
+
+    // Mock Date.now using spyOn
+    jest.spyOn(Date, 'now').mockReturnValue(1234567890);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  describe('executeGemini', () => {
+    test('should throw error when no prompt provided', async () => {
+      await expect(executeGemini('')).rejects.toThrow('no prompt');
+      await expect(executeGemini(null)).rejects.toThrow('no prompt');
+      await expect(executeGemini(undefined)).rejects.toThrow('no prompt');
+    });
+
+    test('should create temporary file with prompt text', async () => {
+      mockChildProcess.on.mockImplementation((event, handler) => {
+        if (event === 'close') {
+          setTimeout(() => handler(0), 0);
+        }
+      });
+
+      await executeGemini('test prompt');
+
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        expect.stringContaining('claudiomiro-'),
+        'test prompt',
+        'utf-8'
+      );
+    });
+
+    test('should spawn Gemini process with correct command', async () => {
+      mockChildProcess.on.mockImplementation((event, handler) => {
+        if (event === 'close') {
+          setTimeout(() => handler(0), 0);
+        }
+      });
+
+      await executeGemini('test prompt');
+
+      expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('gemini')], {
+        cwd: '/test',
+        stdio: ['ignore', 'pipe', 'pipe']
+      });
+    });
+
+    test('should handle stdout data processing', async () => {
+      return new Promise((resolve) => {
+        mockChildProcess.stdout.on.mockImplementation((event, handler) => {
+          if (event === 'data') {
+            handler('test data\n');
+          }
+        });
+
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            setTimeout(() => handler(0), 0);
+          }
+        });
+
+        const { processGeminiMessage } = require('./gemini-logger');
+        executeGemini('test prompt').then(() => {
+          expect(processGeminiMessage).toHaveBeenCalled();
+          resolve();
+        });
+      });
+    });
+
+    test('should handle process close with success code', async () => {
+      return new Promise((resolve) => {
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            setTimeout(() => handler(0), 0);
+          }
+        });
+
+        executeGemini('test prompt').then(() => {
+          expect(logger.success).toHaveBeenCalledWith('Gemini execution completed');
+          resolve();
+        });
+      });
+    });
+
+    test('should handle process close with error code', async () => {
+      return new Promise((resolve) => {
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            setTimeout(() => handler(1), 0);
+          }
+        });
+
+        executeGemini('test prompt').catch((error) => {
+          expect(error.message).toContain('Gemini exited with code 1');
+          resolve();
+        });
+      });
+    });
+
+    test('should handle process error', async () => {
+      return new Promise((resolve) => {
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'error') {
+            setTimeout(() => handler(new Error('Process failed')), 0);
+          }
+        });
+
+        executeGemini('test prompt').catch((error) => {
+          expect(error.message).toBe('Process failed');
+          expect(logger.error).toHaveBeenCalledWith('Failed to execute Gemini: Process failed');
+          resolve();
+        });
+      });
+    });
+
+    test('should update state manager when taskName provided', async () => {
+      return new Promise((resolve) => {
+        const mockStateManagerInstance = {
+          isUIRendererActive: jest.fn().mockReturnValue(false),
+          updateClaudeMessage: jest.fn()
+        };
+        mockStateManager.getInstance.mockReturnValue(mockStateManagerInstance);
+
+        mockChildProcess.stdout.on.mockImplementation((event, handler) => {
+          if (event === 'data') {
+            handler('test data\n');
+          }
+        });
+
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            setTimeout(() => handler(0), 0);
+          }
+        });
+
+        executeGemini('test prompt', 'testTask').then(() => {
+          expect(mockStateManagerInstance.updateClaudeMessage).toHaveBeenCalledWith('testTask', 'processed message');
+          resolve();
+        });
+      });
+    });
+
+    test('should cleanup temporary file on successful completion', async () => {
+      fs.existsSync.mockReturnValue(true);
+
+      return new Promise((resolve) => {
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            setTimeout(() => handler(0), 0);
+          }
+        });
+
+        executeGemini('test prompt').then(() => {
+          expect(fs.existsSync).toHaveBeenCalled();
+          expect(fs.unlinkSync).toHaveBeenCalled();
+          resolve();
+        });
+      });
+    });
+
+    test('should implement timeout mechanism', (done) => {
+      jest.useFakeTimers();
+
+      mockChildProcess.stdout.on.mockImplementation((event, handler) => {
+        if (event === 'data') {
+          // Don't send any data to trigger timeout
+        }
+      });
+
+      executeGemini('test prompt').catch((error) => {
+        expect(error.message).toContain('Gemini stuck - timeout');
+        expect(mockChildProcess.kill).toHaveBeenCalledWith('SIGKILL');
+        jest.useRealTimers();
+        done();
+      });
+
+      // Fast-forward time to trigger timeout
+      jest.advanceTimersByTime(15 * 60 * 1000);
+    });
+
+    test('should suppress streaming logs when UI renderer is active', async () => {
+      return new Promise((resolve) => {
+        const mockStateManagerInstance = {
+          isUIRendererActive: jest.fn().mockReturnValue(true),
+          updateClaudeMessage: jest.fn()
+        };
+        mockStateManager.getInstance.mockReturnValue(mockStateManagerInstance);
+
+        mockChildProcess.stdout.on.mockImplementation((event, handler) => {
+          if (event === 'data') {
+            handler('test data\n');
+          }
+        });
+
+        mockChildProcess.on.mockImplementation((event, handler) => {
+          if (event === 'close') {
+            setTimeout(() => handler(0), 0);
+          }
+        });
+
+        executeGemini('test prompt', 'testTask').then(() => {
+          expect(console.log).not.toHaveBeenCalled();
+          resolve();
+        });
+      });
+    });
+  });
+});
