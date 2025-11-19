@@ -328,9 +328,8 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.not.stringMatching(/\{\{.*\}\}/)
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).not.toMatch(/\{\{.*\}\}/);
     });
 
     test('should include researchSection when RESEARCH.md exists', async () => {
@@ -346,12 +345,9 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('4. **')
-      );
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('** → Pre-implementation analysis and execution strategy')
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).toContain('4. **');
+      expect(actualCall).toContain('** → Pre-implementation analysis and execution strategy');
     });
 
     test('should have empty researchSection when RESEARCH.md does not exist', async () => {
