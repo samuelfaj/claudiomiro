@@ -1,7 +1,24 @@
 const readline = require('readline');
 const chalk = require('chalk');
 const logger = require('../utils/logger');
-const { getMultilineInput, getSimpleInput, askClarificationQuestions } = require('./prompt-reader');
+
+// Get the original module for testing getSimpleInput when needed
+const originalPromptReader = jest.requireActual('./prompt-reader');
+
+// Mock getSimpleInput at module level to intercept internal calls
+const mockGetSimpleInput = jest.fn();
+jest.mock('./prompt-reader', () => {
+  const originalModule = jest.requireActual('./prompt-reader');
+  return {
+    ...originalModule,
+    getSimpleInput: mockGetSimpleInput,
+    getMultilineInput: originalModule.getMultilineInput,
+    askClarificationQuestions: originalModule.askClarificationQuestions
+  };
+});
+
+// Now import the mocked functions
+const { getMultilineInput, askClarificationQuestions } = require('./prompt-reader');
 
 // Mock chalk comprehensively
 jest.mock('chalk', () => ({
@@ -34,6 +51,9 @@ describe('prompt-reader', () => {
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
+
+    // Reset the getSimpleInput mock
+    mockGetSimpleInput.mockReset();
 
     // Setup console mocks
     mockConsoleLog = jest.spyOn(console, 'log').mockImplementation();
@@ -123,7 +143,7 @@ describe('prompt-reader', () => {
         setTimeout(() => callback(mockAnswer), 5);
       });
 
-      const promise = getSimpleInput('Test question?');
+      const promise = originalPromptReader.getSimpleInput('Test question?');
 
       expect(readline.createInterface).toHaveBeenCalledWith({
         input: process.stdin,
@@ -149,7 +169,7 @@ describe('prompt-reader', () => {
         }
       });
 
-      const promise = getSimpleInput('Test?');
+      const promise = originalPromptReader.getSimpleInput('Test?');
 
       await new Promise(resolve => setTimeout(resolve, 20));
 
@@ -167,30 +187,13 @@ describe('prompt-reader', () => {
         setTimeout(() => callback(mockAnswer), 5);
       });
 
-      return getSimpleInput('Test?').then(result => {
+      return originalPromptReader.getSimpleInput('Test?').then(result => {
         expect(result).toBe('trimmed answer');
       });
     });
   });
 
   describe('askClarificationQuestions', () => {
-    // Mock getSimpleInput at the module level for these tests
-    let originalGetSimpleInput;
-
-    beforeEach(() => {
-      // Store original implementation
-      const promptReader = require('./prompt-reader');
-      originalGetSimpleInput = promptReader.getSimpleInput;
-
-      // Mock getSimpleInput
-      promptReader.getSimpleInput = jest.fn();
-    });
-
-    afterEach(() => {
-      // Restore original implementation
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput = originalGetSimpleInput;
-    });
 
     test('should process JSON string questions and collect answers', async () => {
       const questionsJson = JSON.stringify([
@@ -202,8 +205,7 @@ describe('prompt-reader', () => {
         }
       ]);
 
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput.mockResolvedValue('Test answer');
+      mockGetSimpleInput.mockResolvedValue('Test answer');
 
       const result = await askClarificationQuestions(questionsJson);
 
@@ -216,7 +218,8 @@ describe('prompt-reader', () => {
         category: 'General',
         answer: 'Test answer'
       });
-      expect(promptReader.getSimpleInput).toHaveBeenCalledTimes(1);
+      expect(mockGetSimpleInput).toHaveBeenCalledTimes(1);
+      expect(mockGetSimpleInput).toHaveBeenCalledWith('Your answer: ');
     });
 
     test('should process object questions and collect answers', async () => {
@@ -227,8 +230,7 @@ describe('prompt-reader', () => {
         }
       ];
 
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput.mockResolvedValue('Object Answer');
+      mockGetSimpleInput.mockResolvedValue('Object Answer');
 
       const result = await askClarificationQuestions(questionsObject);
 
@@ -244,8 +246,7 @@ describe('prompt-reader', () => {
         { title: 'Question 2', question: 'Second?' }
       ];
 
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput
+      mockGetSimpleInput
         .mockResolvedValueOnce('Answer 1')
         .mockResolvedValueOnce('Answer 2');
 
@@ -255,7 +256,7 @@ describe('prompt-reader', () => {
       expect(parsedResult.answers).toHaveLength(2);
       expect(parsedResult.answers[0].answer).toBe('Answer 1');
       expect(parsedResult.answers[1].answer).toBe('Answer 2');
-      expect(promptReader.getSimpleInput).toHaveBeenCalledTimes(2);
+      expect(mockGetSimpleInput).toHaveBeenCalledTimes(2);
     });
 
     test('should throw error for malformed JSON string', async () => {
@@ -297,8 +298,7 @@ describe('prompt-reader', () => {
         }
       ];
 
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput.mockResolvedValue('a');
+      mockGetSimpleInput.mockResolvedValue('a');
 
       const result = await askClarificationQuestions(questionsWithOption);
 
@@ -316,8 +316,7 @@ describe('prompt-reader', () => {
         }
       ];
 
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput.mockResolvedValue('New pattern');
+      mockGetSimpleInput.mockResolvedValue('New pattern');
 
       const result = await askClarificationQuestions(questionsWithPatterns);
 
@@ -335,8 +334,7 @@ describe('prompt-reader', () => {
         }
       ];
 
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput.mockResolvedValue('Réponse avec émojis ✨');
+      mockGetSimpleInput.mockResolvedValue('Réponse avec émojis ✨');
 
       const result = await askClarificationQuestions(unicodeQuestions);
 
@@ -349,8 +347,7 @@ describe('prompt-reader', () => {
     test('should verify timestamp format in response', async () => {
       const questions = [{ title: 'Time Question', question: 'What time is it?' }];
 
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput.mockResolvedValue('Now');
+      mockGetSimpleInput.mockResolvedValue('Now');
 
       const result = await askClarificationQuestions(questions);
 
@@ -371,8 +368,7 @@ describe('prompt-reader', () => {
         }
       ];
 
-      const promptReader = require('./prompt-reader');
-      promptReader.getSimpleInput
+      mockGetSimpleInput
         .mockResolvedValueOnce('Answer 1')
         .mockResolvedValueOnce('Answer 2');
 

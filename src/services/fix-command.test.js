@@ -421,24 +421,15 @@ describe('fix-command', () => {
     test('should attempt to fix command on failure', async () => {
       fs.existsSync.mockReturnValue(true);
 
-      // Simulate command failure twice (for 2 attempts)
-      let attemptCount = 0;
-      setTimeout(() => {
-        mockChildProcess.emitClose(1);
-        attemptCount++;
-        if (attemptCount < 2) {
-          // Simulate second failure after Claude execution
-          setTimeout(() => {
-            mockChildProcess.emitClose(1);
-          }, 5);
-        }
-      }, 10);
+      // Mock executeCommand to simulate failure
+      const mockExecuteCommand = jest.spyOn({ executeCommand }, 'executeCommand');
+      mockExecuteCommand.mockResolvedValue({ success: false, exitCode: 1, output: 'Error' });
 
       await expect(fixCommand('ls', 2)).rejects.toThrow('All 2 attempts to fix the command "ls" have failed');
 
       expect(executeClaude).toHaveBeenCalledWith('fix command "ls"');
       expect(logger.info).toHaveBeenCalledWith('fix command "ls"');
-    }, 10000);
+    });
 
     test('should create claudiomiro folder if it does not exist', async () => {
       fs.existsSync.mockReturnValue(false);
@@ -502,34 +493,32 @@ describe('fix-command', () => {
 
       const commandWithSpecialChars = 'git commit -m "Fix bug #123 & update docs"';
 
-      // Simulate command failure
-      setTimeout(() => {
-        mockChildProcess.emitClose(1);
-      }, 10);
+      // Mock executeCommand to simulate failure
+      const mockExecuteCommand = jest.spyOn({ executeCommand }, 'executeCommand');
+      mockExecuteCommand.mockResolvedValue({ success: false, exitCode: 1, output: 'Error' });
 
       await expect(fixCommand(commandWithSpecialChars, 1)).rejects.toThrow(
         expect.stringContaining('git commit -m "Fix bug #123 & update docs"')
       );
 
       expect(executeClaude).toHaveBeenCalledWith(`fix command "${commandWithSpecialChars}"`);
-    }, 10000);
+    });
 
     test('should handle very long commands', async () => {
       fs.existsSync.mockReturnValue(true);
 
       const longCommand = 'x'.repeat(1000);
 
-      // Simulate command failure
-      setTimeout(() => {
-        mockChildProcess.emitClose(1);
-      }, 10);
+      // Mock executeCommand to simulate failure
+      const mockExecuteCommand = jest.spyOn({ executeCommand }, 'executeCommand');
+      mockExecuteCommand.mockResolvedValue({ success: false, exitCode: 1, output: 'Error' });
 
       await expect(fixCommand(longCommand, 1)).rejects.toThrow(
         expect.stringContaining(longCommand)
       );
 
       expect(executeClaude).toHaveBeenCalledWith(`fix command "${longCommand}"`);
-    }, 10000);
+    });
   });
 
   describe('Edge cases and error handling', () => {
@@ -2088,12 +2077,15 @@ describe('fix-command', () => {
             const writeCalls = mockLogStream.write.mock.calls;
 
             // Check for separator and timestamp header
+            const separatorCall = writeCalls.find(call =>
+              call[0] === '='.repeat(80)
+            );
             const headerCall = writeCalls.find(call =>
               call[0].includes('Command execution started: npm install')
             );
+            expect(separatorCall).toBeDefined();
             expect(headerCall).toBeDefined();
             expect(headerCall[0]).toContain('[2024-01-15T10:30:45.123Z]');
-            expect(headerCall[0]).toContain('='.repeat(80));
 
             // Check for completion timestamp
             const completionCall = writeCalls.find(call =>
