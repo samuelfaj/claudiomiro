@@ -392,7 +392,21 @@ describe('step4/utils', () => {
       // Arrange
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue(`
+        Fully implemented: NO
+        ## Context Reference
         References to AI_PROMPT.md and TASK.md
+        ## Implementation Plan
+        **What to do:** Implementation details here
+        **Context (read-only):** Context files listed here
+        **Touched (will modify/create):** Files to be modified here
+        ## Verification
+        Verification steps with \`src/index.js:10-20\` references
+        ## Acceptance Criteria
+        All criteria met with \`utils.js:45-50\` implementation
+        ## Impact Analysis
+        Analysis with references to \`config.json:100\`
+        ## Follow-ups
+        Follow-up items with \`test.js:1-10\` references
         ${'x'.repeat(600)} // Make content long enough
       `);
 
@@ -407,7 +421,21 @@ describe('step4/utils', () => {
       // Arrange
       fs.existsSync.mockReturnValue(true);
       fs.readFileSync.mockReturnValue(`
+        Fully implemented: NO
+        ## Context Reference
         References to AI_PROMPT.md and TASK.md and PROMPT.md
+        ## Implementation Plan
+        **What to do:** Implementation details here
+        **Context (read-only):** Context files listed here
+        **Touched (will modify/create):** Files to be modified here
+        ## Verification
+        Verification steps with \`src/index.js:10-20\` references
+        ## Acceptance Criteria
+        All criteria met with \`utils.js:45-50\` implementation
+        ## Impact Analysis
+        Analysis with references to \`config.json:100\`
+        ## Follow-ups
+        Follow-up items with \`test.js:1-10\` references
         ${'x'.repeat(600)} // Make content long enough
       `);
 

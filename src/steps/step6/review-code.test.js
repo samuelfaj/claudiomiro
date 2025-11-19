@@ -142,9 +142,9 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('CONTEXT.md')
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).toContain('CONTEXT.md');
+      expect(actualCall).toContain('/test/.claudiomiro/TASK1/CONTEXT.md');
     });
 
     test('should skip RESEARCH.md and CONTEXT.md when they do not exist', async () => {
@@ -160,12 +160,9 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.not.stringContaining('TASK1/RESEARCH.md')
-      );
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.not.stringContaining('TASK1/CONTEXT.md')
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).not.toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
+      expect(actualCall).not.toContain('/test/.claudiomiro/TASK1/CONTEXT.md');
     });
 
     test('should collect context from other tasks', async () => {
@@ -186,15 +183,10 @@ describe('review-code', () => {
       await reviewCode(mockTask);
 
       // Assert
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('TASK2/CONTEXT.md')
-      );
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('TASK2/RESEARCH.md')
-      );
-      expect(executeClaude).toHaveBeenCalledWith(
-        expect.stringContaining('TASK3/CONTEXT.md')
-      );
+      const actualCall = executeClaude.mock.calls[0][0];
+      expect(actualCall).toContain('/test/.claudiomiro/TASK2/CONTEXT.md');
+      expect(actualCall).toContain('/test/.claudiomiro/TASK2/RESEARCH.md');
+      expect(actualCall).toContain('/test/.claudiomiro/TASK3/CONTEXT.md');
     });
 
     test('should skip current task when collecting from other tasks', async () => {
