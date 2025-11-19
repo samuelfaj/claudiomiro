@@ -8,13 +8,13 @@ const { processClaudeMessage } = require('./claude-logger');
 const { ParallelStateManager } = require('./parallel-state-manager');
 
 const overwriteBlock = (lines) => {
-    // Move o cursor para cima N linhas e limpa cada uma
+    // Move cursor up N lines and clear each one
     process.stdout.write(`\x1b[${lines}A`);
     for (let i = 0; i < lines; i++) {
-      process.stdout.write('\x1b[2K'); // limpa linha
-      process.stdout.write('\x1b[1B'); // desce uma linha
+      process.stdout.write('\x1b[2K'); // clear line
+      process.stdout.write('\x1b[1B'); // move down one line
     }
-    // Volta para o topo do bloco
+    // Return to the top of the block
     process.stdout.write(`\x1b[${lines}A`);
   }
 
