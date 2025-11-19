@@ -1,6 +1,6 @@
 const readline = require('readline');
 const chalk = require('chalk');
-const logger = require('../../logger');
+const logger = require('../utils/logger');
 
 const getMultilineInput = () => {
     return new Promise((resolve) => {

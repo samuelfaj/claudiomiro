@@ -1,5 +1,5 @@
 const fs = require('fs');
-const logger = require('../../logger');
+const logger = require('../utils/logger');
 const state = require('../config/state');
 
 const startFresh = (createFolder = false) => {

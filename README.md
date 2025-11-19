@@ -4,14 +4,14 @@
 
 With an army of AI agents, turn days of complex development into a fully automated process — without sacrificing production-grade code quality.
 
-![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/claudiomiro_terminal.png?raw=true)
+![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/claudiomiro_terminal.png?raw=true)
 
 **Works With:**
 - ✅ `claudiomiro --claude`
 - ✅ `claudiomiro --codex`
 - ✅ `claudiomiro --gemini`
-- ✅ `claudiomiro --deep-seek` [(how to)](./DEEPSEEK.md)
-- ✅ `claudiomiro --glm` [(how to)](./GLM.md)
+- ✅ `claudiomiro --deep-seek` [(how to)](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
+- ✅ `claudiomiro --glm` [(how to)](./docs/HOW-TO-RUN-WITH-GLM.md)
 
 **Examples:**
 - 💬 [“Implement Express.js with some basic routes and JWT.”](https://github.com/samuelfaj/claudiomiro-express-example) - Claude
@@ -63,32 +63,61 @@ Claudiomiro eliminates the manual workflow management by combining **autonomous 
 **Parallel Execution** - Claudiomiro intelligently breaks down complex tasks into independent sub-tasks that can run simultaneously, dramatically reducing completion time:
 
 ```
-Cycle 1: [Step 0] Decomposing complex task into 5 parallelizable sub-tasks
-Cycle 2: [Step 1] Analyzing dependencies and creating execution plan
+Cycle 1: [Step 0-3] Planning and decomposition
+         → Clarification questions → AI_PROMPT.md → Task decomposition → Execution plan (DAG)
          → EXECUTION_PLAN.md created (3 layers, max 4 parallel tasks)
 
 Parallel Execution Started (DAG Executor):
   🚀 Running 4 tasks in parallel: TASK2, TASK3, TASK4, TASK5
-  ▶️  TASK2: Research → Implement → Code Review → Tests... ✅
-  ▶️  TASK3: Research → Implement → Code Review → Tests... ✅
-  ▶️  TASK4: Research → Implement → Code Review → Tests... ✅
-  ▶️  TASK5: Research → Implement → Code Review → Tests... ✅
+  ▶️  TASK2: [Step 4-6] TODO → Research → Implement → Code Review... ✅
+  ▶️  TASK3: [Step 4-6] TODO → Research → Implement → Code Review... ✅
+  ▶️  TASK4: [Step 4-6] TODO → Research → Implement → Code Review... ✅
+  ▶️  TASK5: [Step 4-6] TODO → Research → Implement → Code Review... ✅
 
   🚀 Running 1 task in parallel: TASK6 (depends on TASK2-5)
-  ▶️  TASK6: Integration tests... ✅
+  ▶️  TASK6: [Step 4-6] Integration tests... ✅
 
-Cycle 3: [Step 5] Creating commit and pushing
+Cycle 2: [Step 7] Global critical bug sweep
+         → Analyzing ALL changes via git diff
+         → Hunting for CRITICAL bugs (security, production-breaking)
+         → Self-correcting in loop until 0 critical bugs found
+         → CRITICAL_REVIEW_PASSED.md ✅
+
+Cycle 3: [Step 8] Creating final commit and PR
 
 ✓ Task completed in 3 autonomous cycles (4 tasks ran in parallel)
 ```
 
 No manual intervention. No "continue" prompts. Just complete, production-ready code — **now faster with parallel execution**.
 
+### Step-by-Step Workflow
+
+Claudiomiro executes through a refined 9-step pipeline (completely refactored in v1.9.0 following Single Responsibility Principle):
+
+1. **Step 0** - Generate clarification questions and initial branch setup
+2. **Step 1** - Generate refined AI_PROMPT.md from user answers
+3. **Step 2** - Decompose task into parallelizable sub-tasks
+4. **Step 3** - Analyze dependencies and create execution plan (DAG)
+5. **Step 4** - Generate detailed TODO.md for each task
+6. **Step 5** - Execute task (research → context → implementation)
+7. **Step 6** - Senior-level code review with quality validation
+8. **Step 7** - **NEW**: Global critical bug sweep across ALL changes
+9. **Step 8** - Final commit and pull request creation
+
+**What's new in Step 7?**
+- Analyzes git diff of **entire branch** (not just individual tasks)
+- Hunts for **CRITICAL severity bugs only** (security, data loss, production-breaking issues)
+- Self-corrects in loop until **0 critical bugs remain**
+- Only runs on new branches created by Claudiomiro (not --same-branch)
+- Prevents shipping dangerous code to production
+
 ### Safety Mechanisms
 
 - **Maximum 20 cycles per task** - Prevents runaway execution within each task (customize with `--limit=N` or disable with `--no-limit`)
+- **Critical bug sweep** - Step 7 ensures no critical bugs ship to production
 - **Progress validation** - Ensures forward progress each cycle
 - **Error detection** - Stops if same error repeats
+- **Branch validation** - Step 7 only runs on Claudiomiro-managed branches
 - **Manual override** - Use `--push=false` to review before final commit
 
 ## Key Features
@@ -100,10 +129,12 @@ No manual intervention. No "continue" prompts. Just complete, production-ready c
 - 🎯 **Dual Planning Modes**: Choose between auto (speed) or hard (maximum criticality + deep reasoning)
 - 🧠 **Deep Analysis**: Understands your codebase patterns and architecture
 - 👨‍💻 **Automated Code Review**: Senior-level review validates quality before testing
+- 🛡️ **Global Critical Bug Sweep** (NEW v1.9.0): Final security & safety validation before shipping
 - 🔧 **Command Fixing**: Automatically retries and fixes failing commands using AI
 - 🧪 **Quality Enforced**: Never skips tests, always validates
 - 📊 **Full Transparency**: Live logs show every decision and action
-- 🎯 **Production Ready**: Code is tested, reviewed, documented, and ready to merge
+- 🏗️ **Refactored Architecture** (v1.9.0): Each step follows Single Responsibility Principle
+- 🎯 **Production Ready**: Code is tested, reviewed, debugged, and ready to merge
 - ⚡ **Massive Time Savings**: 95-98% reduction in development time
 
 ## Prerequisites for Optimal Performance
@@ -249,6 +280,61 @@ Investigate root cause in /services/FinancialService.js
 and fix with proper tests to prevent regression.
 ```
 
+## Architecture & Development
+
+Claudiomiro v1.9.0 features a completely refactored architecture following **Single Responsibility Principle**:
+
+### Directory Structure
+```
+src/
+├── steps/
+│   ├── step0/         # Clarification questions
+│   ├── step1/         # AI_PROMPT generation
+│   ├── step2/         # Task decomposition
+│   ├── step3/         # Dependency analysis (DAG)
+│   ├── step4/         # TODO generation
+│   ├── step5/         # Task execution
+│   ├── step6/         # Code review
+│   ├── step7/         # Global critical bug sweep (NEW)
+│   └── step8/         # Final commit & PR
+├── services/          # Executors (Claude, Codex, Gemini, DeepSeek, GLM)
+├── utils/             # Shared utilities
+└── templates/         # Output templates (TODO.md, CONTEXT.md)
+```
+
+### Key Principles
+- **Each step = ONE responsibility** (no more substeps like 0.0, 0.1, 0.2)
+- **Co-located tests** (test files next to source files, not in separate directories)
+- **External prompts** (large prompts in `.md` files, not inline)
+- **Language-agnostic** (works with JavaScript, Python, Go, Java, Rust, etc.)
+
+### For Contributors
+
+**Before contributing, please read:**
+- 📖 [CLAUDE.md](./CLAUDE.md) - Development guide, conventions, and best practices
+- 🧪 [Testing Guidelines](./CLAUDE.md#test-structure) - How to write tests
+- 🏗️ [Architecture Principles](./CLAUDE.md#project-architecture) - Single Responsibility Principle
+- 📝 [Code Standards](./CLAUDE.md#development-conventions) - English code, naming conventions
+
+**Quick Start for Development:**
+```bash
+# Run tests
+npm test
+
+# Run tests with coverage
+npm run test:coverage
+
+# All code and tests must be in English
+# All markdown files in src/steps/ must be lowercase
+# Each .js file must have a corresponding .test.js file
+```
+
 ## Contributing
 
-Issues and PRs welcome! Please check the [issues page](https://github.com/yourusername/claudiomiro/issues).
+Issues and PRs welcome! Please:
+1. Read [CLAUDE.md](./CLAUDE.md) for development guidelines
+2. Ensure all tests pass (`npm test`)
+3. Follow Single Responsibility Principle
+4. Write code and comments in English only
+
+Check the [issues page](https://github.com/samuelfaj/claudiomiro/issues) for open tasks.

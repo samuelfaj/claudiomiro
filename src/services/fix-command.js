@@ -1,7 +1,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const logger = require('../../logger');
+const logger = require('../utils/logger');
 const state = require('../config/state');
 const { executeClaude } = require("./claude-executor");
 const { log } = require('console');

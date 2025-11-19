@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const logger = require('../../logger');
+const logger = require('../utils/logger');
 const state = require('../config/state');
-const { step2, step3, step4 } = require('../steps');
+const { step4, step5, step6, step7 } = require('../steps');
 const { isFullyImplemented, hasApprovedCodeReview } = require('../utils/validation');
 const ParallelStateManager = require('./parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
@@ -85,8 +85,8 @@ class DAGExecutor {
   }
 
   /**
-   * Executa o ciclo completo de uma task: step2 → step3 → step4
-   * (step1 foi incorporado ao step0 e já criou PROMPT.md)
+   * Executa o ciclo completo de uma task: step4 → step5 → step6 → step7
+   * (step0-3 já foram executados: questões, AI_PROMPT, decomposição, dependências)
    */
   async executeTask(taskName) {
     try {
@@ -123,18 +123,18 @@ class DAGExecutor {
         return;
       }
 
-      // PROMPT.md já foi criado pelo step0, então começamos direto no step2
+      // PROMPT.md já foi criado pelos steps 0-3, então começamos direto no step4
 
-      // Step 2: Planejamento (PROMPT.md → TODO.md)
+      // Step 4: Planejamento (PROMPT.md → TODO.md)
       if (!fs.existsSync(todoPath)) {
-        if (!this.shouldRunStep(2)) {
+        if (!this.shouldRunStep(4)) {
           this.stateManager.updateTaskStatus(taskName, 'completed');
           this.tasks[taskName].status = 'completed';
           this.running.delete(taskName);
           return;
         }
-        this.stateManager.updateTaskStep(taskName, 'Step 2 - Research and planning');
-        await step2(taskName);
+        this.stateManager.updateTaskStep(taskName, 'Step 4 - Research and planning');
+        await step4(taskName);
 
         // Check if task was split (original folder no longer exists)
         if (!fs.existsSync(taskPath)) {
@@ -146,8 +146,8 @@ class DAGExecutor {
         }
       }
 
-      // Se step 2 foi executado e não devemos executar step 3, para aqui
-      if (!this.shouldRunStep(3)) {
+      // Se step 4 foi executado e não devemos executar step 5, para aqui
+      if (!this.shouldRunStep(5)) {
         this.stateManager.updateTaskStatus(taskName, 'completed');
         this.tasks[taskName].status = 'completed';
         this.running.delete(taskName);
@@ -157,21 +157,21 @@ class DAGExecutor {
       // Loop até implementação completa
       let maxAttempts = this.noLimit ? Infinity : this.maxAttemptsPerTask; // Limite de segurança (customizável via --limit, infinito com --no-limit)
       let attempts = 0;
-      let lastStep3Error = null;
+      let lastStep5Error = null;
 
       while (attempts < maxAttempts) {
         attempts++;
 
-        // Step 3: Implementação
+        // Step 5: Implementação
         if (!fs.existsSync(todoPath) || !isFullyImplemented(todoPath)) {
           try {
-            this.stateManager.updateTaskStep(taskName, `Step 3 - Implementing tasks (attempt ${attempts})`);
-            await step3(taskName);
-            lastStep3Error = null; // Clear any previous error on success
+            this.stateManager.updateTaskStep(taskName, `Step 5 - Implementing tasks (attempt ${attempts})`);
+            await step5(taskName);
+            lastStep5Error = null; // Clear any previous error on success
           } catch (error) {
-            // If step3 fails, we should continue the loop to retry
-            lastStep3Error = error;
-            logger.warning(`${taskName} Step 3 failed (attempt ${attempts}): ${error.message}`);
+            // If step5 fails, we should continue the loop to retry
+            lastStep5Error = error;
+            logger.warning(`${taskName} Step 5 failed (attempt ${attempts}): ${error.message}`);
             // Add a small delay before retry to avoid rapid failures
             await new Promise(resolve => setTimeout(resolve, 1000));
             continue;
@@ -179,20 +179,20 @@ class DAGExecutor {
           continue; // Volta para verificar se está implementado
         }
 
-        // Se step 3 foi executado e não devemos executar step 4, para aqui
-        if (!this.shouldRunStep(4)) {
+        // Se step 5 foi executado e não devemos executar step 6, para aqui
+        if (!this.shouldRunStep(6)) {
           this.stateManager.updateTaskStatus(taskName, 'completed');
           this.tasks[taskName].status = 'completed';
           this.running.delete(taskName);
           return;
         }
 
-        // Step 4: Code review final
+        // Step 6: Code review final
         if (!hasApprovedCodeReview(codeReviewPath)) {
-          this.stateManager.updateTaskStep(taskName, 'Step 4 - Code review');
+          this.stateManager.updateTaskStep(taskName, 'Step 6 - Code review');
 
           const shouldPush = !process.argv.some(arg => arg === '--push=false');
-          await step4(taskName, shouldPush);
+          await step6(taskName, shouldPush);
 
           // Se ainda não foi aprovado, continua o loop
           if (!isTaskApproved()) {
@@ -200,14 +200,15 @@ class DAGExecutor {
           }
         }
 
+        // Step 7 agora é executado globalmente após todas as tasks
         // Se chegou aqui, task aprovada!
         break;
       }
 
       if (attempts >= maxAttempts) {
         this.stateManager.updateTaskStatus(taskName, 'failed');
-        const errorMessage = lastStep3Error
-          ? `Maximum attempts (${maxAttempts}) reached for ${taskName}. Last error: ${lastStep3Error.message}`
+        const errorMessage = lastStep5Error
+          ? `Maximum attempts (${maxAttempts}) reached for ${taskName}. Last error: ${lastStep5Error.message}`
           : `Maximum attempts (${maxAttempts}) reached for ${taskName}`;
         throw new Error(errorMessage);
       }
@@ -245,7 +246,10 @@ class DAGExecutor {
     const runningPromises = new Map();
 
     while (true) {
-      buildTaskGraph(); // Rebuild task graph to capture any changes in dependencies
+      // Rebuild task graph to capture any changes in dependencies (if provided)
+      if (buildTaskGraph && typeof buildTaskGraph === 'function') {
+        buildTaskGraph();
+      }
 
       // Verifica se há slots disponíveis e tasks prontas
       const ready = this.getReadyTasks();
@@ -302,6 +306,32 @@ class DAGExecutor {
       .filter(([, task]) => task.status === 'failed')
       .map(([name]) => name);
 
+    // Step 7: Critical Bug Sweep (global) - só roda se não houve falhas
+    if (failed.length === 0 && this.shouldRunStep(7)) {
+      logger.newline();
+      logger.info('🔍 Running Step 7: Critical Bug Sweep (global)...');
+
+      try {
+        // Pass noLimit and maxAttemptsPerTask to step7
+        const maxIterations = this.noLimit ? Infinity : this.maxAttemptsPerTask;
+        await step7(maxIterations);
+        logger.success('✅ Step 7 completed - No critical bugs found');
+      } catch (error) {
+        logger.newline();
+        logger.error('❌ STEP 7 FAILED: Critical bugs remain after maximum iterations');
+        logger.error('');
+        logger.error('📋 Check the following file for details:');
+        logger.error(`   ${path.join(state.claudiomiroFolder, 'BUGS.md')}`);
+        logger.error('');
+        logger.error('💡 Next steps:');
+        logger.error('   1. Review BUGS.md to see which critical bugs were found');
+        logger.error('   2. Fix the bugs manually');
+        logger.error('   3. Run Claudiomiro again to verify fixes');
+        logger.newline();
+        throw error; // Propaga erro para impedir step8 e parar o processo
+      }
+    }
+
     const pending = Object.entries(this.tasks)
       .filter(([, task]) => task.status === 'pending')
       .map(([name]) => name);
@@ -323,14 +353,14 @@ class DAGExecutor {
   }
 
   /**
-   * Executa apenas o step2 (planejamento) para todas as tasks em paralelo
+   * Executa apenas o step4 (planejamento/TODO) para todas as tasks em paralelo
    */
   async runStep2() {
     const coreCount = CORE_COUNT;
     const defaultMax = CORE_COUNT;
     const isCustom = this.maxConcurrent !== defaultMax;
 
-    logger.info(`Starting step 2 (planning) with max ${this.maxConcurrent} concurrent tasks${isCustom ? ' (custom)' : ` (${coreCount} cores × 2, capped at 5)`}`);
+    logger.info(`Starting step 4 (planning) with max ${this.maxConcurrent} concurrent tasks${isCustom ? ' (custom)' : ` (${coreCount} cores × 2, capped at 5)`}`);
     logger.newline();
 
     // Initialize and start UI renderer
@@ -385,7 +415,7 @@ class DAGExecutor {
    * @returns {boolean} true se executou pelo menos uma task
    */
   async executeStep2Wave() {
-    // Step 2: ignora dependências - todas as tarefas podem planejar em paralelo
+    // Step 4: ignora dependências - todas as tarefas podem planejar em paralelo
     const ready = Object.entries(this.tasks)
       .filter(([name, task]) => task.status === 'pending')
       .map(([name]) => name);
@@ -411,7 +441,7 @@ class DAGExecutor {
   }
 
   /**
-   * Executa apenas o step2 para uma task específica
+   * Executa apenas o step4 para uma task específica
    */
   async executeStep2Task(taskName) {
     try {
@@ -429,16 +459,16 @@ class DAGExecutor {
         return;
       }
 
-      // Step 2: Planejamento (PROMPT.md → TODO.md)
-      if (!this.shouldRunStep(2)) {
+      // Step 4: Planejamento (PROMPT.md → TODO.md)
+      if (!this.shouldRunStep(4)) {
         this.stateManager.updateTaskStatus(taskName, 'completed');
         this.tasks[taskName].status = 'completed';
         this.running.delete(taskName);
         return;
       }
 
-      this.stateManager.updateTaskStep(taskName, 'Step 2 - Research and planning');
-      await step2(taskName);
+      this.stateManager.updateTaskStep(taskName, 'Step 4 - Research and planning');
+      await step4(taskName);
 
       // Check if task was split (original folder no longer exists)
       if (!fs.existsSync(taskPath)) {
@@ -452,7 +482,7 @@ class DAGExecutor {
       this.stateManager.updateTaskStatus(taskName, 'completed');
       this.tasks[taskName].status = 'completed';
       this.running.delete(taskName);
-      logger.success(`✅ ${taskName} step 2 completed successfully`);
+      logger.success(`✅ ${taskName} step 4 completed successfully`);
     } catch (error) {
       this.stateManager.updateTaskStatus(taskName, 'failed');
       this.tasks[taskName].status = 'failed';

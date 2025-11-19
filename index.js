@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-const logger = require('./logger');
-const { init } = require('./src/cli');
+const logger = require('./src/utils/logger');
+const { init } = require('./src/utils/cli');
 
 init().catch((error) => {
     logger.newline();

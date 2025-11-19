@@ -1,6 +1,6 @@
 const chalk = require('chalk');
 const cliSpinners = require('cli-spinners');
-const logger = require('../../logger');
+const logger = require('../utils/logger');
 
 /**
  * ParallelUIRenderer - Renders live UI updates for parallel task execution
