@@ -23,12 +23,8 @@ const runGlm = (text, taskName = null) => {
         const stateManager = taskName ? ParallelStateManager.getInstance() : null;
         const suppressStreamingLogs = Boolean(taskName) && stateManager && typeof stateManager.isUIRendererActive === 'function' && stateManager.isUIRendererActive();
 
-        if(!text){
-            throw new Error('no prompt');
-        }
-
         // Create temporary file for the prompt
-        const tmpFile = path.join(os.tmpdir(), `claudiomiro-codex-${Date.now()}.txt`);
+        const tmpFile = path.join(os.tmpdir(), `claudiomiro-glm-${Date.now()}.txt`);
         fs.writeFileSync(tmpFile, text, 'utf-8');
 
         // Use sh to execute command with cat substitution
@@ -218,9 +214,9 @@ const runGlm = (text, taskName = null) => {
 };
 
 const executeGlm = (text, taskName = null) => {
-    if (state.executorType === 'codex') {
-        const { executeCodex } = require('./codex-executor');
-        return executeCodex(text, taskName);
+    // Validate input before dispatching to any executor
+    if(!text){
+        return Promise.reject(new Error('no prompt'));
     }
 
     return runGlm(text, taskName);
