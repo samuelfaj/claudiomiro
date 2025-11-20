@@ -21,7 +21,7 @@ const executeCodex = (text, taskName = null) => {
         const stateManager = taskName ? ParallelStateManager.getInstance() : null;
         const suppressStreamingLogs = Boolean(taskName) && stateManager && typeof stateManager.isUIRendererActive === 'function' && stateManager.isUIRendererActive();
 
-        if(!text){
+        if (!text) {
             throw new Error('no prompt');
         }
         const tmpFile = path.join(os.tmpdir(), `claudiomiro-codex-${Date.now()}.txt`);
@@ -70,6 +70,7 @@ const executeCodex = (text, taskName = null) => {
                 // Force the Promise to reject with timeout error
                 reject(new Error('Codex stuck - timeout after 10 minutes of inactivity'));
             }, INACTIVITY_TIMEOUT);
+            inactivityTimer.unref();
         };
 
         const logMessage = (content) => {

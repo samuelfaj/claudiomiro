@@ -18,8 +18,8 @@ const getMultilineInput = () => {
         console.log(chalk.white('Describe what you need help with:'));
         console.log(chalk.bold.cyan('─────────────────────────────────────────────'));
         console.log(chalk.gray('✓ Write or paste your task description'));
-        console.log(chalk.gray('✓ Paste code, URLs, or drag & drop file paths') );
-        console.log(chalk.gray('✓ Press ENTER twice to submit') );
+        console.log(chalk.gray('✓ Paste code, URLs, or drag & drop file paths'));
+        console.log(chalk.gray('✓ Press ENTER twice to submit'));
         console.log(chalk.gray('✓ Press Ctrl+C to cancel'));
         console.log(chalk.bold.cyan('─────────────────────────────────────────────'));
         console.log();

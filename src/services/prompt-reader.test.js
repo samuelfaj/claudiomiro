@@ -3,7 +3,9 @@ const chalk = require('chalk');
 const logger = require('../utils/logger');
 
 // Mock dependencies first
-jest.mock('readline');
+jest.mock('readline', () => ({
+  createInterface: jest.fn()
+}));
 jest.mock('../utils/logger');
 
 // Import the actual module for testing
@@ -43,19 +45,26 @@ describe('prompt-reader', () => {
     mockProcessStdoutWrite = jest.spyOn(process.stdout, 'write').mockImplementation();
 
     // Setup mock readline interface
+    // Setup mock readline interface
     mockReadlineInterface = {
       on: jest.fn(),
       question: jest.fn(),
       close: jest.fn()
     };
 
-    readline.createInterface.mockReturnValue(mockReadlineInterface);
+    // Access the mocked module
+    const readlineMock = require('readline');
+    readlineMock.createInterface.mockReturnValue(mockReadlineInterface);
   });
 
   afterEach(() => {
     // Restore console mocks
     mockConsoleLog.mockRestore();
     mockProcessStdoutWrite.mockRestore();
+  });
+
+  afterAll(() => {
+    process.stdin.unref();
   });
 
   describe('getMultilineInput', () => {
