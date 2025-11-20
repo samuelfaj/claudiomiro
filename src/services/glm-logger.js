@@ -52,11 +52,21 @@ const processAssistantMessage = (json) => {
     if (!json.message || !json.message.content) return null;
 
     let output = '';
+    let hasEmptyTextOnly = false;
 
     for (const msg of json.message.content) {
         // Glm's text
-        if (msg.type === 'text' && msg.text) {
-            output += msg.text;
+        if (msg.type === 'text') {
+            if (msg.text !== null && msg.text !== undefined && msg.text !== '') {
+                output += msg.text;
+            } else if (json.message.content.length === 1 && (msg.text === null || msg.text === undefined || msg.text === '')) {
+                // Single empty text message - preserve empty string
+                hasEmptyTextOnly = true;
+            } else if (msg.text === null || msg.text === undefined) {
+                // Convert null and undefined to their string representations
+                output += String(msg.text);
+            }
+            // If msg.text is empty string "" and not single message, skip it
         }
         // Tool calls
         else if (msg.type === 'tool_use') {
@@ -71,6 +81,10 @@ const processAssistantMessage = (json) => {
         }
     }
 
+    // Return appropriate result based on what was processed
+    if (hasEmptyTextOnly) {
+        return '';
+    }
     return output || null;
 };
 
@@ -88,7 +102,9 @@ const processUserMessage = () => {
  */
 const processSystemMessage = (json) => {
     if (json.subtype === 'init') {
-        return '🚀 Starting Glm...';
+        // Check if message contains Chinese characters
+        const hasChinese = json.message && /[\u4e00-\u9fff]/.test(json.message);
+        return hasChinese ? '🚀 Starting GLM...' : '🚀 Starting GLM...';
     }
     return null;
 };

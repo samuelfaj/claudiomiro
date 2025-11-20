@@ -785,4 +785,284 @@ describe('Claude Logger', () => {
       expect(result).toBe('\n🔧 Bash: npm install');
     });
   });
+
+  describe('AI-Specific Streaming Scenarios', () => {
+    test('should handle streaming message concatenation with partial chunks', () => {
+      const partialMessage1 = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'I will help you' }
+          ]
+        }
+      };
+      const partialMessage2 = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: ' implement this feature.' }
+          ]
+        }
+      };
+
+      const result1 = processClaudeMessage(JSON.stringify(partialMessage1));
+      const result2 = processClaudeMessage(JSON.stringify(partialMessage2));
+
+      expect(result1).toBe('I will help you');
+      expect(result2).toBe(' implement this feature.');
+    });
+
+    test('should handle complex nested tool workflows with reasoning', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Let me analyze the codebase structure first.' },
+            { type: 'tool_use', name: 'Glob', input: { pattern: '**/*.js' } },
+            { type: 'text', text: '\nFound JavaScript files. Now examining the main entry point:' },
+            { type: 'tool_use', name: 'Read', input: { file_path: '/src/index.js' } },
+            { type: 'text', text: '\nI can see the issue. Let me check the dependencies:' },
+            { type: 'tool_use', name: 'Read', input: { file_path: '/package.json' } },
+            { type: 'text', text: '\nNow I\'ll fix the import statement:' },
+            { type: 'tool_use', name: 'Edit', input: { file_path: '/src/index.js' } },
+            { type: 'text', text: '\nLet\'s run the tests to verify:' },
+            { type: 'tool_use', name: 'Bash', input: { description: 'npm test' } }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+
+      expect(result).toContain('analyze the codebase structure');
+      expect(result).toContain('🔍 Glob');
+      expect(result).toContain('📖 Read: Reading index.js');
+      expect(result).toContain('📖 Read: Reading package.json');
+      expect(result).toContain('📝 Edit: Editing index.js');
+      expect(result).toContain('🔧 Bash: npm test');
+    });
+
+    test('should handle streaming tool use with dynamic content', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Processing file ' },
+            { type: 'tool_use', name: 'Read', input: { file_path: '/var/log/app.log' } },
+            { type: 'text', text: ' and analyzing errors...' },
+            { type: 'tool_use', name: 'Grep', input: { pattern: 'ERROR' } },
+            { type: 'text', text: ' Found 5 issues.' }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+
+      expect(result).toContain('Processing file');
+      expect(result).toContain('📖 Read: Reading app.log');
+      expect(result).toContain('analyzing errors');
+      expect(result).toContain('🔎 Grep');
+      expect(result).toContain('Found 5 issues');
+    });
+  });
+
+  describe('Claude-Specific Response Format Edge Cases', () => {
+    test('should handle tool_use with complex nested input objects', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              name: 'Edit',
+              input: {
+                file_path: '/src/components/UserProfile.jsx',
+                old_string: 'const [user, setUser] = useState(null);',
+                new_string: 'const [user, setUser] = useState(null);\nconst [loading, setLoading] = useState(false);'
+              }
+            }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toContain('📝 Edit: Editing UserProfile.jsx');
+    });
+
+    test('should handle WebFetch and WebSearch tools properly', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'WebSearch', input: { query: 'JavaScript async await best practices' } },
+            { type: 'text', text: '\nBased on the search results, let me fetch the documentation:' },
+            { type: 'tool_use', name: 'WebFetch', input: { url: 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Statements/async_function' } }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toContain('🔎 WebSearch');
+      expect(result).toContain('🌐 WebFetch');
+    });
+
+    test('should handle unknown tools gracefully with default icon', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'CustomAnalyzer', input: { data: 'complex analysis' } },
+            { type: 'tool_use', name: 'DataProcessor', input: { items: [1, 2, 3] } }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toContain('🛠️ CustomAnalyzer');
+      expect(result).toContain('🛠️ DataProcessor');
+    });
+
+    test('should handle system initialization messages', () => {
+      const json = {
+        type: 'system',
+        subtype: 'init'
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe('🚀 Starting Claude...');
+    });
+
+    test('should handle result success messages with duration and cost', () => {
+      const json = {
+        type: 'result',
+        subtype: 'success',
+        duration_ms: 2500,
+        total_cost_usd: 0.0142
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe('\n✅ Completed in 2.5s ($0.0142)');
+    });
+
+    test('should handle result success messages with duration only', () => {
+      const json = {
+        type: 'result',
+        subtype: 'success',
+        duration_ms: 1200
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe('\n✅ Completed in 1.2s');
+    });
+
+    test('should handle result error messages', () => {
+      const json = {
+        type: 'result',
+        subtype: 'error',
+        error: 'API rate limit exceeded'
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe('\n❌ Error: API rate limit exceeded');
+    });
+
+    test('should handle result error messages without error text', () => {
+      const json = {
+        type: 'result',
+        subtype: 'error'
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe('\n❌ Error: Unknown error');
+    });
+  });
+
+  describe('Error Handling and Edge Cases', () => {
+    test('should handle extremely long text content gracefully', () => {
+      const longText = 'A'.repeat(10000);
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: longText }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe(longText);
+    });
+
+    test('should handle messages with null or undefined content blocks', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Valid content' },
+            { type: 'text', text: null },
+            { type: 'text', text: undefined },
+            { type: 'text', text: 'More valid content' }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe('Valid contentMore valid content');
+    });
+
+    test('should handle tool_use with missing input property', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Bash', input: {} }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe('\n🔧 Bash');
+    });
+
+    test('should handle content blocks with missing type property', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { text: 'Content without type' },
+            { type: 'tool_use', name: 'Read', input: { file_path: '/test.js' } }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      // Content without type is ignored, only tool_use is processed
+      expect(result).toContain('📖 Read');
+      expect(result).not.toContain('Content without type');
+    });
+
+    test('should handle malformed JSON gracefully', () => {
+      const malformedJson = '{"type": "assistant", "message": {"content": [{"type": "text", "text": "test"}';
+      const result = processClaudeMessage(malformedJson);
+      expect(result).toBeNull();
+    });
+
+    test('should handle JSON injection attempts safely', () => {
+      const maliciousInput = '{"type": "assistant", "message": {"content": [{"type": "text", "text": " legit content"}]}, "injected": "bad data"}';
+      const result = processClaudeMessage(maliciousInput);
+      expect(result).toContain('legit content');
+      expect(result).not.toContain('injected');
+    });
+
+    test('should handle Unicode and special characters in tool descriptions', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Bash', input: { description: 'Test with émojis: 🚀 🎉 and special chars: ñáü' } }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toContain('🔧 Bash: Test with émojis: 🚀 🎉 and special chars: ñáü');
+    });
+
+    test('should handle content with newline characters and various whitespace', () => {
+      const json = {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'text', text: 'Line 1\nLine 2\n  Indented line 3\tTabbed content' }
+          ]
+        }
+      };
+      const result = processClaudeMessage(JSON.stringify(json));
+      expect(result).toBe('Line 1\nLine 2\n  Indented line 3\tTabbed content');
+    });
+  });
 });

@@ -11,24 +11,20 @@ const overwriteBlock = (lines) => {
     // Move o cursor para cima N linhas e limpa cada uma
     process.stdout.write(`\x1b[${lines}A`);
     for (let i = 0; i < lines; i++) {
-      process.stdout.write('\x1b[2K'); // limpa linha
-      process.stdout.write('\x1b[1B'); // desce uma linha
+        process.stdout.write('\x1b[2K'); // limpa linha
+        process.stdout.write('\x1b[1B'); // desce uma linha
     }
     // Volta para o topo do bloco
     process.stdout.write(`\x1b[${lines}A`);
-  }
+}
 
 const runDeepSeek = (text, taskName = null) => {
     return new Promise((resolve, reject) => {
         const stateManager = taskName ? ParallelStateManager.getInstance() : null;
         const suppressStreamingLogs = Boolean(taskName) && stateManager && typeof stateManager.isUIRendererActive === 'function' && stateManager.isUIRendererActive();
 
-        if(!text){
-            throw new Error('no prompt');
-        }
-
         // Create temporary file for the prompt
-        const tmpFile = path.join(os.tmpdir(), `claudiomiro-codex-${Date.now()}.txt`);
+        const tmpFile = path.join(os.tmpdir(), `claudiomiro-deepseek-${Date.now()}.txt`);
         fs.writeFileSync(tmpFile, text, 'utf-8');
 
         // Use sh to execute command with cat substitution
@@ -77,6 +73,7 @@ const runDeepSeek = (text, taskName = null) => {
                 // Force the Promise to reject with timeout error
                 reject(new Error('DeepSeek stuck - timeout after 10 minutes of inactivity'));
             }, INACTIVITY_TIMEOUT);
+            inactivityTimer.unref();
         };
 
         // Start the inactivity timer when the process begins
@@ -99,7 +96,7 @@ const runDeepSeek = (text, taskName = null) => {
 
             const log = (text) => {
                 // Sobrescreve o bloco anterior se existir
-                if (!suppressStreamingLogs && overwriteBlockLines > 0){
+                if (!suppressStreamingLogs && overwriteBlockLines > 0) {
                     overwriteBlock(overwriteBlockLines);
                 }
 
@@ -117,14 +114,14 @@ const runDeepSeek = (text, taskName = null) => {
 
                 // Processa e imprime o texto linha por linha
                 const lines = text.split("\n");
-                for(const line of lines){
-                    if(line.length > max){
+                for (const line of lines) {
+                    if (line.length > max) {
                         // Quebra linha longa em múltiplas linhas
-                        for(let i = 0; i < line.length; i += max){
+                        for (let i = 0; i < line.length; i += max) {
                             console.log(line.substring(i, i + max));
                             lineCount++;
                         }
-                    }else{
+                    } else {
                         console.log(line);
                         lineCount++;
                     }
@@ -136,7 +133,7 @@ const runDeepSeek = (text, taskName = null) => {
 
             for (const line of lines) {
                 const text = processDeepSeekMessage(line);
-                if(text){
+                if (text) {
                     log(text);
                     // Update state manager with DeepSeek message if taskName provided
                     if (stateManager && taskName) {
@@ -175,7 +172,7 @@ const runDeepSeek = (text, taskName = null) => {
 
             logger.newline();
             logger.newline();
-            
+
             logStream.write(`\n\n[${new Date().toISOString()}] DeepSeek execution completed with code ${code}\n`);
             logStream.end();
 
@@ -218,9 +215,9 @@ const runDeepSeek = (text, taskName = null) => {
 };
 
 const executeDeepSeek = (text, taskName = null) => {
-    if (state.executorType === 'codex') {
-        const { executeCodex } = require('./codex-executor');
-        return executeCodex(text, taskName);
+    // Validate input before dispatching to any executor
+    if (!text) {
+        return Promise.reject(new Error('no prompt'));
     }
 
     return runDeepSeek(text, taskName);

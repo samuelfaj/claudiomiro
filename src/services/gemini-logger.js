@@ -118,17 +118,71 @@ const processResultMessage = (json) => {
  * @returns {string|null} - Formatted text or null if no content
  */
 const processGeminiMessage = (line) => {
-    // Skip empty lines
-    if (!line.trim()) return null;
+    // Handle null/undefined input
+    if (line === null || line === undefined || typeof line !== 'string') return null;
 
-    // Skip deprecation warnings
-    if (line.includes('DEP0040') || line.includes('punycode')) return null;
+    // Skip deprecation warnings (be more specific)
+    if (line.includes('DeprecationWarning') || line.includes('DEP')) return null;
 
-    // Skip help/option output
-    if (line.includes('Options:') || line.includes('--help')) return null;
+    // Skip help/option output variations (but allow "Usage:" when it's part of legitimate content)
+    if (line.includes('Options:') || line.includes('--help') ||
+        line.includes('Syntax:') || line.includes('Common commands:') ||
+        (line.startsWith('Help:') && line.includes('For more information'))) {
+        return null;
+    }
 
-    // Return the actual content
-    return line.trim();
+    // Skip "Usage:" only when it's clearly help output, not legitimate content
+    if (line.match(/^Usage:\s*\w+.*\[.*\]/)) {
+        return null;
+    }
+
+    // Skip version information
+    if (line.includes('Version:') || line.includes('build:') || line.includes('Release:') ||
+        line.match(/^v\d+\.\d+/)) {
+        return null;
+    }
+
+    // Skip Google AI API debug messages
+    if (line.includes('Google AI:') || line.includes('DEBUG:') ||
+        line.includes('INFO: Rate limit') || line.includes('Google AI SDK:')) {
+        return null;
+    }
+
+    // Skip network retry and timeout messages
+    if (line.includes('Retrying request') || line.includes('Backoff:') ||
+        line.includes('Connection failed') || line.includes('will retry')) {
+        return null;
+    }
+
+    // Skip API key and quota warnings (but allow legitimate error messages about API keys)
+    if (line.includes('API quota') || line.includes('quota usage') ||
+        line.includes('Rate limit warning') || line.includes('daily quota') ||
+        (line.includes('API key') && line.includes('Warning')) ||
+        (line.includes('Security') && line.includes('environment variables')) ||
+        line.includes('Security:')) {
+        return null;
+    }
+
+    // Skip "API:" when it's debug messages, but allow it in error context
+    if (line.includes('API:') && line.includes('Sending request to')) {
+        return null;
+    }
+
+    // Skip retry-related messages
+    if (line.includes('retry') && (line.includes('Network') || line.includes('timeout'))) {
+        return null;
+    }
+
+    // Trim whitespace from content
+    const trimmed = line.trim();
+
+    // Skip empty lines and whitespace-only lines
+    if (trimmed === '') {
+        return null;
+    }
+
+    // Return trimmed content
+    return trimmed;
 };
 
 module.exports = { processGeminiMessage };

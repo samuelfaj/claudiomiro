@@ -117,43 +117,52 @@ const processCodexEvent = (line) => {
         return null;
     }
 
-
-    if(json.item){
-        if(json.item.text){
-            return json.item.text;
-        }
-        if(json.item.command){
-            return `> ` + json.item.command;
-        }
+    // Return null for empty JSON objects only
+    if (!json || typeof json !== 'object' || Array.isArray(json) || Object.keys(json).length === 0) {
+        return null;
     }
 
-    if(json.prompt){
+    if(json.item){
+        // Return empty strings as-is (not null)
+        if(json.item.text !== undefined){
+            return json.item.text;
+        }
+        if(json.item.command !== undefined){
+            return `> ` + json.item.command;
+        }
+        // If item exists but has no text or command, fall through to truncation
+    }
+
+    if(json.prompt !== undefined){
         return json.prompt;
     }
 
-    if(json.msg && json.msg.text){
-        return json.msg.tex;
+    if(json.msg){
+        if(json.msg.text !== undefined){
+            return json.msg.text;
+        }
+        if(json.msg.type !== undefined && json.msg.type !== null){
+            const type = json.msg.type;
+
+            if(type && type.includes('token_count')){
+                return null;
+            }
+
+            if(type && type.includes('exec_command')){
+                return `Executing command...`;
+            }
+
+            if(type && type.includes('agent_reasoning')){
+                return `Agent reasoning...`;
+            }
+
+            return type;
+        }
+        // If msg exists but has no text or type, return null
+        return null;
     }
 
-    if(json.msg && json.msg.type){
-        const type = json.msg.type;
-
-        if(type.includes('token_count')){
-            return null;
-        }
-
-        if(type.includes('exec_command')){
-            return `Executing command...`;
-        }
-
-        if(type.includes('agent_reasoning')){
-            return `Agent reasoning...`;
-        }
-
-        return type;
-
-    }
-
+    // Truncate for valid, unrecognized JSON objects with content
     return JSON.stringify(json).substring(0, 160) + '...';
 };
 

@@ -50,5 +50,11 @@ module.exports = {
   moduleFileExtensions: ['js', 'json'],
 
   // Verbose output
-  verbose: true
+  verbose: true,
+
+  // Test timeout (30 seconds for all tests to prevent hanging)
+  testTimeout: 30000,
+
+  // Limit worker threads to prevent memory issues
+  maxWorkers: 2
 };
