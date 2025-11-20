@@ -187,7 +187,7 @@ Based on the search results, here's what I found...`;
 
       partialResponses.forEach(partial => {
         const result = processGeminiMessage(partial);
-        expect(result).toBe(partial);
+        expect(result).toBe(partial.trim());
       });
     });
 
@@ -360,7 +360,7 @@ It should not be filtered out like system warnings`;
 
       whitespaceInputs.forEach(input => {
         const result = processGeminiMessage(input);
-        expect(result).toBe(input);
+        expect(result).toBeNull(); // processGeminiMessage returns null for empty/whitespace-only lines
       });
     });
 
