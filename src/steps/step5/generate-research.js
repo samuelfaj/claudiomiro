@@ -65,7 +65,7 @@ const generateResearchFile = async (task) => {
     logger.stopSpinner();
     logger.error('Research phase failed: ' + error.message);
     // Don't block execution if research fails, but warn user
-    logger.warn('Continuing without research file - execution may be less informed');
+    logger.warning('Continuing without research file - execution may be less informed');
   }
 };
 

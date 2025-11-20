@@ -11,7 +11,7 @@ jest.mock('../../utils/logger', () => ({
   stopSpinner: jest.fn(),
   success: jest.fn(),
   error: jest.fn(),
-  warn: jest.fn(),
+  warning: jest.fn(),
   info: jest.fn()
 }));
 

@@ -33,7 +33,7 @@ const step5 = async (task) => {
       // Re-research if: 3+ attempts AND last attempt failed
       if(info.attempts >= 3 && info.lastError){
         needsReResearch = true;
-        logger.warn(`Task has failed ${info.attempts} times. Re-analyzing approach...`);
+        logger.warning(`Task has failed ${info.attempts} times. Re-analyzing approach...`);
         // Remove old RESEARCH.md to force new analysis
         if(fs.existsSync(folder('RESEARCH.md'))){
           fs.renameSync(folder('RESEARCH.md'), folder('RESEARCH.old.md'));

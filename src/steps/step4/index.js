@@ -25,8 +25,8 @@ const step4 = async (task) => {
   const validation = validateTodoQuality(folder('TODO.md'));
 
   if(!validation.valid){
-    logger.warn('TODO.md quality issues detected:');
-    validation.errors.forEach(error => logger.warn(`  - ${error}`));
+    logger.warning('TODO.md quality issues detected:');
+    validation.errors.forEach(error => logger.warning(`  - ${error}`));
     logger.info(`Context reference score: ${validation.contextScore}/3`);
     logger.newline();
     logger.info('TODO.md was created but may need manual review for completeness.');

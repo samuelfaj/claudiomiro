@@ -77,7 +77,7 @@ describe('Gemini Executor', () => {
     processGeminiMessage.mockReturnValue('processed message');
 
     // Mock logger methods
-    logger.warn = jest.fn();
+    logger.warning = jest.fn();
     logger.info = jest.fn();
 
     // Mock console methods

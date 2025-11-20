@@ -26,7 +26,7 @@ const step8 = async (tasks, shouldPush = true) => {
         fs.writeFileSync(path.join(state.claudiomiroFolder, 'done.txt'), '1');
     } catch (error) {
         // Log but don't block execution
-        logger.warn('⚠️  Commit/PR failed in step8, continuing anyway:', error.message);
+        logger.warning('⚠️  Commit/PR failed in step8, continuing anyway:', error.message);
     }
 
     logger.info(`✅ Claudiomiro has been successfully executed. Check out: ${state.folder}`);

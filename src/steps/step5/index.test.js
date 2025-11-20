@@ -9,7 +9,7 @@ jest.mock('../../config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
 jest.mock('../../utils/logger', () => ({
-  warn: jest.fn(),
+  warning: jest.fn(),
   info: jest.fn()
 }));
 
@@ -118,7 +118,7 @@ describe('step5', () => {
       const result = await step5(mockTask);
 
       // Assert
-      expect(logger.warn).toHaveBeenCalledWith('Task has failed 3 times. Re-analyzing approach...');
+      expect(logger.warning).toHaveBeenCalledWith('Task has failed 3 times. Re-analyzing approach...');
       expect(fs.renameSync).toHaveBeenCalledWith(
         path.join(taskFolder, 'RESEARCH.md'),
         path.join(taskFolder, 'RESEARCH.old.md')
