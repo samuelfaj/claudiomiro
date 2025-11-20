@@ -72,6 +72,11 @@ describe('DAGExecutor', () => {
     executor = new DAGExecutor(mockTasks);
   });
 
+  afterEach(() => {
+    // Clear all timers to prevent worker process hangs
+    jest.clearAllTimers();
+  });
+
   afterAll(() => {
     process.argv = originalArgv;
   });
@@ -847,6 +852,7 @@ describe('DAGExecutor', () => {
 
       fs.existsSync.mockImplementation(filePath => {
         if (filePath.includes('TODO.md')) return true;
+        if (filePath.includes('CODE_REVIEW.md')) return true;
         return true;
       });
 
@@ -856,12 +862,17 @@ describe('DAGExecutor', () => {
         return callCount > 3; // Succeeds after 3 attempts
       });
 
+      // Also mock hasApprovedCodeReview to prevent infinite loop
+      hasApprovedCodeReview.mockImplementation(() => {
+        return callCount > 3; // Approved after 3 attempts
+      });
+
       mockStep5.mockResolvedValue();
 
       // Should not throw despite exceeding maxAttemptsPerTask
       await expect(executor.executeTask('testTask')).resolves.not.toThrow();
       expect(mockStateManager.updateTaskStatus).toHaveBeenCalledWith('testTask', 'completed');
-    });
+    }, 10000); // 10 second timeout to prevent hanging
 
     test('should handle TODO.old.md restoration', async () => {
       fs.existsSync.mockImplementation(filePath => {

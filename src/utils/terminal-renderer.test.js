@@ -117,7 +117,24 @@ describe('TerminalRenderer', () => {
 
   describe('getTerminalWidth', () => {
     test('should return process.stdout.columns when available', () => {
-      expect(renderer.getTerminalWidth()).toBe(120);
+      // Store original value and override for test
+      const originalColumns = process.stdout.columns;
+      Object.defineProperty(process.stdout, 'columns', {
+        value: 120,
+        writable: true,
+        configurable: true
+      });
+
+      try {
+        expect(renderer.getTerminalWidth()).toBe(120);
+      } finally {
+        // Restore original
+        Object.defineProperty(process.stdout, 'columns', {
+          value: originalColumns,
+          writable: true,
+          configurable: true
+        });
+      }
     });
 
     test('should return default 80 when stdout is null', () => {

@@ -282,7 +282,7 @@ const runGemini = (text, taskName = null) => {
 const executeGemini = (text, taskName = null) => {
     // Validate input before dispatching to any executor
     if(!text){
-        return Promise.reject(new Error('no prompt'));
+        return Promise.reject(new Error('Invalid prompt text: must be a non-empty string'));
     }
 
     return runGemini(text, taskName);

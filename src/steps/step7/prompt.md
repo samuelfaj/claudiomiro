@@ -257,9 +257,14 @@ After analyzing and fixing:
 
 ### Decision Rules
 
-#### Scenario A: 0 Critical Bugs Remaining ✅
+#### Scenario A: Clean Sweep (0 Bugs Found) ✅
 
-**Create** `{{passedPath}}`:
+**Condition**:
+- **Critical bugs found this iteration**: 0
+- **Critical bugs fixed this iteration**: 0
+- **Critical bugs pending**: 0
+
+**Action**: Create `{{passedPath}}`:
 
 ```markdown
 # Critical Review Passed
@@ -311,16 +316,31 @@ No critical bugs remain. Code is production-ready.
 
 ---
 
-#### Scenario B: Critical Bugs Still Pending 🔧
+#### Scenario B: Bugs Fixed (Verification Required) 🔄
 
-**DO NOT** create `{{passedPath}}` yet.
+**Condition**:
+- **Critical bugs found this iteration**: > 0
+- **Critical bugs fixed this iteration**: > 0
+- **Critical bugs pending**: 0
 
-**Update** `{{bugsPath}}` with current status.
+**Action**:
+1. **Update** `{{bugsPath}}` with fixed status.
+2. **DO NOT** create `{{passedPath}}`.
+3. **Force next iteration** to verify the fixes and ensure no new bugs were introduced.
 
-**Next iteration will run automatically** - you will:
-1. See updated BUGS.md from this iteration
-2. Continue fixing remaining bugs
-3. Try different approaches if previous fixes failed
+> "I fixed bugs, so I must run one more 'clean sweep' iteration to verify everything is truly clean."
+
+---
+
+#### Scenario C: Critical Bugs Still Pending 🔧
+
+**Condition**:
+- **Critical bugs pending**: > 0
+
+**Action**:
+1. **Update** `{{bugsPath}}` with current status.
+2. **DO NOT** create `{{passedPath}}`.
+3. **Next iteration will run automatically**.
 
 ---
 
