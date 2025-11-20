@@ -1,3 +1,6 @@
+// Mock Date.now before importing modules that use it
+jest.spyOn(Date, 'now').mockReturnValue(1234567890);
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -84,8 +87,7 @@ describe('GLM Executor', () => {
       configurable: true
     });
 
-    // Mock Date.now using spyOn
-    jest.spyOn(Date, 'now').mockReturnValue(1234567890);
+    // Date.now is already mocked at the top of the file
   });
 
   afterEach(() => {
@@ -175,11 +177,13 @@ describe('GLM Executor', () => {
     });
 
     test('should write log headers with timestamp', async () => {
-      // Mock Date constructor but preserve Date.now functionality
+      // Mock Date constructor to return a specific date
       const mockDate = new Date('2024-01-01T00:00:00.000Z');
-      const mockDateImplementation = jest.fn(() => mockDate);
-      mockDateImplementation.now = jest.fn(() => 1234567890);
-      jest.spyOn(global, 'Date').mockImplementation(mockDateImplementation);
+      const OriginalDate = global.Date;
+      global.Date = jest.fn(() => mockDate);
+      global.Date.prototype = Object.create(Date.prototype);
+      global.Date.prototype.constructor = global.Date;
+      global.Date.now = OriginalDate.now;
 
       mockChildProcess.on.mockImplementation((event, handler) => {
         if (event === 'close') {
@@ -193,6 +197,9 @@ describe('GLM Executor', () => {
       expect(mockLogStream.write).toHaveBeenCalledWith(
         expect.stringContaining('[2024-01-01T00:00:00.000Z]')
       );
+
+      // Restore Date
+      global.Date = OriginalDate;
     });
 
     test('should handle stdout data processing', async () => {

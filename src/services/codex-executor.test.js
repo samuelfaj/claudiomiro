@@ -1,3 +1,6 @@
+// Mock Date.now before importing modules that use it
+jest.spyOn(Date, 'now').mockReturnValue(1234567890);
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -83,20 +86,10 @@ describe('Codex Executor', () => {
       configurable: true
     });
 
-    // Mock Date.now with a stable implementation
-    const originalDateNow = Date.now;
-    Date.now = jest.fn(() => 1234567890);
-
-    // Store for cleanup
-    this._originalDateNow = originalDateNow;
+    // Date.now is already mocked at the top of the file
   });
 
   afterEach(() => {
-    // Restore Date.now if it was stored
-    if (this._originalDateNow) {
-      Date.now = this._originalDateNow;
-      this._originalDateNow = null;
-    }
     jest.restoreAllMocks();
   });
 

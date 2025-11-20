@@ -311,7 +311,14 @@ describe('Claude Executor', () => {
 
     test('should write log headers with timestamp', async () => {
       const mockDate = new Date('2024-01-01T00:00:00.000Z');
-      jest.spyOn(global, 'Date').mockImplementation(() => mockDate);
+      const originalDate = global.Date;
+      jest.spyOn(global, 'Date').mockImplementation((...args) => {
+        if (args.length === 0) {
+          return mockDate;
+        }
+        return new originalDate(...args);
+      });
+      global.Date.now = jest.fn(() => 1704067200000); // Mock Date.now() specifically
 
       mockChildProcess.on.mockImplementation((event, handler) => {
         if (event === 'close') {
