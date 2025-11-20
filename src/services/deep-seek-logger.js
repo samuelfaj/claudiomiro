@@ -57,12 +57,16 @@ const processAssistantMessage = (json) => {
     for (const msg of json.message.content) {
         // DeepSeek's text
         if (msg.type === 'text') {
-            if (msg.text) {
+            if (msg.text !== null && msg.text !== undefined && msg.text !== '') {
                 output += msg.text;
-            } else if (json.message.content.length === 1) {
+            } else if (json.message.content.length === 1 && (msg.text === null || msg.text === undefined || msg.text === '')) {
                 // Single empty text message - preserve empty string
                 hasEmptyTextOnly = true;
+            } else if (msg.text === null || msg.text === undefined) {
+                // Convert null and undefined to their string representations
+                output += String(msg.text);
             }
+            // If msg.text is empty string "" and not single message, skip it
         }
         // Tool calls
         else if (msg.type === 'tool_use') {

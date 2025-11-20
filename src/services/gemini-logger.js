@@ -121,77 +121,68 @@ const processGeminiMessage = (line) => {
     // Handle null/undefined input
     if (line === null || line === undefined || typeof line !== 'string') return null;
 
-    // For basic empty string test case, return null
-    if (line === '') return null;
-
-    // For other whitespace-only lines, check if this is part of the robustness test
-    // that expects the input to be returned as-is
-    if (line.trim() === '') {
-        // Check if this matches the specific robustness test patterns
-        const robustnessPatterns = [
-            '   ',           // 3 spaces
-            '\t\t\t',        // 3 tabs
-            '\n\n\n',        // 3 newlines
-            '  \t  \n  \t  ', // complex whitespace (length 11)
-            '\r\n\r\n'       // 2 CRLF pairs
-        ];
-
-        if (robustnessPatterns.includes(line)) {
-            return line; // Return as-is for robustness testing
-        }
-
-        return null; // Filter other whitespace-only lines
-    }
-
-    // Skip all deprecation warnings (not just DEP0040 and punycode)
+    // Skip deprecation warnings (be more specific)
     if (line.includes('DeprecationWarning') || line.includes('DEP')) return null;
 
-    // Skip help/option output variations
+    // Skip help/option output variations (but allow "Usage:" when it's part of legitimate content)
     if (line.includes('Options:') || line.includes('--help') ||
         line.includes('Syntax:') || line.includes('Common commands:') ||
-        line.includes('Usage:') ||
         (line.startsWith('Help:') && line.includes('For more information'))) {
         return null;
     }
 
-    // Skip version information (but be careful about "Usage:" which can be legitimate)
+    // Skip "Usage:" only when it's clearly help output, not legitimate content
+    if (line.match(/^Usage:\s*\w+.*\[.*\]/)) {
+        return null;
+    }
+
+    // Skip version information
     if (line.includes('Version:') || line.includes('build:') || line.includes('Release:') ||
         line.match(/^v\d+\.\d+/)) {
         return null;
     }
 
     // Skip Google AI API debug messages
-    if (line.includes('Google AI:') || line.includes('API:') || line.includes('DEBUG:') ||
+    if (line.includes('Google AI:') || line.includes('DEBUG:') ||
         line.includes('INFO: Rate limit') || line.includes('Google AI SDK:')) {
         return null;
     }
 
-    // Skip network retry and timeout messages (be more specific)
-    if (line.includes('Retrying request') || line.includes('retry') ||
-        line.includes('Backoff:')) {
+    // Skip network retry and timeout messages
+    if (line.includes('Retrying request') || line.includes('Backoff:') ||
+        line.includes('Connection failed') || line.includes('will retry')) {
         return null;
     }
 
-    // Skip API key and quota warnings
-    if (line.includes('API key') || line.includes('API quota') || line.includes('quota usage') ||
-        line.includes('Rate limit warning') || line.includes('daily quota')) {
+    // Skip API key and quota warnings (but allow legitimate error messages about API keys)
+    if (line.includes('API quota') || line.includes('quota usage') ||
+        line.includes('Rate limit warning') || line.includes('daily quota') ||
+        (line.includes('API key') && line.includes('Warning')) ||
+        (line.includes('Security') && line.includes('environment variables')) ||
+        line.includes('Security:')) {
         return null;
     }
 
-    // For normal content, trim whitespace (but preserve exact content for streaming)
-    // Check if this matches one of the known streaming response patterns from the tests
-    const streamingResponses = [
-        'I think the best approach would be',
-        ' to use a recursive algorithm that',
-        ' handles edge cases properly.'
-    ];
-
-    if (streamingResponses.includes(line)) {
-        return line; // Don't trim known streaming content
-    } else {
-        // For regular content, trim whitespace as expected by most tests
-        return line.trim();
+    // Skip "API:" when it's debug messages, but allow it in error context
+    if (line.includes('API:') && line.includes('Sending request to')) {
+        return null;
     }
+
+    // Skip retry-related messages
+    if (line.includes('retry') && (line.includes('Network') || line.includes('timeout'))) {
+        return null;
+    }
+
+    // Trim whitespace from content
+    const trimmed = line.trim();
+
+    // Skip empty lines and whitespace-only lines
+    if (trimmed === '') {
+        return null;
+    }
+
+    // Return trimmed content
+    return trimmed;
 };
 
 module.exports = { processGeminiMessage };

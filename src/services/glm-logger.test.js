@@ -260,7 +260,7 @@ describe('GLM Logger', () => {
       });
 
       const result = processGlmMessage(input);
-      expect(result).toBe('🚀 Starting Glm...');
+      expect(result).toBe('🚀 Starting GLM...');
     });
 
     test('should return null for other subtypes', () => {
@@ -515,7 +515,7 @@ describe('GLM Logger', () => {
 
       const results = messages.map(msg => processGlmMessage(JSON.stringify(msg)));
 
-      expect(results[0]).toBe('🚀 Starting Glm...');
+      expect(results[0]).toBe('🚀 Starting GLM...');
       expect(results[1]).toBe('I will help you with that.');
       expect(results[2]).toBeNull(); // User messages return null
       expect(results[3]).toContain('✅ Completed in 1.0s');
