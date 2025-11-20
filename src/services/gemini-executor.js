@@ -79,7 +79,7 @@ const runGemini = (text, taskName = null) => {
             try {
                 // Validate taskName format
                 if (!/^[a-zA-Z0-9_-]+$/.test(taskName)) {
-                    logger.warn(`Invalid taskName format: ${taskName}. Must be alphanumeric with dashes/underscores.`);
+                    logger.warning(`Invalid taskName format: ${taskName}. Must be alphanumeric with dashes/underscores.`);
                 } else {
                     stateManager = ParallelStateManager.getInstance();
                     if (stateManager && typeof stateManager.isUIRendererActive === 'function') {
@@ -88,7 +88,7 @@ const runGemini = (text, taskName = null) => {
                     }
                 }
             } catch (error) {
-                logger.warn(`Failed to initialize ParallelStateManager: ${error.message}`);
+                logger.warning(`Failed to initialize ParallelStateManager: ${error.message}`);
             }
         }
 
@@ -141,7 +141,7 @@ const runGemini = (text, taskName = null) => {
 
             // Check buffer size limit
             if (buffer.length + output.length > MAX_BUFFER_SIZE) {
-                logger.warn('Gemini output buffer overflow - truncating buffer');
+                logger.warning('Gemini output buffer overflow - truncating buffer');
                 buffer = ''; // Reset buffer to prevent memory exhaustion
             }
 
@@ -211,7 +211,7 @@ const runGemini = (text, taskName = null) => {
                             stateManager.updateClaudeMessage(taskName, text);
                             logger.debug(`Updated state manager for task ${taskName}: ${text.substring(0, 50)}...`);
                         } catch (error) {
-                            logger.warn(`Failed to update state manager: ${error.message}`);
+                            logger.warning(`Failed to update state manager: ${error.message}`);
                         }
                     }
                 }

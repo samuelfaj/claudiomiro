@@ -11,7 +11,7 @@ jest.mock('../../utils/logger', () => ({
   stopSpinner: jest.fn(),
   success: jest.fn(),
   error: jest.fn(),
-  warn: jest.fn()
+  warning: jest.fn()
 }));
 
 // Import after mocks
@@ -156,7 +156,7 @@ describe('generate-research', () => {
       await generateResearchFile(mockTask);
 
       expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Research phase failed'));
-      expect(logger.warn).toHaveBeenCalledWith('Continuing without research file - execution may be less informed');
+      expect(logger.warning).toHaveBeenCalledWith('Continuing without research file - execution may be less informed');
     });
   });
 });

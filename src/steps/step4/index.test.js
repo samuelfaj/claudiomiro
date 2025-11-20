@@ -4,7 +4,7 @@ jest.mock('./generate-todo');
 jest.mock('./analyze-split');
 jest.mock('./utils');
 jest.mock('../../utils/logger', () => ({
-  warn: jest.fn(),
+  warning: jest.fn(),
   info: jest.fn(),
   success: jest.fn(),
   newline: jest.fn()
@@ -68,9 +68,9 @@ describe('step4', () => {
       // Assert
       expect(generateTodo).toHaveBeenCalledWith(mockTask);
       expect(validateTodoQuality).toHaveBeenCalled();
-      expect(logger.warn).toHaveBeenCalledWith('TODO.md quality issues detected:');
-      expect(logger.warn).toHaveBeenCalledWith('  - TODO.md is too short (< 500 chars) - likely missing context');
-      expect(logger.warn).toHaveBeenCalledWith('  - Missing required section: ## Implementation Plan');
+      expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
+      expect(logger.warning).toHaveBeenCalledWith('  - TODO.md is too short (< 500 chars) - likely missing context');
+      expect(logger.warning).toHaveBeenCalledWith('  - Missing required section: ## Implementation Plan');
       expect(logger.info).toHaveBeenCalledWith('Context reference score: 1/3');
       expect(logger.info).toHaveBeenCalledWith('TODO.md was created but may need manual review for completeness.');
       expect(logger.newline).toHaveBeenCalled();
@@ -92,8 +92,8 @@ describe('step4', () => {
       const result = await step4(mockTask);
 
       // Assert
-      expect(logger.warn).toHaveBeenCalledWith('TODO.md quality issues detected:');
-      expect(logger.warn).toHaveBeenCalledWith('  - No context references found');
+      expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
+      expect(logger.warning).toHaveBeenCalledWith('  - No context references found');
       expect(logger.info).toHaveBeenCalledWith('Context reference score: 0/3');
       expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
       expect(result).toEqual({ shouldSplit: false, reason: 'Task analysis complete' });
@@ -113,8 +113,8 @@ describe('step4', () => {
       const result = await step4(mockTask);
 
       // Assert
-      expect(logger.warn).toHaveBeenCalledWith('TODO.md quality issues detected:');
-      expect(logger.warn).toHaveBeenCalledWith('  - Missing some implementation details');
+      expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
+      expect(logger.warning).toHaveBeenCalledWith('  - Missing some implementation details');
       expect(logger.info).toHaveBeenCalledWith('Context reference score: 2/3');
       expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
       expect(result).toEqual({ shouldSplit: true, reason: 'Complex task' });
@@ -139,11 +139,11 @@ describe('step4', () => {
       const result = await step4(mockTask);
 
       // Assert
-      expect(logger.warn).toHaveBeenCalledWith('TODO.md quality issues detected:');
-      expect(logger.warn).toHaveBeenCalledWith('  - TODO.md was not created');
-      expect(logger.warn).toHaveBeenCalledWith('  - Missing required section: ## Context Reference');
-      expect(logger.warn).toHaveBeenCalledWith('  - Missing required section: ## Implementation Plan');
-      expect(logger.warn).toHaveBeenCalledWith('  - Missing required section: ## Verification');
+      expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
+      expect(logger.warning).toHaveBeenCalledWith('  - TODO.md was not created');
+      expect(logger.warning).toHaveBeenCalledWith('  - Missing required section: ## Context Reference');
+      expect(logger.warning).toHaveBeenCalledWith('  - Missing required section: ## Implementation Plan');
+      expect(logger.warning).toHaveBeenCalledWith('  - Missing required section: ## Verification');
       expect(logger.info).toHaveBeenCalledWith('Context reference score: 0/3');
       expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
       expect(result).toEqual({ shouldSplit: false, reason: 'Proceed with task' });
@@ -193,7 +193,7 @@ describe('step4', () => {
       const result = await step4(mockTask);
 
       // Assert
-      expect(logger.warn).toHaveBeenCalledWith('TODO.md quality issues detected:');
+      expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
       expect(logger.info).toHaveBeenCalledWith('Context reference score: 2/3');
       expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
       expect(result).toEqual({ shouldSplit: false, reason: 'Analysis complete' });

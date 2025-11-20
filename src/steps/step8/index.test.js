@@ -14,7 +14,7 @@ jest.mock('../../config/state', () => ({
 }));
 jest.mock('../../utils/logger', () => ({
   info: jest.fn(),
-  warn: jest.fn(),
+  warning: jest.fn(),
   stopSpinner: jest.fn()
 }));
 
@@ -51,7 +51,7 @@ describe('step8', () => {
         '✅ Claudiomiro has been successfully executed. Check out: /test/project'
       );
       expect(mockExit).toHaveBeenCalledWith(0);
-      expect(require('../../utils/logger').warn).not.toHaveBeenCalled();
+      expect(require('../../utils/logger').warning).not.toHaveBeenCalled();
     });
 
     test('should generate commit-only prompt when shouldPush is false', async () => {
@@ -140,7 +140,7 @@ describe('step8', () => {
       await step8([], true);
 
       // Assert
-      expect(logger.warn).toHaveBeenCalledWith(
+      expect(logger.warning).toHaveBeenCalledWith(
         '⚠️  Commit/PR failed in step8, continuing anyway:',
         errorMessage
       );
