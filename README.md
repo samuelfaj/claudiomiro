@@ -312,7 +312,7 @@ src/
 
 **Before contributing, please read:**
 - 📖 [CLAUDE.md](./CLAUDE.md) - Development guide, conventions, and best practices
-- 🧪 [Testing Guidelines](./CLAUDE.md#test-structure) - How to write tests
+- 🧪 [Testing Guidelines](./CLAUDE.md#3-test-structure) - How to write tests
 - 🏗️ [Architecture Principles](./CLAUDE.md#project-architecture) - Single Responsibility Principle
 - 📝 [Code Standards](./CLAUDE.md#development-conventions) - English code, naming conventions
 
