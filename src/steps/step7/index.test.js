@@ -74,6 +74,13 @@ describe('step7', () => {
       expect(logger.warning).toHaveBeenCalledWith('⚠️  Step 7 skipped: Not running on a new branch created by Claudiomiro');
       expect(logger.info).toHaveBeenCalledWith('💡 Step 7 only runs on branches created with Claudiomiro (without --same-branch flag)');
       expect(executeClaude).not.toHaveBeenCalled();
+
+      // Verify CRITICAL_REVIEW_PASSED.md is created to allow step8
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        passedPath,
+        expect.stringContaining('Critical Review Skipped')
+      );
+      expect(logger.info).toHaveBeenCalledWith('✅ Created CRITICAL_REVIEW_PASSED.md (step7 not required for same-branch workflow)');
     });
 
     test('should skip if AI_PROMPT.md does not exist (incomplete session)', async () => {
@@ -89,6 +96,13 @@ describe('step7', () => {
       expect(logger.warning).toHaveBeenCalledWith('⚠️  Step 7 skipped: Incomplete Claudiomiro session');
       expect(logger.info).toHaveBeenCalledWith('💡 AI_PROMPT.md not found - session may be corrupted or step1 not executed');
       expect(executeClaude).not.toHaveBeenCalled();
+
+      // Verify CRITICAL_REVIEW_PASSED.md is created to allow step8
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        passedPath,
+        expect.stringContaining('Critical Review Skipped')
+      );
+      expect(logger.info).toHaveBeenCalledWith('✅ Created CRITICAL_REVIEW_PASSED.md (step7 not required for incomplete session)');
     });
 
     test('should skip if no code changes detected (git status clean + no commits)', async () => {
@@ -111,6 +125,13 @@ describe('step7', () => {
 
       expect(logger.warning).toHaveBeenCalledWith('⚠️  Step 7 skipped: No code changes detected');
       expect(executeClaude).not.toHaveBeenCalled();
+
+      // Verify CRITICAL_REVIEW_PASSED.md is created to allow step8
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        passedPath,
+        expect.stringContaining('Critical Review Skipped')
+      );
+      expect(logger.info).toHaveBeenCalledWith('✅ Created CRITICAL_REVIEW_PASSED.md (no changes to review)');
     });
 
     test('should skip if not a git repository (git commands fail)', async () => {
@@ -130,6 +151,13 @@ describe('step7', () => {
       expect(logger.warning).toHaveBeenCalledWith('⚠️  Step 7 skipped: Not a git repository or git is not available');
       expect(logger.info).toHaveBeenCalledWith('💡 Step 7 requires git to analyze code changes');
       expect(executeClaude).not.toHaveBeenCalled();
+
+      // Verify CRITICAL_REVIEW_PASSED.md is created to allow step8
+      expect(fs.writeFileSync).toHaveBeenCalledWith(
+        passedPath,
+        expect.stringContaining('Critical Review Skipped')
+      );
+      expect(logger.info).toHaveBeenCalledWith('✅ Created CRITICAL_REVIEW_PASSED.md (git not available)');
     });
   });
 

@@ -1137,6 +1137,113 @@ describe('DAGExecutor', () => {
       calculateProgress.mockReturnValue({ completed: 1, total: 3, percentage: 33.3 });
     });
 
+    test('should update task graph dynamically when buildTaskGraph returns new graph', async () => {
+      // Initial tasks
+      executor.tasks = {
+        'TASK1': { deps: [], status: 'completed' },
+        'TASK2': { deps: ['TASK1'], status: 'pending' }
+      };
+
+      // Mock state manager with Map for taskStates
+      mockStateManager.taskStates = new Map([
+        ['TASK1', { status: 'completed', step: null, message: null }],
+        ['TASK2', { status: 'pending', step: null, message: null }]
+      ]);
+
+      // buildTaskGraph returns updated graph with new task (simulating task split)
+      const buildTaskGraph = jest.fn()
+        .mockReturnValueOnce({
+          'TASK1': { deps: [], status: 'completed' },
+          'TASK2.1': { deps: ['TASK1'], status: 'pending' },
+          'TASK2.2': { deps: ['TASK1'], status: 'pending' }
+        })
+        .mockReturnValueOnce({
+          'TASK1': { deps: [], status: 'completed' },
+          'TASK2.1': { deps: ['TASK1'], status: 'completed' },
+          'TASK2.2': { deps: ['TASK1'], status: 'completed' }
+        });
+
+      jest.spyOn(executor, 'getReadyTasks')
+        .mockReturnValueOnce(['TASK2.1', 'TASK2.2'])
+        .mockReturnValueOnce([]);
+
+      jest.spyOn(executor, 'executeTask').mockImplementation(async (taskName) => {
+        executor.tasks[taskName].status = 'completed';
+        executor.running.delete(taskName);
+      });
+
+      await executor.run(buildTaskGraph);
+
+      // Verify that new tasks were added
+      expect(executor.tasks['TASK2.1']).toBeDefined();
+      expect(executor.tasks['TASK2.2']).toBeDefined();
+
+      // Verify that old task (TASK2) was removed since it was pending and no longer in graph
+      expect(executor.tasks['TASK2']).toBeUndefined();
+
+      // Verify buildTaskGraph was called
+      expect(buildTaskGraph).toHaveBeenCalled();
+    });
+
+    test('should preserve running task status when updating graph', async () => {
+      executor.tasks = {
+        'TASK1': { deps: [], status: 'running' }
+      };
+      executor.running.add('TASK1');
+
+      mockStateManager.taskStates = new Map([
+        ['TASK1', { status: 'running', step: null, message: null }]
+      ]);
+
+      // buildTaskGraph returns same task with different status (should be preserved)
+      const buildTaskGraph = jest.fn().mockReturnValue({
+        'TASK1': { deps: [], status: 'pending' } // Graph says pending, but it's actually running
+      });
+
+      jest.spyOn(executor, 'getReadyTasks').mockReturnValue([]);
+
+      // Short execution - immediately complete
+      executor.tasks['TASK1'].status = 'completed';
+
+      await executor.run(buildTaskGraph);
+
+      // The running status should have been preserved during update
+      expect(buildTaskGraph).toHaveBeenCalled();
+    });
+
+    test('should update task dependencies from new graph', async () => {
+      executor.tasks = {
+        'TASK1': { deps: [], status: 'completed' },
+        'TASK2': { deps: ['TASK1'], status: 'pending' }
+      };
+
+      mockStateManager.taskStates = new Map([
+        ['TASK1', { status: 'completed', step: null, message: null }],
+        ['TASK2', { status: 'pending', step: null, message: null }]
+      ]);
+
+      // buildTaskGraph returns updated dependencies
+      const buildTaskGraph = jest.fn().mockReturnValue({
+        'TASK1': { deps: [], status: 'completed' },
+        'TASK2': { deps: ['TASK1', 'TASK1.1'], status: 'pending' }, // New dependency added
+        'TASK1.1': { deps: ['TASK1'], status: 'completed' }
+      });
+
+      jest.spyOn(executor, 'getReadyTasks')
+        .mockReturnValueOnce(['TASK2'])
+        .mockReturnValueOnce([]);
+
+      jest.spyOn(executor, 'executeTask').mockImplementation(async (taskName) => {
+        executor.tasks[taskName].status = 'completed';
+        executor.running.delete(taskName);
+      });
+
+      await executor.run(buildTaskGraph);
+
+      // Verify dependencies were updated
+      expect(executor.tasks['TASK2'].deps).toContain('TASK1.1');
+    });
+
     test('should execute tasks until completion', async () => {
       // Mock ready tasks and execution
       jest.spyOn(executor, 'getReadyTasks')

@@ -9,6 +9,7 @@ const ParallelStateManager = require('./parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
+const { resolveDeadlock } = require('./deadlock-resolver');
 
 const CORE_COUNT = Math.max(1, os.cpus().length);
 
@@ -21,6 +22,11 @@ class DAGExecutor {
     const defaultMax = Math.max(1, CORE_COUNT);
     this.maxConcurrent = maxConcurrent || defaultMax;
     this.running = new Set(); // Tasks atualmente em execução
+
+    // Deadlock detection state
+    this._deadlockCounter = 0;
+    this._deadlockResolutionAttempts = 0;
+    this._lastPendingTasksLog = 0; // Throttle for pending tasks log
 
     // Initialize ParallelStateManager
     this.stateManager = new ParallelStateManager();
@@ -54,6 +60,61 @@ class DAGExecutor {
         task.deps.every(dep => this.tasks[dep] && this.tasks[dep].status === 'completed')
       )
       .map(([name]) => name);
+  }
+
+  /**
+   * Updates tasks from a new graph while preserving running/completed status.
+   * Handles adding new tasks, updating dependencies, and removing obsolete tasks.
+   * @param {Object} newGraph - The new task graph from buildTaskGraph()
+   * @returns {boolean} - True if any changes were made
+   */
+  _updateTasksFromGraph(newGraph) {
+    if (!newGraph) return false;
+
+    let hasChanges = false;
+
+    // Update tasks with new graph while preserving running/completed status
+    for (const [taskName, taskData] of Object.entries(newGraph)) {
+      if (!this.tasks[taskName]) {
+        // New task (e.g., from split) - add it
+        this.tasks[taskName] = taskData;
+        this.stateManager.taskStates.set(taskName, {
+          status: taskData.status,
+          step: null,
+          message: null
+        });
+        logger.info(`📥 Added new task: ${taskName} (deps: ${taskData.deps.join(', ') || 'none'})`);
+        hasChanges = true;
+      } else {
+        // Existing task - update deps but preserve status if running/completed
+        const oldDeps = this.tasks[taskName].deps.join(',');
+        const newDeps = taskData.deps.join(',');
+        if (oldDeps !== newDeps) {
+          logger.info(`🔄 Updated deps for ${taskName}: [${oldDeps}] → [${newDeps}]`);
+          hasChanges = true;
+        }
+        this.tasks[taskName].deps = taskData.deps;
+        // Update status from graph if task is still pending (e.g., completed in background)
+        if (this.tasks[taskName].status === 'pending' && taskData.status === 'completed') {
+          this.tasks[taskName].status = 'completed';
+          this.stateManager.updateTaskStatus(taskName, 'completed');
+          logger.info(`✅ ${taskName} marked as completed from graph`);
+          hasChanges = true;
+        }
+      }
+    }
+
+    // Remove tasks that no longer exist in the graph (e.g., parent task that was split)
+    for (const taskName of Object.keys(this.tasks)) {
+      if (!newGraph[taskName] && this.tasks[taskName].status === 'pending') {
+        logger.info(`🗑️ Removed task no longer in graph: ${taskName}`);
+        delete this.tasks[taskName];
+        this.stateManager.taskStates.delete(taskName);
+        hasChanges = true;
+      }
+    }
+
+    return hasChanges;
   }
 
   /**
@@ -248,7 +309,23 @@ class DAGExecutor {
     while (true) {
       // Rebuild task graph to capture any changes in dependencies (if provided)
       if (buildTaskGraph && typeof buildTaskGraph === 'function') {
-        buildTaskGraph();
+        const newGraph = buildTaskGraph();
+        this._updateTasksFromGraph(newGraph);
+      }
+
+      // Debug: show pending tasks and their dependencies (throttled to once every 10 seconds)
+      const now = Date.now();
+      if (now - this._lastPendingTasksLog >= 10000) {
+        const pendingTasksDebug = Object.entries(this.tasks)
+          .filter(([, t]) => t.status === 'pending')
+          .map(([name, t]) => {
+            const missingDeps = t.deps.filter(d => !this.tasks[d] || this.tasks[d].status !== 'completed');
+            return `${name}(waiting: ${missingDeps.join(',') || 'ready!'})`;
+          });
+        if (pendingTasksDebug.length > 0 && this.running.size === 0) {
+          logger.info(`⏳ Pending tasks: ${pendingTasksDebug.join(', ')}`);
+          this._lastPendingTasksLog = now;
+        }
       }
 
       // Verifica se há slots disponíveis e tasks prontas
@@ -286,9 +363,84 @@ class DAGExecutor {
 
       // Se ainda há tasks rodando, aguarda um pouco antes de verificar novamente
       if (this.running.size > 0) {
+        this._deadlockCounter = 0; // Reset counter when tasks are running
         await new Promise(resolve => setTimeout(resolve, 500)); // Reduzido para resposta mais rápida
       } else if (ready.length === 0) {
         // Não há tasks prontas e nenhuma rodando - possivelmente dependências não satisfeitas
+        this._deadlockCounter++;
+
+        // After 5 seconds of no progress, attempt to resolve deadlock
+        if (this._deadlockCounter >= 5) {
+          uiRenderer.stop();
+          logger.newline();
+          logger.warning('🔒 DEADLOCK DETECTED - No tasks can proceed');
+          logger.newline();
+
+          // Show detailed diagnostics
+          const pendingTasks = Object.entries(this.tasks)
+            .filter(([, t]) => t.status === 'pending');
+
+          for (const [taskName, task] of pendingTasks) {
+            const missingDeps = task.deps.filter(d => {
+              if (!this.tasks[d]) return true; // Dependency doesn't exist
+              return this.tasks[d].status !== 'completed';
+            });
+
+            if (missingDeps.length > 0) {
+              logger.warning(`  ⏳ ${taskName} waiting for:`);
+              for (const dep of missingDeps) {
+                if (!this.tasks[dep]) {
+                  logger.warning(`     - ${dep} (DOES NOT EXIST IN GRAPH!)`);
+                } else {
+                  logger.warning(`     - ${dep} (status: ${this.tasks[dep].status})`);
+                }
+              }
+            }
+          }
+
+          logger.newline();
+
+          // Attempt AI-powered resolution
+          this._deadlockResolutionAttempts++;
+
+          if (this._deadlockResolutionAttempts > 3) {
+            logger.error('❌ Maximum deadlock resolution attempts (3) reached');
+            logger.error('💡 Manual intervention required. Check the @dependencies in TASK.md files.');
+            throw new Error('Deadlock could not be resolved after 3 attempts');
+          }
+
+          logger.info(`🤖 Attempting AI-powered deadlock resolution (attempt ${this._deadlockResolutionAttempts}/3)...`);
+          logger.newline();
+
+          const resolved = await resolveDeadlock(this.tasks, pendingTasks);
+
+          if (resolved) {
+            logger.newline();
+            logger.success('✅ Deadlock resolution completed - rebuilding task graph...');
+            logger.newline();
+
+            // Reset deadlock counters after successful resolution
+            this._deadlockCounter = 0;
+            this._deadlockResolutionAttempts = 0;
+
+            // Rebuild task graph after resolution
+            if (buildTaskGraph && typeof buildTaskGraph === 'function') {
+              const newGraph = buildTaskGraph();
+              this._updateTasksFromGraph(newGraph);
+            }
+
+            // Restart UI renderer
+            uiRenderer.start(this.getStateManager(), { calculateProgress });
+
+            // Continue loop to check for ready tasks
+            continue;
+          } else {
+            logger.error('❌ AI could not resolve the deadlock');
+            logger.error('💡 Manual intervention required. Check the @dependencies in TASK.md files.');
+            throw new Error('Deadlock could not be resolved by AI');
+          }
+        }
+
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
