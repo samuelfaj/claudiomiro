@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../utils/logger');
 const state = require('../config/state');
-const { executeClaude } = require('./claude-executor');
+const { executeClaude } = require('../executors/claude-executor');
 
 const commitOrFix = async (prompt, taskName = null) => {
     logger.stopSpinner();

@@ -5,7 +5,14 @@ const { spawn } = require('child_process');
 const logger = require('../utils/logger');
 const state = require('../config/state');
 const { processGlmMessage } = require('./glm-logger');
-const { ParallelStateManager } = require('./parallel-state-manager');
+// ParallelStateManager is optional - only available when running within task-executor context
+let ParallelStateManager = { getInstance: () => null };
+try {
+    const psm = require('./parallel-state-manager');
+    ParallelStateManager = psm.ParallelStateManager || ParallelStateManager;
+} catch (e) {
+    // ParallelStateManager not available in shared context - this is expected
+}
 
 const overwriteBlock = (lines) => {
     // Move o cursor para cima N linhas e limpa cada uma

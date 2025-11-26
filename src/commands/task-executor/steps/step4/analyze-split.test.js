@@ -2,14 +2,14 @@ const fs = require('fs');
 const path = require('path');
 
 jest.mock('fs');
-jest.mock('../../services/claude-executor');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
 
 // Import after mocks
 const { analyzeSplit } = require('./analyze-split');
-const { executeClaude } = require('../../services/claude-executor');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
 describe('analyze-split', () => {
   const mockTask = 'TASK1';

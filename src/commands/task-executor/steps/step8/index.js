@@ -1,10 +1,10 @@
 const fs = require('fs');
 const path = require('path');
-const state = require('../../config/state');
-const { executeClaude } = require('../../services/claude-executor');
-const logger = require('../../utils/logger');
-const { commitOrFix } = require('../../services/git-commit');
-const { gitStatus } = require('../../services/git-status');
+const state = require('../../../../shared/config/state');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const logger = require('../../../../shared/utils/logger');
+const { commitOrFix } = require('../../../../shared/services/git-commit');
+const { gitStatus } = require('../../../../shared/services/git-status');
 
 /**
  * Step 8: Final Commit and Pull Request

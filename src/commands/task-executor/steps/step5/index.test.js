@@ -2,23 +2,23 @@ const fs = require('fs');
 const path = require('path');
 
 jest.mock('fs');
-jest.mock('../../services/claude-executor');
+jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('./generate-research');
 jest.mock('./generate-context');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
-jest.mock('../../utils/logger', () => ({
+jest.mock('../../../../shared/utils/logger', () => ({
   warning: jest.fn(),
   info: jest.fn()
 }));
 
 // Import after mocks
 const { step5 } = require('./index');
-const { executeClaude } = require('../../services/claude-executor');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { generateResearchFile } = require('./generate-research');
 const { generateContextFile } = require('./generate-context');
-const logger = require('../../utils/logger');
+const logger = require('../../../../shared/utils/logger');
 
 describe('step5', () => {
   const mockTask = 'TASK1';

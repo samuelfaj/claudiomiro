@@ -2,11 +2,11 @@ const fs = require('fs');
 const path = require('path');
 
 jest.mock('fs');
-jest.mock('../../services/claude-executor');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
-jest.mock('../../utils/logger', () => ({
+jest.mock('../../../../shared/utils/logger', () => ({
   startSpinner: jest.fn(),
   stopSpinner: jest.fn(),
   success: jest.fn(),
@@ -17,7 +17,7 @@ jest.mock('../../utils/logger', () => ({
 
 // Import after mocks
 const { generateTodo } = require('./generate-todo');
-const { executeClaude } = require('../../services/claude-executor');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
 describe('generate-todo', () => {
   const mockTask = 'TASK1';

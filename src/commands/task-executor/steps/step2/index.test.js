@@ -2,11 +2,11 @@ const fs = require('fs');
 const path = require('path');
 
 jest.mock('fs');
-jest.mock('../../services/claude-executor');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
-jest.mock('../../utils/logger', () => ({
+jest.mock('../../../../shared/utils/logger', () => ({
   newline: jest.fn(),
   startSpinner: jest.fn(),
   stopSpinner: jest.fn(),
@@ -18,8 +18,8 @@ jest.mock('../../utils/logger', () => ({
 
 // Import after mocks are defined
 const { step2 } = require('./index');
-const { executeClaude } = require('../../services/claude-executor');
-const logger = require('../../utils/logger');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const logger = require('../../../../shared/utils/logger');
 
 describe('step2', () => {
   const originalNodeEnv = process.env.NODE_ENV;

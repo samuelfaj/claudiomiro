@@ -6,9 +6,9 @@ jest.mock('fs');
 jest.mock('path');
 jest.mock('./review-code');
 jest.mock('./reanalyze-failed');
-jest.mock('../../services/git-commit');
+jest.mock('../../../../shared/services/git-commit');
 jest.mock('../../utils/validation');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
 
@@ -19,7 +19,7 @@ const consoleWarn = jest.spyOn(console, 'warn').mockImplementation();
 const { step6 } = require('./index');
 const { reviewCode } = require('./review-code');
 const { reanalyzeFailed } = require('./reanalyze-failed');
-const { commitOrFix } = require('../../services/git-commit');
+const { commitOrFix } = require('../../../../shared/services/git-commit');
 const { isFullyImplemented } = require('../../utils/validation');
 
 describe('step6', () => {

@@ -5,7 +5,14 @@ const { spawn } = require('child_process');
 const logger = require('../utils/logger');
 const state = require('../config/state');
 const { processGeminiMessage } = require('./gemini-logger');
-const { ParallelStateManager } = require('./parallel-state-manager');
+// ParallelStateManager is optional - only available when running within task-executor context
+let ParallelStateManager = { getInstance: () => null };
+try {
+    const psm = require('./parallel-state-manager');
+    ParallelStateManager = psm.ParallelStateManager || ParallelStateManager;
+} catch (e) {
+    // ParallelStateManager not available in shared context - this is expected
+}
 
 const overwriteBlock = (lines) => {
     // Move cursor up N lines and clear each one

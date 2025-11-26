@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 jest.mock('fs');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
 

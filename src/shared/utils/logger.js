@@ -4,7 +4,7 @@ const logSymbols = require('log-symbols');
 const boxen = require('boxen');
 const gradient = require('gradient-string');
 const readline = require('readline');
-const packageJson = require('../../package.json');
+const packageJson = require('../../../package.json');
 
 class Logger {
     constructor() {

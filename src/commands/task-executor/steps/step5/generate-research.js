@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const state = require('../../config/state');
-const { executeClaude } = require('../../services/claude-executor');
+const state = require('../../../../shared/config/state');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
 /**
  * Generates RESEARCH.md file with deep context analysis
@@ -24,7 +24,7 @@ const generateResearchFile = async (task) => {
     return;
   }
 
-  const logger = require('../../utils/logger');
+  const logger = require('../../../../shared/utils/logger');
 
   logger.startSpinner('Analyzing task and gathering context...');
 

@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const state = require('../../config/state');
-const { executeClaude } = require('../../services/claude-executor');
-const logger = require('../../utils/logger');
+const state = require('../../../../shared/config/state');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const logger = require('../../../../shared/utils/logger');
 
 /**
  * Step 7: Global Critical Bug Sweep

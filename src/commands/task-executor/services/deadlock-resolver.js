@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const logger = require('../utils/logger');
-const state = require('../config/state');
-const { executeClaude } = require('./claude-executor');
+const logger = require('../../../shared/utils/logger');
+const state = require('../../../shared/config/state');
+const { executeClaude } = require('../../../shared/executors/claude-executor');
 
 /**
  * Analyzes and resolves circular dependencies in task graph

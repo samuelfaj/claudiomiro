@@ -1,6 +1,6 @@
 const fs = require('fs');
-const logger = require('../utils/logger');
-const state = require('../config/state');
+const logger = require('../../../shared/utils/logger');
+const state = require('../../../shared/config/state');
 
 const startFresh = (createFolder = false) => {
     logger.task('Cleaning up previous files...');

@@ -14,8 +14,8 @@ const { validateTodoQuality } = require('./utils');
  * @returns {Promise} Result of the split analysis
  */
 const step4 = async (task) => {
-  const logger = require('../../utils/logger');
-  const state = require('../../config/state');
+  const logger = require('../../../../shared/utils/logger');
+  const state = require('../../../../shared/config/state');
   const folder = (file) => path.join(state.claudiomiroFolder, task, file);
 
   // Generate TODO.md

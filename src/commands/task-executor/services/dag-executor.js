@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const logger = require('../utils/logger');
-const state = require('../config/state');
+const logger = require('../../../shared/utils/logger');
+const state = require('../../../shared/config/state');
 const { step4, step5, step6, step7 } = require('../steps');
 const { isFullyImplemented, hasApprovedCodeReview } = require('../utils/validation');
 const ParallelStateManager = require('./parallel-state-manager');

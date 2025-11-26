@@ -5,7 +5,6 @@ const { spawn } = require('child_process');
 const logger = require('../utils/logger');
 const state = require('../config/state');
 const { processDeepSeekMessage } = require('./deep-seek-logger');
-const { ParallelStateManager } = require('./parallel-state-manager');
 const { executeDeepSeek } = require('./deep-seek-executor');
 
 // Mock modules
@@ -16,7 +15,20 @@ jest.mock('child_process');
 jest.mock('../utils/logger');
 jest.mock('../config/state');
 jest.mock('./deep-seek-logger');
-jest.mock('./parallel-state-manager');
+
+// Mock ParallelStateManager - it's optional in the shared context
+// Variable name must be prefixed with 'mock' to be allowed in jest.mock scope
+const mockParallelStateManager = {
+    getInstance: jest.fn(() => ({
+        isUIRendererActive: jest.fn(() => false),
+        updateClaudeMessage: jest.fn()
+    }))
+};
+jest.mock('./parallel-state-manager', () => ({
+    ParallelStateManager: mockParallelStateManager
+}), { virtual: true });
+// Alias for existing test code that uses ParallelStateManager
+const ParallelStateManager = mockParallelStateManager;
 
 describe('deep-seek-executor', () => {
   let mockSpawn;

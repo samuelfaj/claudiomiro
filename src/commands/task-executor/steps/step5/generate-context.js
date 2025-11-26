@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const state = require('../../config/state');
+const state = require('../../../../shared/config/state');
 
 /**
  * Generates CONTEXT.md file after successful task completion

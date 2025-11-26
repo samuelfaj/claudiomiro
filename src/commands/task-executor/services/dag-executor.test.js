@@ -2,8 +2,8 @@
 jest.mock('fs');
 jest.mock('path');
 jest.mock('os');
-jest.mock('../utils/logger');
-jest.mock('../config/state');
+jest.mock('../../../shared/utils/logger');
+jest.mock('../../../shared/config/state');
 jest.mock('./parallel-state-manager');
 jest.mock('./parallel-ui-renderer');
 jest.mock('../utils/terminal-renderer');
@@ -16,8 +16,8 @@ os.cpus.mockReturnValue([1, 2, 3, 4]); // 4 cores
 
 const fs = require('fs');
 const path = require('path');
-const logger = require('../utils/logger');
-const state = require('../config/state');
+const logger = require('../../../shared/utils/logger');
+const state = require('../../../shared/config/state');
 const ParallelStateManager = require('./parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');

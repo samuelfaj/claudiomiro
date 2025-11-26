@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const state = require('../../config/state');
-const { executeClaude } = require('../../services/claude-executor');
+const state = require('../../../../shared/config/state');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
 /**
  * Performs systematic code review of implemented task

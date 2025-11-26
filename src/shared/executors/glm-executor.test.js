@@ -8,7 +8,6 @@ const { spawn } = require('child_process');
 const logger = require('../utils/logger');
 const state = require('../config/state');
 const { processGlmMessage } = require('./glm-logger');
-const { ParallelStateManager } = require('./parallel-state-manager');
 const { executeGlm } = require('./glm-executor');
 
 // Mock modules
@@ -19,7 +18,20 @@ jest.mock('child_process');
 jest.mock('../utils/logger');
 jest.mock('../config/state');
 jest.mock('./glm-logger');
-jest.mock('./parallel-state-manager');
+
+// Mock ParallelStateManager - it's optional in the shared context
+// Variable name must be prefixed with 'mock' to be allowed in jest.mock scope
+const mockParallelStateManager = {
+    getInstance: jest.fn(() => ({
+        isUIRendererActive: jest.fn(() => false),
+        updateClaudeMessage: jest.fn()
+    }))
+};
+jest.mock('./parallel-state-manager', () => ({
+    ParallelStateManager: mockParallelStateManager
+}), { virtual: true });
+// Alias for existing test code that uses ParallelStateManager
+const ParallelStateManager = mockParallelStateManager;
 
 describe('GLM Executor', () => {
   let mockSpawn;

@@ -2,15 +2,15 @@ const { detectCycles, parseDependencies, rebuildTaskGraphFromFiles, resolveDeadl
 
 // Mock dependencies
 jest.mock('fs');
-jest.mock('./claude-executor');
-jest.mock('../utils/logger');
-jest.mock('../config/state', () => ({
+jest.mock('../../../shared/executors/claude-executor');
+jest.mock('../../../shared/utils/logger');
+jest.mock('../../../shared/config/state', () => ({
   claudiomiroFolder: '/mock/claudiomiro'
 }));
 
 const fs = require('fs');
-const { executeClaude } = require('./claude-executor');
-const logger = require('../utils/logger');
+const { executeClaude } = require('../../../shared/executors/claude-executor');
+const logger = require('../../../shared/utils/logger');
 
 describe('deadlock-resolver', () => {
   beforeEach(() => {

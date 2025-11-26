@@ -7,12 +7,12 @@ jest.spyOn(process, 'exit').mockImplementation(mockExit);
 
 // Mock all dependencies
 jest.mock('fs');
-jest.mock('../../services/git-commit');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/services/git-commit');
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro',
   folder: '/test/project'
 }));
-jest.mock('../../utils/logger', () => ({
+jest.mock('../../../../shared/utils/logger', () => ({
   info: jest.fn(),
   warning: jest.fn(),
   stopSpinner: jest.fn()
@@ -20,7 +20,7 @@ jest.mock('../../utils/logger', () => ({
 
 // Import modules after mocks are defined
 const { step8 } = require('./index');
-const { commitOrFix } = require('../../services/git-commit');
+const { commitOrFix } = require('../../../../shared/services/git-commit');
 
 describe('step8', () => {
   beforeEach(() => {

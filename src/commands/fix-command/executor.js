@@ -1,9 +1,9 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const logger = require('../utils/logger');
-const state = require('../config/state');
-const { executeClaude } = require("./claude-executor");
+const logger = require('../../shared/utils/logger');
+const state = require('../../shared/config/state');
+const { executeClaude } = require("../../shared/executors/claude-executor");
 const { log } = require('console');
 
 const executeCommand = async (command) => {

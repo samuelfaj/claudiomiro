@@ -2,13 +2,13 @@ const fs = require('fs');
 const path = require('path');
 
 jest.mock('fs');
-jest.mock('../../services/claude-executor');
-jest.mock('../../services/prompt-reader');
+jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/services/prompt-reader');
 jest.mock('../../services/file-manager');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
-jest.mock('../../utils/logger', () => ({
+jest.mock('../../../../shared/utils/logger', () => ({
   newline: jest.fn(),
   startSpinner: jest.fn(),
   stopSpinner: jest.fn(),
@@ -20,10 +20,10 @@ jest.mock('../../utils/logger', () => ({
 
 // Import after mocks
 const { step0 } = require('./index');
-const { executeClaude } = require('../../services/claude-executor');
-const { getMultilineInput, askClarificationQuestions } = require('../../services/prompt-reader');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const { getMultilineInput, askClarificationQuestions } = require('../../../../shared/services/prompt-reader');
 const { startFresh } = require('../../services/file-manager');
-const logger = require('../../utils/logger');
+const logger = require('../../../../shared/utils/logger');
 
 describe('step0', () => {
   beforeEach(() => {

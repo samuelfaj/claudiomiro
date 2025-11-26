@@ -2,11 +2,11 @@ const fs = require('fs');
 const path = require('path');
 
 jest.mock('fs');
-jest.mock('../../services/claude-executor');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
-jest.mock('../../utils/logger', () => ({
+jest.mock('../../../../shared/utils/logger', () => ({
   startSpinner: jest.fn(),
   stopSpinner: jest.fn(),
   success: jest.fn(),
@@ -16,7 +16,7 @@ jest.mock('../../utils/logger', () => ({
 
 // Import after mocks
 const { generateResearchFile } = require('./generate-research');
-const { executeClaude } = require('../../services/claude-executor');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
 describe('generate-research', () => {
   const mockTask = 'TASK1';
@@ -77,7 +77,7 @@ describe('generate-research', () => {
     });
 
     test('should validate RESEARCH.md was created', async () => {
-      const logger = require('../../utils/logger');
+      const logger = require('../../../../shared/utils/logger');
 
       fs.existsSync.mockImplementation((filePath) => {
         // First calls: check if files exist
@@ -102,7 +102,7 @@ describe('generate-research', () => {
     });
 
     test('should validate RESEARCH.md has minimum content', async () => {
-      const logger = require('../../utils/logger');
+      const logger = require('../../../../shared/utils/logger');
       let existsCallCount = 0;
 
       fs.existsSync.mockImplementation((filePath) => {
@@ -135,7 +135,7 @@ describe('generate-research', () => {
     });
 
     test('should warn and continue if research fails', async () => {
-      const logger = require('../../utils/logger');
+      const logger = require('../../../../shared/utils/logger');
 
       fs.existsSync.mockImplementation((filePath) => {
         if(filePath.includes('RESEARCH.md')) return false;

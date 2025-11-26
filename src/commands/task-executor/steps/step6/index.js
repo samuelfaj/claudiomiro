@@ -2,9 +2,9 @@ const fs = require('fs');
 const path = require('path');
 const { reviewCode } = require('./review-code');
 const { reanalyzeFailed } = require('./reanalyze-failed');
-const { commitOrFix } = require('../../services/git-commit');
+const { commitOrFix } = require('../../../../shared/services/git-commit');
 const { isFullyImplemented } = require('../../utils/validation');
-const state = require('../../config/state');
+const state = require('../../../../shared/config/state');
 
 /**
  * Step 6: Code Review

@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const state = require('../../config/state');
-const { executeClaude } = require('../../services/claude-executor');
+const state = require('../../../../shared/config/state');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { generateResearchFile } = require('./generate-research');
 const { generateContextFile } = require('./generate-context');
 
@@ -24,7 +24,7 @@ const listFolders = (dir) => {
 
 const step5 = async (task) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
-    const logger = require('../../utils/logger');
+    const logger = require('../../../../shared/utils/logger');
 
     // Check if we need to re-research due to multiple failures
     let needsReResearch = false;

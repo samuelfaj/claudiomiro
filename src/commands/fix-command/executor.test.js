@@ -1,18 +1,18 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const logger = require('../utils/logger');
-const state = require('../config/state');
-const { executeClaude } = require('./claude-executor');
-const { fixCommand, executeCommand } = require('./fix-command');
+const logger = require('../../shared/utils/logger');
+const state = require('../../shared/config/state');
+const { executeClaude } = require('../../shared/executors/claude-executor');
+const { fixCommand, executeCommand } = require('./executor');
 
 // Mock modules
 jest.mock('child_process');
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../utils/logger');
-jest.mock('../config/state');
-jest.mock('./claude-executor');
+jest.mock('../../shared/utils/logger');
+jest.mock('../../shared/config/state');
+jest.mock('../../shared/executors/claude-executor');
 
 // Mock process.exit to prevent actual process termination
 const originalExit = process.exit;

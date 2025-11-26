@@ -4,14 +4,14 @@ const path = require('path');
 // Mock all dependencies
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../../services/claude-executor');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
 
 // Import after mocking
 const { reviewCode } = require('./review-code');
-const { executeClaude } = require('../../services/claude-executor');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
 describe('review-code', () => {
   const mockTask = 'TASK1';

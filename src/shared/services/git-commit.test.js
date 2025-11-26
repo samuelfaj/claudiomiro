@@ -1,12 +1,12 @@
 const logger = require('../utils/logger');
 const state = require('../config/state');
-const { executeClaude } = require('./claude-executor');
+const { executeClaude } = require('../executors/claude-executor');
 const { commitOrFix } = require('./git-commit');
 
 // Mock modules
 jest.mock('../utils/logger');
 jest.mock('../config/state');
-jest.mock('./claude-executor');
+jest.mock('../executors/claude-executor');
 
 describe('git-commit', () => {
   beforeEach(() => {

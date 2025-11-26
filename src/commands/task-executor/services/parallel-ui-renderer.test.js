@@ -1,7 +1,7 @@
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const chalk = require('chalk');
 const cliSpinners = require('cli-spinners');
-const logger = require('../utils/logger');
+const logger = require('../../../shared/utils/logger');
 
 // Mock TerminalRenderer
 class MockTerminalRenderer {

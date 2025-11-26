@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
-const state = require('../../config/state');
-const logger = require('../../utils/logger');
-const { executeClaude } = require('../../services/claude-executor');
-const { getMultilineInput, askClarificationQuestions } = require('../../services/prompt-reader');
+const state = require('../../../../shared/config/state');
+const logger = require('../../../../shared/utils/logger');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const { getMultilineInput, askClarificationQuestions } = require('../../../../shared/services/prompt-reader');
 const { startFresh } = require('../../services/file-manager');
 
 /**

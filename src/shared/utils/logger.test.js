@@ -1,5 +1,15 @@
 const logger = require('./logger');
-const ParallelStateManager = require('../services/parallel-state-manager');
+
+// Mock ParallelStateManager - it's optional in the shared context
+// Variable name must be prefixed with 'mock' to be allowed in jest.mock scope
+const mockParallelStateManager = {
+    instance: null
+};
+jest.mock('../services/parallel-state-manager', () => ({
+    ParallelStateManager: mockParallelStateManager
+}), { virtual: true });
+// Alias for existing test code that uses ParallelStateManager
+const ParallelStateManager = mockParallelStateManager;
 
 describe('Logger', () => {
   // Mock console.log to prevent output during tests

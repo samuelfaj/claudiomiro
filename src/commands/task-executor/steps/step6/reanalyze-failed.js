@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
-const state = require('../../config/state');
-const { executeClaude } = require('../../services/claude-executor');
+const state = require('../../../../shared/config/state');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
 /**
  * Deep re-analysis when code review fails multiple times

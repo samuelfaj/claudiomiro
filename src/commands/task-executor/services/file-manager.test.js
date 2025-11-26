@@ -1,12 +1,12 @@
 const fs = require('fs');
-const logger = require('../utils/logger');
-const state = require('../config/state');
+const logger = require('../../../shared/utils/logger');
+const state = require('../../../shared/config/state');
 const { startFresh } = require('./file-manager');
 
 // Mock modules
 jest.mock('fs');
-jest.mock('../utils/logger');
-jest.mock('../config/state');
+jest.mock('../../../shared/utils/logger');
+jest.mock('../../../shared/config/state');
 
 describe('file-manager', () => {
   beforeEach(() => {

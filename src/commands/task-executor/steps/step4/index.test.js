@@ -3,13 +3,13 @@ const path = require('path');
 jest.mock('./generate-todo');
 jest.mock('./analyze-split');
 jest.mock('./utils');
-jest.mock('../../utils/logger', () => ({
+jest.mock('../../../../shared/utils/logger', () => ({
   warning: jest.fn(),
   info: jest.fn(),
   success: jest.fn(),
   newline: jest.fn()
 }));
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
 
@@ -18,7 +18,7 @@ const { step4 } = require('./index');
 const { generateTodo } = require('./generate-todo');
 const { analyzeSplit } = require('./analyze-split');
 const { validateTodoQuality } = require('./utils');
-const logger = require('../../utils/logger');
+const logger = require('../../../../shared/utils/logger');
 
 describe('step4', () => {
   const mockTask = 'TASK1';

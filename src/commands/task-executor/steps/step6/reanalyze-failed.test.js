@@ -4,8 +4,8 @@ const path = require('path');
 // Mock all dependencies
 jest.mock('fs');
 jest.mock('path');
-jest.mock('../../services/claude-executor');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
 
@@ -16,7 +16,7 @@ global.Date.getTime = jest.fn(() => mockDate.getTime());
 
 // Import after mocking
 const { reanalyzeFailed } = require('./reanalyze-failed');
-const { executeClaude } = require('../../services/claude-executor');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
 describe('reanalyze-failed', () => {
   const mockTask = 'TASK1';

@@ -1,18 +1,15 @@
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
-const state = require('../../config/state');
-const { executeClaude } = require('../../services/claude-executor');
-const logger = require('../../utils/logger');
 
 jest.mock('fs');
 jest.mock('path');
 jest.mock('child_process');
-jest.mock('../../services/claude-executor');
-jest.mock('../../config/state', () => ({
+jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/config/state', () => ({
   claudiomiroFolder: '/test/.claudiomiro'
 }));
-jest.mock('../../utils/logger', () => ({
+jest.mock('../../../../shared/utils/logger', () => ({
   startSpinner: jest.fn(),
   stopSpinner: jest.fn(),
   success: jest.fn(),
@@ -23,6 +20,9 @@ jest.mock('../../utils/logger', () => ({
 
 // Import after mocks
 const { step7 } = require('./index');
+const state = require('../../../../shared/config/state');
+const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const logger = require('../../../../shared/utils/logger');
 
 describe('step7', () => {
   const bugsPath = '/test/.claudiomiro/BUGS.md';
