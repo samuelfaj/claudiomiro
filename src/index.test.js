@@ -1,66 +1,70 @@
-// Mock all dependencies BEFORE requiring the module
-jest.mock('./shared/utils/logger', () => ({
-    banner: jest.fn(),
-    info: jest.fn(),
-    error: jest.fn(),
-    warning: jest.fn()
-}));
-
-jest.mock('./shared/config/state', () => ({
-    setFolder: jest.fn(),
-    folder: '/test/folder',
-    claudiomiroFolder: '/test/folder/.claudiomiro'
-}));
-
-jest.mock('./shared/utils/auto-update', () => ({
-    checkForUpdatesAsync: jest.fn()
-}));
-
-// Mock command modules
-jest.mock('./commands/task-executor', () => ({
-    run: jest.fn().mockResolvedValue(undefined)
-}));
-
-jest.mock('./commands/fix-command', () => ({
-    run: jest.fn().mockResolvedValue(undefined)
-}));
-
-jest.mock('./commands/loop-fixes', () => ({
-    run: jest.fn().mockResolvedValue(undefined)
-}));
-
-const logger = require('./shared/utils/logger');
-const { checkForUpdatesAsync } = require('./shared/utils/auto-update');
-const { run: runTaskExecutor } = require('./commands/task-executor');
-const { run: runFixCommand } = require('./commands/fix-command');
-const { run: runLoopFixes } = require('./commands/loop-fixes');
-
 // Store original process.argv and process.exit
 const originalArgv = process.argv;
 const originalExit = process.exit;
 
 describe('src/index.js', () => {
+    // Mock references that will be set in beforeEach
+    let logger;
+    let checkForUpdatesAsync;
+    let runTaskExecutor;
+    let runFixCommand;
+    let runLoopFixes;
     let indexModule;
 
     beforeEach(() => {
-        // Reset all mocks
-        jest.clearAllMocks();
+        // Reset modules to ensure fresh mocks
+        jest.resetModules();
+
+        // Setup mocks BEFORE requiring the module
+        jest.doMock('./shared/utils/logger', () => ({
+            banner: jest.fn(),
+            info: jest.fn(),
+            error: jest.fn(),
+            warning: jest.fn()
+        }));
+
+        jest.doMock('./shared/config/state', () => ({
+            setFolder: jest.fn(),
+            folder: '/test/folder',
+            claudiomiroFolder: '/test/folder/.claudiomiro'
+        }));
+
+        jest.doMock('./shared/utils/auto-update', () => ({
+            checkForUpdatesAsync: jest.fn()
+        }));
+
+        jest.doMock('./commands/task-executor', () => ({
+            run: jest.fn().mockResolvedValue(undefined)
+        }));
+
+        jest.doMock('./commands/fix-command', () => ({
+            run: jest.fn().mockResolvedValue(undefined)
+        }));
+
+        jest.doMock('./commands/loop-fixes', () => ({
+            run: jest.fn().mockResolvedValue(undefined)
+        }));
+
+        // Now require the module and get references to mocks
+        logger = require('./shared/utils/logger');
+        checkForUpdatesAsync = require('./shared/utils/auto-update').checkForUpdatesAsync;
+        runTaskExecutor = require('./commands/task-executor').run;
+        runFixCommand = require('./commands/fix-command').run;
+        runLoopFixes = require('./commands/loop-fixes').run;
+        indexModule = require('./index');
 
         // Reset process.argv
         process.argv = ['node', 'claudiomiro'];
 
         // Mock process.exit
         process.exit = jest.fn();
-
-        // Clear module cache and re-require
-        jest.resetModules();
-        indexModule = require('./index');
     });
 
     afterEach(() => {
         // Restore process.argv and process.exit
         process.argv = originalArgv;
         process.exit = originalExit;
+        jest.resetModules();
     });
 
     describe('parseArgs()', () => {
