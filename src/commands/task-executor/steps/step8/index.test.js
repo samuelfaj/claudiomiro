@@ -47,11 +47,11 @@ describe('step8', () => {
         path.join('/test/.claudiomiro', 'done.txt'),
         '1'
       );
-      expect(require('../../utils/logger').info).toHaveBeenCalledWith(
+      expect(require('../../../../shared/utils/logger').info).toHaveBeenCalledWith(
         '✅ Claudiomiro has been successfully executed. Check out: /test/project'
       );
       expect(mockExit).toHaveBeenCalledWith(0);
-      expect(require('../../utils/logger').warning).not.toHaveBeenCalled();
+      expect(require('../../../../shared/utils/logger').warning).not.toHaveBeenCalled();
     });
 
     test('should generate commit-only prompt when shouldPush is false', async () => {
@@ -71,7 +71,7 @@ describe('step8', () => {
         path.join('/test/.claudiomiro', 'done.txt'),
         '1'
       );
-      expect(require('../../utils/logger').info).toHaveBeenCalledWith(
+      expect(require('../../../../shared/utils/logger').info).toHaveBeenCalledWith(
         '✅ Claudiomiro has been successfully executed. Check out: /test/project'
       );
       expect(mockExit).toHaveBeenCalledWith(0);
@@ -117,7 +117,7 @@ describe('step8', () => {
       // Arrange
       commitOrFix.mockResolvedValue(true);
       fs.writeFileSync.mockImplementation(() => {});
-      const logger = require('../../utils/logger');
+      const logger = require('../../../../shared/utils/logger');
 
       // Act
       await step8([], true);
@@ -134,7 +134,7 @@ describe('step8', () => {
       const errorMessage = 'Git command failed';
       commitOrFix.mockRejectedValue(new Error(errorMessage));
       fs.writeFileSync.mockImplementation(() => {});
-      const logger = require('../../utils/logger');
+      const logger = require('../../../../shared/utils/logger');
 
       // Act
       await step8([], true);
