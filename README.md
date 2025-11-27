@@ -6,7 +6,10 @@ With an army of AI agents, turn days of complex development into a fully automat
 
 ![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/claudiomiro_terminal.png?raw=true)
 
-Today’s AI coding assistants are powerful, but **still fundamentally unfinished**. They generate promising first drafts, then hand the burden back to you — forcing manual review, debugging, and cleanup.
+Today’s AI coding assistants are powerful, but **still fundamentally unfinished**. 
+
+They generate promising first drafts, then hand the burden back to you — forcing manual review, debugging, and cleanup.
+
 The result is a **productivity paradox**: tools that speed up typing but slow down everything else.
 
 **Claudiomiro breaks this cycle**.
