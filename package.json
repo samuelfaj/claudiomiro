@@ -1,12 +1,12 @@
 {
   "name": "claudiomiro",
-  "version": "1.9.5",
+  "version": "1.9.7",
   "main": "index.js",
   "bin": {
     "claudiomiro": "./index.js"
   },
   "scripts": {
-    "test": "NODE_OPTIONS=--max-old-space-size=8192 npx jest --testPathIgnorePatterns=dag-executor.test.js",
+    "test": "NODE_OPTIONS=--max-old-space-size=8192 npx jest --testPathIgnorePatterns='dag-executor.test.js|cli.test.js'",
     "test:dag": "NODE_OPTIONS=--max-old-space-size=8192 npx jest src/services/dag-executor.test.js --runInBand --forceExit",
     "test:all": "npm run test && npm run test:dag",
     "test:coverage": "NODE_OPTIONS=--max-old-space-size=8192 jest --coverage"

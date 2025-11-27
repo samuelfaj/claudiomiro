@@ -13,11 +13,6 @@ With an army of AI agents, turn days of complex development into a fully automat
 - ✅ `claudiomiro --deep-seek` [(how to)](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
 - ✅ `claudiomiro --glm` [(how to)](./docs/HOW-TO-RUN-WITH-GLM.md)
 
-**Examples:**
-- 💬 [“Implement Express.js with some basic routes and JWT.”](https://github.com/samuelfaj/claudiomiro-express-example) - Claude
-- 💬 [“Create the classic Snake game entirely in JavaScript to run in the browser.”](https://github.com/samuelfaj/claudiomiro-snake-game-example) - Codex
-- 💬 [“Refactor Claudiomiro to typescript.”](https://github.com/samuelfaj/claudiomiro/pull/10) - DeepSeek
-
 ------
 
 ## The Problem with Agents
@@ -101,15 +96,8 @@ Claudiomiro executes through a refined 9-step pipeline (completely refactored in
 5. **Step 4** - Generate detailed TODO.md for each task
 6. **Step 5** - Execute task (research → context → implementation)
 7. **Step 6** - Senior-level code review with quality validation
-8. **Step 7** - **NEW**: Global critical bug sweep across ALL changes
+8. **Step 7** - Global critical bug sweep across ALL changes
 9. **Step 8** - Final commit and pull request creation
-
-**What's new in Step 7?**
-- Analyzes git diff of **entire branch** (not just individual tasks)
-- Hunts for **CRITICAL severity bugs only** (security, data loss, production-breaking issues)
-- Self-corrects in loop until **0 critical bugs remain**
-- Only runs on new branches created by Claudiomiro (not --same-branch)
-- Prevents shipping dangerous code to production
 
 ### Safety Mechanisms
 
@@ -119,23 +107,6 @@ Claudiomiro executes through a refined 9-step pipeline (completely refactored in
 - **Error detection** - Stops if same error repeats
 - **Branch validation** - Step 7 only runs on Claudiomiro-managed branches
 - **Manual override** - Use `--push=false` to review before final commit
-
-## Key Features
-
-- 🔄 **Truly Autonomous**: Loops until task is 100% complete
-- ⚡ **Parallel Execution**: Runs independent tasks simultaneously (2 per CPU core, max 5)
-- 🧩 **Intelligent Decomposition**: Breaks complex tasks into granular, independent sub-tasks optimized for parallelism
-- 📊 **Smart Dependency Analysis**: Creates execution plan with layers and critical path
-- 🎯 **Dual Planning Modes**: Choose between auto (speed) or hard (maximum criticality + deep reasoning)
-- 🧠 **Deep Analysis**: Understands your codebase patterns and architecture
-- 👨‍💻 **Automated Code Review**: Senior-level review validates quality before testing
-- 🛡️ **Global Critical Bug Sweep** (NEW v1.9.0): Final security & safety validation before shipping
-- 🔧 **Command Fixing**: Automatically retries and fixes failing commands using AI
-- 🧪 **Quality Enforced**: Never skips tests, always validates
-- 📊 **Full Transparency**: Live logs show every decision and action
-- 🏗️ **Refactored Architecture** (v1.9.0): Each step follows Single Responsibility Principle
-- 🎯 **Production Ready**: Code is tested, reviewed, debugged, and ready to merge
-- ⚡ **Massive Time Savings**: 95-98% reduction in development time
 
 ## Prerequisites for Optimal Performance
 
@@ -184,157 +155,27 @@ claudiomiro /path/to/project --prompt="Refactor payment processing"
 claudiomiro
 ```
 
-### Advanced Options
+## Available Commands
+
+Claudiomiro provides specialized commands for different workflows. [Full documentation →](./docs/commands/README.md)
+
+| Command | Description |
+|---------|-------------|
+| `claudiomiro [folder]` | Full autonomous development (default) |
+| `claudiomiro --fix-command="<cmd>"` | [Run & fix a command until it passes](./docs/commands/fix-command.md) |
+| `claudiomiro --loop-fixes` | [Iterative issue detection and fixing](./docs/commands/loop-fixes.md) |
+| `claudiomiro --fix-branch` | [Branch code review and fix](./docs/commands/fix-branch.md) |
+| `claudiomiro --help` | [Show help and usage info](./docs/commands/help.md) |
+
+### Quick Examples
+
 ```bash
-# Review changes before pushing (recommended for first use)
-claudiomiro --prompt="Implement dark mode" --push=false
+# Fix failing tests automatically
+claudiomiro --fix-command="npm test"
 
-# Work on current branch (no new branch created)
-claudiomiro --prompt="Fix login bug" --same-branch
+# Security audit with iterative fixes
+claudiomiro --loop-fixes --prompt="Find and fix security vulnerabilities"
 
-# Start fresh (removes all generated files)
-claudiomiro --fresh
-
-# Change cycle limit per task (default: 20)
-claudiomiro --prompt="Complex refactoring" --limit=50
-
-# Remove cycle limit per task (use with caution)
-claudiomiro --prompt="Very complex task" --no-limit
-
-# Control parallel execution (default: 2 per core, max 5)
-claudiomiro --prompt="Build microservices" --maxConcurrent=10
-
-# Task planning mode (auto or hard)
-claudiomiro --prompt="Build REST API" --mode=hard  # Maximum criticality + reasoning
-claudiomiro --prompt="Add feature" --mode=auto     # Default: parallelism-focused
-
-# Choose AI executor (default: Claude)
-claudiomiro --prompt="Migrate to microfrontends" --codex
-claudiomiro --prompt="Run security audit" --claude
-claudiomiro --prompt="Build REST API" --glm
-claudiomiro --prompt="Implement ML pipeline" --deep-seek
-
-# Run only specific steps
-claudiomiro --steps=2,3,4  # Skip planning, only implement
-claudiomiro --step=0       # Only create task decomposition
-
-# Combine options
-claudiomiro /path/to/project --prompt="Add GraphQL API" --push=false --maxConcurrent=8 --mode=hard
-
-# Fix command execution (automatically retry and fix failing commands)
-claudiomiro --glm --fix-command="npm test"
+# Branch code review and fix before opening PR
+claudiomiro --fix-branch
 ```
-
-### Example Prompts
-
-**Integrating frontend and backend:**
-```bash
-I want you to review every component inside
-/project/frontend/src/app/modules/authenticated-user/pages/financial/bill
-and make sure it calls the correct backend route:
-   • /project/backend/src/http/routes/v1/auth/financial/bills-to-pay.ts
-   • /project/backend/src/http/routes/v1/auth/financial/bills-to-receive.ts
-
-In development, the URLs will look like this:
-   • http://localhost:v1/auth/bills-to-pay/xxx
-   • http://localhost:v1/auth/bills-to-receive/xxx
-
-You must create any missing routes required by the frontend,
-but all of them must stay within the /v1/auth/bills-to-pay or /v1/auth/bills-to-receive domain
-and follow the RESTful pattern (GET, POST, PUT, DELETE).
-
-You must implement controllers, routes, services, models, and anything else necessary.
-
-You must also create unit and integration tests for all functionalities, both frontend and backend.
-Tests must always use mocked data — never real data or real database connections.
-
-Finally, create one task for each frontend file that makes a backend request.
-Every single frontend functionality must be supported by the backend.
-```
-
-**Creating tons of useful tests:**
-```bash
-- Delete all existing tests in /project/frontend/src/app/modules/authenticated-user/pages/financial/bill (recursively).
-- I want you to create a task for each component that exists in /project/src/app/modules/authenticated-user/pages/financial/bill (recursively):
-    - Translate the view into Brazilian Portuguese (the code must remain in English).
-    - Map out each functionality that this component performs.
-    - List all possible test cases.
-    - Create these tests.
-        - If something isn’t working, you must fix both the frontend and the backend 
-          (/project/backend/src/http/routes/v1/auth/financial/bills-to-pay.ts /project/backend/src/http/routes/v1/auth/financial/bills-to-receive.ts)
-```
-
-**Large Refactoring:**
-```bash
-Migrate from REST to GraphQL:
-- Convert all API endpoints
-- Update all frontend calls
-- Maintain backward compatibility during transition
-- Add comprehensive tests
-```
-
-**Bug Investigation:**
-```bash
-Users report intermittent data corruption.
-Investigate root cause in /services/FinancialService.js
-and fix with proper tests to prevent regression.
-```
-
-## Architecture & Development
-
-Claudiomiro v1.9.0 features a completely refactored architecture following **Single Responsibility Principle**:
-
-### Directory Structure
-```
-src/
-├── steps/
-│   ├── step0/         # Clarification questions
-│   ├── step1/         # AI_PROMPT generation
-│   ├── step2/         # Task decomposition
-│   ├── step3/         # Dependency analysis (DAG)
-│   ├── step4/         # TODO generation
-│   ├── step5/         # Task execution
-│   ├── step6/         # Code review
-│   ├── step7/         # Global critical bug sweep (NEW)
-│   └── step8/         # Final commit & PR
-├── services/          # Executors (Claude, Codex, Gemini, DeepSeek, GLM)
-├── utils/             # Shared utilities
-└── templates/         # Output templates (TODO.md, CONTEXT.md)
-```
-
-### Key Principles
-- **Each step = ONE responsibility** (no more substeps like 0.0, 0.1, 0.2)
-- **Co-located tests** (test files next to source files, not in separate directories)
-- **External prompts** (large prompts in `.md` files, not inline)
-- **Language-agnostic** (works with JavaScript, Python, Go, Java, Rust, etc.)
-
-### For Contributors
-
-**Before contributing, please read:**
-- 📖 [CLAUDE.md](./CLAUDE.md) - Development guide, conventions, and best practices
-- 🧪 [Testing Guidelines](./CLAUDE.md#test-structure) - How to write tests
-- 🏗️ [Architecture Principles](./CLAUDE.md#project-architecture) - Single Responsibility Principle
-- 📝 [Code Standards](./CLAUDE.md#development-conventions) - English code, naming conventions
-
-**Quick Start for Development:**
-```bash
-# Run tests
-npm test
-
-# Run tests with coverage
-npm run test:coverage
-
-# All code and tests must be in English
-# All markdown files in src/steps/ must be lowercase
-# Each .js file must have a corresponding .test.js file
-```
-
-## Contributing
-
-Issues and PRs welcome! Please:
-1. Read [CLAUDE.md](./CLAUDE.md) for development guidelines
-2. Ensure all tests pass (`npm test`)
-3. Follow Single Responsibility Principle
-4. Write code and comments in English only
-
-Check the [issues page](https://github.com/samuelfaj/claudiomiro/issues) for open tasks.
