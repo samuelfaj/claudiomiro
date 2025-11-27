@@ -3,7 +3,10 @@
 Turn days of complex development into a fully automated process — without sacrificing production-grade code quality.
 
 **Send your prompt — it decomposes, codes, reviews, builds, tests, and commits autonomously, in PARALLEL.**
-❌ No "continue" prompts. ❌ No manual intervention. 🐞 No Bugs. **✅ Just results!**
+- No "continue" prompts.
+- No manual intervention.
+- No Bugs.
+**✅ Just results!**
 
 ![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/claudiomiro_terminal.png?raw=true)
 
