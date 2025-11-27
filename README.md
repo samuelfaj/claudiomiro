@@ -14,9 +14,7 @@ The result is a **productivity paradox**: tools that speed up typing but slow do
 
 **Claudiomiro breaks this cycle**.
 
-## What It Does
-
-Give Claudiomiro a task. It will:
+Give Claudiomiro a task and it will:
 
 1. Break it into smaller, parallelizable tasks
 2. Execute tasks simultaneously using AI agents
@@ -24,7 +22,7 @@ Give Claudiomiro a task. It will:
 4. Run tests and fix failures automatically
 5. Create a production-ready commit
 
-**No "continue" prompts. No manual intervention. Just results.**
+**No "continue" prompts. No manual intervention. No Bugs. Just results.**
 
 ### Examples
 
@@ -54,9 +52,6 @@ claudiomiro --fix-branch
 ## Documentation
 
 - [Basic Usage Guide](./docs/basic-usage.md) - Complete guide from installation to your first task
-- [Fix Command](./docs/commands/fix-command.md)
-- [Loop Fixes](./docs/commands/loop-fixes.md)
-- [Fix Branch](./docs/commands/fix-branch.md)
 - [Commands Reference](./docs/commands/README.md) - All available commands and options
 
 
