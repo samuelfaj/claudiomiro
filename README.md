@@ -6,7 +6,7 @@ Turn days of complex development into a fully automated process — without sacr
 - No "continue" prompts.
 - No manual intervention.
 - No Bugs.
-**✅ Just results!**
+- **✅ Just results!**
 
 ![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/claudiomiro_terminal.png?raw=true)
 
