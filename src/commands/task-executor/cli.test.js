@@ -1,96 +1,87 @@
+/**
+ * cli.js test suite
+ *
+ * NOTE: This test file uses a lightweight mocking approach to avoid loading
+ * the entire module dependency graph (steps, dag-executor, etc.) which causes
+ * memory issues in Jest. The tests verify the CLI's argument parsing and
+ * basic initialization logic.
+ */
+
+const path = require('path');
+
+// Mock all dependencies BEFORE requiring cli.js
+jest.mock('fs');
+jest.mock('../../shared/utils/logger');
+jest.mock('../../shared/config/state');
+jest.mock('./services/file-manager');
+jest.mock('./steps');
+jest.mock('./services/dag-executor');
+jest.mock('./utils/validation');
+
+const fs = require('fs');
+const logger = require('../../shared/utils/logger');
+const state = require('../../shared/config/state');
+const { startFresh } = require('./services/file-manager');
+
+// Setup default mock implementations
+logger.banner = jest.fn();
+logger.info = jest.fn();
+logger.error = jest.fn();
+logger.warning = jest.fn();
+logger.success = jest.fn();
+logger.path = jest.fn();
+logger.newline = jest.fn();
+logger.startSpinner = jest.fn();
+logger.confirm = jest.fn().mockResolvedValue(true);
+logger.step = jest.fn();
+
+// Mock state with getters and setters
+let mockFolder = null;
+let mockClaudiomiroFolder = null;
+let mockExecutorType = 'claude';
+
+state.setFolder = jest.fn((folderPath) => {
+    mockFolder = path.resolve(folderPath);
+    mockClaudiomiroFolder = path.join(mockFolder, '.claudiomiro');
+});
+
+Object.defineProperty(state, 'folder', {
+    get: () => mockFolder,
+    configurable: true
+});
+
+Object.defineProperty(state, 'claudiomiroFolder', {
+    get: () => mockClaudiomiroFolder,
+    configurable: true
+});
+
+state.setExecutorType = jest.fn((type) => {
+    mockExecutorType = type;
+});
+
+Object.defineProperty(state, 'executorType', {
+    get: () => mockExecutorType,
+    configurable: true
+});
+
+// Now require the module under test
+const cliModule = require('./cli');
+
 // Store original process.exit
 const originalExit = process.exit;
 
 describe('src/commands/task-executor/cli.js', () => {
-    let fs;
-    let logger;
-    let state;
-    let startFresh;
-    let step0;
-    let cliModule;
-
     beforeEach(() => {
-        // Reset modules to ensure fresh mocks
-        jest.resetModules();
+        // Clear all mocks
+        jest.clearAllMocks();
 
-        // Setup mocks BEFORE requiring the module
-        jest.doMock('fs');
-        jest.doMock('../../shared/utils/logger', () => ({
-            banner: jest.fn(),
-            info: jest.fn(),
-            error: jest.fn(),
-            warning: jest.fn(),
-            success: jest.fn(),
-            path: jest.fn(),
-            newline: jest.fn(),
-            startSpinner: jest.fn(),
-            confirm: jest.fn().mockResolvedValue(true),
-            step: jest.fn()
-        }));
-
-        jest.doMock('../../shared/config/state', () => {
-            const path = require('path');
-            const mockState = {
-                _folder: null,
-                _claudiomiroFolder: null,
-                _executorType: 'claude',
-                setFolder: jest.fn(function(folderPath) {
-                    this._folder = path.resolve(folderPath);
-                    this._claudiomiroFolder = path.join(this._folder, '.claudiomiro');
-                }),
-                get folder() { return this._folder; },
-                get claudiomiroFolder() { return this._claudiomiroFolder; },
-                setExecutorType: jest.fn(function(type) {
-                    this._executorType = type;
-                }),
-                get executorType() { return this._executorType; }
-            };
-            return mockState;
-        });
-
-        jest.doMock('./services/file-manager', () => ({
-            startFresh: jest.fn()
-        }));
-
-        jest.doMock('./steps', () => ({
-            step0: jest.fn().mockResolvedValue(undefined),
-            step1: jest.fn().mockResolvedValue(undefined),
-            step2: jest.fn().mockResolvedValue(undefined),
-            step3: jest.fn().mockResolvedValue(undefined),
-            step4: jest.fn().mockResolvedValue(undefined),
-            step5: jest.fn().mockResolvedValue(undefined),
-            step6: jest.fn().mockResolvedValue(undefined),
-            step7: jest.fn().mockResolvedValue(undefined),
-            step8: jest.fn().mockResolvedValue(undefined)
-        }));
-
-        jest.doMock('./services/dag-executor', () => ({
-            DAGExecutor: jest.fn().mockImplementation(() => ({
-                run: jest.fn().mockResolvedValue(undefined),
-                runStep2: jest.fn().mockResolvedValue(undefined)
-            }))
-        }));
-
-        jest.doMock('./utils/validation', () => ({
-            isFullyImplemented: jest.fn().mockReturnValue(true),
-            hasApprovedCodeReview: jest.fn().mockReturnValue(true)
-        }));
-
-        // Now require modules
-        fs = require('fs');
-        logger = require('../../shared/utils/logger');
-        state = require('../../shared/config/state');
-        startFresh = require('./services/file-manager').startFresh;
-        step0 = require('./steps').step0;
-        cliModule = require('./cli');
+        // Reset state
+        mockFolder = null;
+        mockClaudiomiroFolder = null;
+        mockExecutorType = 'claude';
 
         // Mock process.exit
         process.exit = jest.fn();
-
-        // Reset state
-        state._folder = null;
-        state._claudiomiroFolder = null;
-        state._executorType = 'claude';
 
         // Default fs mock: folder exists, claudiomiro folder does not exist
         fs.existsSync = jest.fn((p) => {
@@ -104,7 +95,6 @@ describe('src/commands/task-executor/cli.js', () => {
 
     afterEach(() => {
         process.exit = originalExit;
-        jest.resetModules();
     });
 
     describe('init()', () => {

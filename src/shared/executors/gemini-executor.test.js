@@ -17,19 +17,9 @@ jest.mock('./gemini-logger', () => ({
   processGeminiMessage: jest.fn().mockReturnValue('processed message')
 }));
 
-// Mock ParallelStateManager - it's optional in the shared context
-// Variable name must be prefixed with 'mock' to be allowed in jest.mock scope
-const mockParallelStateManager = {
-    getInstance: jest.fn(() => ({
-        isUIRendererActive: jest.fn(() => false),
-        updateClaudeMessage: jest.fn()
-    }))
-};
-jest.mock('./parallel-state-manager', () => ({
-    ParallelStateManager: mockParallelStateManager
-}), { virtual: true });
-// Alias for existing test code that uses ParallelStateManager
-const ParallelStateManager = mockParallelStateManager;
+// Mock ParallelStateManager
+jest.mock('./parallel-state-manager');
+const { ParallelStateManager } = require('./parallel-state-manager');
 
 describe('Gemini Executor', () => {
   let mockSpawn;
