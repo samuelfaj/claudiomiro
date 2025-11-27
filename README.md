@@ -23,23 +23,7 @@ Give Claudiomiro a task. It will:
 
 **No "continue" prompts. No manual intervention. Just results.**
 
-## Supported AI Models
-
-```bash
-claudiomiro --claude      # Anthropic Claude
-claudiomiro --codex       # OpenAI Codex
-claudiomiro --gemini      # Google Gemini
-claudiomiro --deep-seek   # DeepSeek
-claudiomiro --glm         # GLM
-```
-
-## Installation & Usage
-
-```bash
-npm install -g claudiomiro
-
-claudiomiro --help
-```
+--------
 
 ## Commands
 
@@ -50,6 +34,8 @@ claudiomiro --help
 | `claudiomiro --loop-fixes` | Iterative issue detection and fixing |
 | `claudiomiro --fix-branch` | Branch code review and fix |
 | `claudiomiro --help` | Show help |
+
+--------
 
 ### Examples
 
@@ -73,14 +59,34 @@ claudiomiro --loop-fixes --prompt="Find and fix security vulnerabilities"
 claudiomiro --fix-branch
 ```
 
-## How It Works
+--------
 
+## Documentation
+
+- [Fix Command](./docs/commands/fix-command.md)
+- [Loop Fixes](./docs/commands/loop-fixes.md)
+- [Fix Branch](./docs/commands/fix-branch.md)
+- [DeepSeek Setup](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
+- [GLM Setup](./docs/HOW-TO-RUN-WITH-GLM.md)
+
+--------
+
+## Installation & Usage
+
+```bash
+npm install -g claudiomiro
+
+claudiomiro --help
 ```
-1. Planning     → Breaks task into sub-tasks with dependency graph
-2. Execution    → Runs independent tasks in parallel (up to 4 at once)
-3. Review       → Senior-level code review on each task
-4. Bug Sweep    → Scans all changes for critical bugs
-5. Commit       → Creates final commit with documentation
+
+## Supported AI Models
+
+```bash
+claudiomiro --claude      # Anthropic Claude
+claudiomiro --codex       # OpenAI Codex
+claudiomiro --gemini      # Google Gemini
+claudiomiro --deep-seek   # DeepSeek
+claudiomiro --glm         # GLM
 ```
 
 ## Requirements
@@ -96,11 +102,3 @@ These create a feedback loop that lets Claudiomiro validate and fix its own work
 - Max 20 cycles per task (customize with `--limit=N`)
 - Critical bug detection before commit
 - Use `--push=false` to review before pushing
-
-## Documentation
-
-- [Fix Command](./docs/commands/fix-command.md)
-- [Loop Fixes](./docs/commands/loop-fixes.md)
-- [Fix Branch](./docs/commands/fix-branch.md)
-- [DeepSeek Setup](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
-- [GLM Setup](./docs/HOW-TO-RUN-WITH-GLM.md)
