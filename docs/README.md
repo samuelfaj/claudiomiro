@@ -4,6 +4,10 @@ Welcome to the Claudiomiro documentation. This folder contains detailed guides f
 
 ## Contents
 
+### Getting Started
+
+- [Basic Usage Guide](./basic-usage.md) - Complete guide from installation to your first task
+
 ### Commands
 
 Detailed documentation for each Claudiomiro command:

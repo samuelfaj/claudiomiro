@@ -23,23 +23,12 @@ Give Claudiomiro a task. It will:
 
 **No "continue" prompts. No manual intervention. Just results.**
 
---------
-
-## Commands
-
-| Command | Description |
-|---------|-------------|
-| `claudiomiro [folder]` | Full autonomous development (default) |
-| `claudiomiro --fix-command="<cmd>"` | Run & fix a command until it passes |
-| `claudiomiro --loop-fixes` | Iterative issue detection and fixing |
-| `claudiomiro --fix-branch` | Branch code review and fix |
-| `claudiomiro --help` | Show help |
-
---------
-
 ### Examples
 
 ```bash
+# Install
+npm install -g claudiomiro
+
 # Interactive mode
 claudiomiro
 
@@ -59,25 +48,15 @@ claudiomiro --loop-fixes --prompt="Find and fix security vulnerabilities"
 claudiomiro --fix-branch
 ```
 
---------
-
 ## Documentation
 
+- [Basic Usage Guide](./docs/basic-usage.md) - Complete guide from installation to your first task
 - [Fix Command](./docs/commands/fix-command.md)
 - [Loop Fixes](./docs/commands/loop-fixes.md)
 - [Fix Branch](./docs/commands/fix-branch.md)
-- [DeepSeek Setup](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
-- [GLM Setup](./docs/HOW-TO-RUN-WITH-GLM.md)
+- [Commands Reference](./docs/commands/README.md) - All available commands and options
 
---------
 
-## Installation & Usage
-
-```bash
-npm install -g claudiomiro
-
-claudiomiro --help
-```
 
 ## Supported AI Models
 
@@ -88,6 +67,9 @@ claudiomiro --gemini      # Google Gemini
 claudiomiro --deep-seek   # DeepSeek
 claudiomiro --glm         # GLM
 ```
+
+- [DeepSeek Setup](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
+- [GLM Setup](./docs/HOW-TO-RUN-WITH-GLM.md)
 
 ## Requirements
 
