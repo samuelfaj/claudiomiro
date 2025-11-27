@@ -2,9 +2,13 @@
 
 **Send your prompt — it decomposes, codes, reviews, builds, tests, and commits autonomously, in PARALLEL.**
 
-With an army of AI agents, turn days of complex development into a fully automated process — without sacrificing production-grade code quality.
+**❌ No "continue" prompts. ❌ No manual intervention. ❌ No Bugs. ✅ Just results.**
+
+Turn days of complex development into a fully automated process — without sacrificing production-grade code quality.
 
 ![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/claudiomiro_terminal.png?raw=true)
+
+## The AI Poductivity Paradox
 
 Today’s AI coding assistants are powerful, but **still fundamentally unfinished**. 
 
@@ -18,11 +22,14 @@ Give Claudiomiro a task and it will:
 
 1. Break it into smaller, parallelizable tasks
 2. Execute tasks simultaneously using AI agents
-3. Review the code (senior-level)
+3. Review the code
 4. Run tests and fix failures automatically
-5. Create a production-ready commit
+5. Create production-ready commits and pull request
 
-**No "continue" prompts. No manual intervention. No Bugs. Just results.**
+## Documentation
+
+- [Basic Usage Guide](./docs/basic-usage.md) - Complete guide from installation to your first task
+- [Commands Reference](./docs/commands/README.md) - All available commands and options
 
 ### Examples
 
@@ -48,13 +55,6 @@ claudiomiro --loop-fixes --prompt="Find and fix security vulnerabilities"
 # Review and fix current branch before PR
 claudiomiro --fix-branch
 ```
-
-## Documentation
-
-- [Basic Usage Guide](./docs/basic-usage.md) - Complete guide from installation to your first task
-- [Commands Reference](./docs/commands/README.md) - All available commands and options
-
-
 
 ## Supported AI Models
 
