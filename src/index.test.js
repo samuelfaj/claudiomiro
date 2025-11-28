@@ -45,6 +45,10 @@ describe('src/index.js', () => {
             run: jest.fn().mockResolvedValue(undefined),
         }));
 
+        jest.doMock('./commands/token-optimizer', () => ({
+            run: jest.fn().mockResolvedValue(undefined),
+        }));
+
         // Now require the module and get references to mocks
         logger = require('./shared/utils/logger');
         checkForUpdatesAsync = require('./shared/utils/auto-update').checkForUpdatesAsync;
@@ -152,6 +156,24 @@ describe('src/index.js', () => {
             await indexModule.init();
 
             expect(runTaskExecutor).toHaveBeenCalledWith([]);
+        });
+
+        test('should skip banner for token-optimizer without --verbose', async () => {
+            process.argv = ['node', 'claudiomiro', '--token-optimizer', '--command="npm test"', '--filter="errors"'];
+
+            await indexModule.init();
+
+            expect(logger.banner).not.toHaveBeenCalled();
+            expect(checkForUpdatesAsync).not.toHaveBeenCalled();
+        });
+
+        test('should show banner for token-optimizer with --verbose', async () => {
+            process.argv = ['node', 'claudiomiro', '--token-optimizer', '--command="npm test"', '--filter="errors"', '--verbose'];
+
+            await indexModule.init();
+
+            expect(logger.banner).toHaveBeenCalled();
+            expect(checkForUpdatesAsync).toHaveBeenCalledWith('claudiomiro');
         });
     });
 

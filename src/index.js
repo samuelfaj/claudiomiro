@@ -57,7 +57,12 @@ const init = async () => {
     loadPersistedConfig();
 
     // Skip banner for help/version/config commands
-    if (command !== 'help' && command !== 'config') {
+    // Skip banner for token-optimizer when --verbose is not passed
+    const skipBanner = command === 'help' ||
+        command === 'config' ||
+        (command === 'token-optimizer' && !args.includes('--verbose'));
+
+    if (!skipBanner) {
         logger.banner();
         checkForUpdatesAsync('claudiomiro');
     }

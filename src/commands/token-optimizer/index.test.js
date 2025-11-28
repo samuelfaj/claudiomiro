@@ -66,6 +66,7 @@ describe('src/commands/token-optimizer/index.js', () => {
             const output = mockConsoleLog.mock.calls.map(call => call[0]).join('');
             expect(output).toContain('--command');
             expect(output).toContain('--filter');
+            expect(output).toContain('--verbose');
             expect(output).toContain('CLAUDIOMIRO_LOCAL_LLM');
         });
     });
@@ -107,9 +108,20 @@ describe('src/commands/token-optimizer/index.js', () => {
 
             await run(['--command="npm test"', '--filter="return only errors"']);
 
-            expect(executeTokenOptimizer).toHaveBeenCalledWith('npm test', 'return only errors');
+            expect(executeTokenOptimizer).toHaveBeenCalledWith('npm test', 'return only errors', { verbose: false });
             expect(mockConsoleLog).toHaveBeenCalledWith('\nfiltered result');
             expect(mockExit).toHaveBeenCalledWith(0);
+        });
+
+        test('should pass verbose option when --verbose flag is present', async () => {
+            executeTokenOptimizer.mockResolvedValue({
+                filteredOutput: 'filtered result',
+                exitCode: 0,
+            });
+
+            await run(['--command="npm test"', '--filter="return errors"', '--verbose']);
+
+            expect(executeTokenOptimizer).toHaveBeenCalledWith('npm test', 'return errors', { verbose: true });
         });
 
         test('should preserve command exit code', async () => {
@@ -136,7 +148,7 @@ describe('src/commands/token-optimizer/index.js', () => {
             expect(mockExit).toHaveBeenCalledWith(0);
         });
 
-        test('should warn when fallback is used', async () => {
+        test('should not warn when fallback is used without verbose', async () => {
             executeTokenOptimizer.mockResolvedValue({
                 filteredOutput: 'original output',
                 exitCode: 0,
@@ -144,6 +156,18 @@ describe('src/commands/token-optimizer/index.js', () => {
             });
 
             await run(['--command="npm test"', '--filter="return errors"']);
+
+            expect(logger.warning).not.toHaveBeenCalled();
+        });
+
+        test('should warn when fallback is used with verbose', async () => {
+            executeTokenOptimizer.mockResolvedValue({
+                filteredOutput: 'original output',
+                exitCode: 0,
+                fallback: true,
+            });
+
+            await run(['--command="npm test"', '--filter="return errors"', '--verbose']);
 
             expect(logger.warning).toHaveBeenCalledWith('Output shown without filtering (Ollama unavailable).');
         });
@@ -165,7 +189,7 @@ describe('src/commands/token-optimizer/index.js', () => {
 
             await run(["--command='npm test'", "--filter='return errors'"]);
 
-            expect(executeTokenOptimizer).toHaveBeenCalledWith('npm test', 'return errors');
+            expect(executeTokenOptimizer).toHaveBeenCalledWith('npm test', 'return errors', { verbose: false });
         });
     });
 

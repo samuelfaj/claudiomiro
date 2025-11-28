@@ -3,11 +3,12 @@ const { executeTokenOptimizer } = require('./executor');
 
 const printUsage = () => {
     console.log(`
-Usage: claudiomiro --token-optimizer --command="<cmd>" --filter="<instruction>"
+Usage: claudiomiro --token-optimizer --command="<cmd>" --filter="<instruction>" [--verbose]
 
 Arguments:
   --command="<cmd>"     Shell command to execute (e.g., "npx jest")
   --filter="<text>"     Instruction for filtering output (e.g., "return only errors")
+  --verbose             Show detailed progress logs
 
 Environment variables:
   CLAUDIOMIRO_LOCAL_LLM   Local LLM model to use (e.g., "qwen2.5-coder:7b")
@@ -18,7 +19,7 @@ Note: Requires CLAUDIOMIRO_LOCAL_LLM to be set. Falls back to original output if
 Examples:
   claudiomiro --token-optimizer --command="npx jest" --filter="return only errors"
   claudiomiro --token-optimizer --command="npm run build" --filter="show only warnings and errors"
-  claudiomiro --token-optimizer --command="cargo test" --filter="summarize test failures"
+  claudiomiro --token-optimizer --command="cargo test" --filter="summarize test failures" --verbose
 `);
 };
 
@@ -49,6 +50,9 @@ const run = async (args) => {
     const filterArg = args.find(arg => arg.startsWith('--filter='));
     const filter = extractQuotedValue(filterArg);
 
+    // Parse verbose flag
+    const verbose = args.includes('--verbose');
+
     // Validate required arguments
     if (!command || !filter) {
         logger.error('Missing required arguments.');
@@ -57,13 +61,13 @@ const run = async (args) => {
     }
 
     try {
-        const result = await executeTokenOptimizer(command, filter);
+        const result = await executeTokenOptimizer(command, filter, { verbose });
 
         if (result.filteredOutput) {
             console.log('\n' + result.filteredOutput);
         }
 
-        if (result.fallback) {
+        if (result.fallback && verbose) {
             logger.warning('Output shown without filtering (Ollama unavailable).');
         }
 
