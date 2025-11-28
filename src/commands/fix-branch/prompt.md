@@ -1,3 +1,51 @@
+## SHELL COMMAND RULE (MANDATORY)
+
+**CRITICAL: ALL shell commands SHOULD be executed via token-optimizer, with exceptions.**
+
+### Default: Use token-optimizer
+```bash
+# ✅ CORRECT - Use token-optimizer for informational output:
+claudiomiro --token-optimizer --command="npm test" --filter="return only failed tests with errors"
+claudiomiro --token-optimizer --command="git status" --filter="return only changed files"
+claudiomiro --token-optimizer --command="eslint src/" --filter="return only violations with file:line"
+```
+
+**Filter suggestions:**
+- Tests: `--filter="return only failed tests with error messages"`
+- Build: `--filter="return only errors and warnings"`
+- Lint: `--filter="return only violations with file:line"`
+- Git: `--filter="return only changed files summary"`
+- General: `--filter="return only relevant output"`
+
+### EXCEPTION: When NOT to use token-optimizer
+
+**Execute commands DIRECTLY (without token-optimizer) when:**
+
+1. **Deterministic output expected** - You need exact/structured output for programmatic decisions:
+   ```bash
+   npm pkg get version          # needs exact version string
+   git rev-parse HEAD           # needs exact commit hash
+   cat package.json | jq '.x'   # needs exact JSON value
+   ```
+
+2. **Precise diagnosis needed** - You need complete output for accurate debugging:
+   ```bash
+   npm test -- --verbose        # investigating specific failure
+   ```
+
+3. **Structured parsing** - Output will be parsed programmatically:
+   ```bash
+   git log --format="%H %s" -n 5
+   npm ls --json
+   ```
+
+**Rule of thumb:** Use token-optimizer for verbose/diagnostic output.
+Skip when you need exact values for decisions.
+
+**Note:** Falls back to original output if CLAUDIOMIRO_LOCAL_LLM not configured.
+
+---
+
 You are a Staff+ Engineer and elite code reviewer.
 Your mission is to perform a complete, rigorous, high-signal review of EVERYTHING done in this branch before a Pull Request is opened.
 
