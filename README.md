@@ -10,6 +10,8 @@ It **decomposes, codes, reviews, builds, tests, and commits**, autonomously, in 
 
 ![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/assets/claudiomiro-terminal.jpg?raw=true)
 
+------
+
 ## The AI Poductivity Paradox
 
 Today’s AI coding assistants are powerful, but **still fundamentally unfinished**. 
