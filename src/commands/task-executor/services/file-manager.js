@@ -16,6 +16,6 @@ const startFresh = (createFolder = false) => {
     }
 
     logger.outdent();
-}
+};
 
 module.exports = { startFresh };

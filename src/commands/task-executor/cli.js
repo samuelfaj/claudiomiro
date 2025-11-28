@@ -3,7 +3,7 @@ const path = require('path');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
 const { startFresh } = require('./services/file-manager');
-const { step0, step1, step2, step3, step4, step5, step6, step7, step8 } = require('./steps');
+const { step0, step1, step2, step3, step7, step8 } = require('./steps');
 const { DAGExecutor } = require('./services/dag-executor');
 const { isFullyImplemented, hasApprovedCodeReview } = require('./utils/validation');
 
@@ -56,7 +56,6 @@ const chooseAction = async (i, args) => {
     const promptArg = args.find(arg => arg.startsWith('--prompt='));
     const promptText = promptArg ? promptArg.split('=').slice(1).join('=').replace(/^["']|["']$/g, '') : null;
 
-
     // Check if --fresh was passed (or if --prompt was used, which automatically activates --fresh)
     // IMPORTANT: --continue should not activate --fresh
     const shouldStartFresh = !continueFlag && (args.includes('--fresh') || promptText !== null);
@@ -76,7 +75,6 @@ const chooseAction = async (i, args) => {
 
     // Check if --codex or --claude was passed
     const codexFlag = args.includes('--codex');
-    const claudeFlag = args.includes('--claude');
     const deepSeekFlag = args.includes('--deep-seek');
     const glmFlag = args.includes('--glm');
     const gemini = args.includes('--gemini');
@@ -84,26 +82,26 @@ const chooseAction = async (i, args) => {
     let executorType = 'claude';
 
     if(codexFlag){
-        executorType = 'codex'
+        executorType = 'codex';
     }
 
     if(deepSeekFlag){
-        executorType = 'deep-seek'
+        executorType = 'deep-seek';
     }
 
     if(glmFlag){
-        executorType = 'glm'
+        executorType = 'glm';
     }
 
     if(gemini){
-        executorType = 'gemini'
+        executorType = 'gemini';
     }
 
     state.setExecutorType(executorType);
 
     // Check if --steps= or --step= was passed (which steps to execute)
     const stepsArg = args.find(arg => arg.startsWith('--steps=') || arg.startsWith('--step='));
-    const allowedSteps = stepsArg
+    const _allowedSteps = stepsArg
         ? stepsArg.split('=')[1].split(',').map(s => parseInt(s.trim(), 10))
         : null; // null = execute all steps
 
@@ -113,8 +111,8 @@ const chooseAction = async (i, args) => {
 
     // Helper to check if a step should be executed
     const shouldRunStep = (stepNumber) => {
-        if (!allowedSteps) return true; // If --steps was not passed, execute all
-        return allowedSteps.includes(stepNumber);
+        if (!_allowedSteps) return true; // If --steps was not passed, execute all
+        return _allowedSteps.includes(stepNumber);
     };
 
     // Filter args to get only the directory
@@ -133,7 +131,7 @@ const chooseAction = async (i, args) => {
         arg !== '--claude' &&
         arg !== '--deep-seek' &&
         arg !== '--glm' &&
-        arg !== '--gemini'
+        arg !== '--gemini',
     );
     const folderArg = filteredArgs[0] || process.cwd();
 
@@ -155,8 +153,8 @@ const chooseAction = async (i, args) => {
     logger.newline();
 
     // Show which steps will be executed if --steps was specified
-    if (allowedSteps && i === 0) {
-        logger.info(`Running only steps: ${allowedSteps.join(', ')}`);
+    if (_allowedSteps && i === 0) {
+        logger.info(`Running only steps: ${_allowedSteps.join(', ')}`);
         logger.newline();
     }
 
@@ -192,7 +190,7 @@ const chooseAction = async (i, args) => {
                     logger.info('Operation cancelled by user.');
                     process.exit(0);
                 }
-             }
+            }
         }
 
         startFresh();
@@ -208,13 +206,13 @@ const chooseAction = async (i, args) => {
     }
 
     const tasks = fs
-    .readdirSync(state.claudiomiroFolder)
-    .filter(name => {
-        const fullPath = path.join(state.claudiomiroFolder, name);
-        // Only include task folders (TASK0, TASK1, etc.), exclude cache and other directories
-        return fs.statSync(fullPath).isDirectory() && /^TASK\d+/.test(name);
-    })
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        .readdirSync(state.claudiomiroFolder)
+        .filter(name => {
+            const fullPath = path.join(state.claudiomiroFolder, name);
+            // Only include task folders (TASK0, TASK1, etc.), exclude cache and other directories
+            return fs.statSync(fullPath).isDirectory() && /^TASK\d+/.test(name);
+        })
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
     if (tasks.length === 0) {
         // Check if we need to run step1 (generate AI_PROMPT.md)
@@ -345,7 +343,7 @@ const chooseAction = async (i, args) => {
             }
         }
 
-        const executor = new DAGExecutor(taskGraph, allowedSteps, maxConcurrent, noLimit, maxAttemptsPerTask);
+        const executor = new DAGExecutor(taskGraph, _allowedSteps, maxConcurrent, noLimit, maxAttemptsPerTask);
         await executor.runStep2();
     }
 
@@ -434,7 +432,7 @@ const chooseAction = async (i, args) => {
         logger.info('Switching to parallel execution mode with DAG executor');
         logger.newline();
 
-        const executor = new DAGExecutor(taskGraph, allowedSteps, maxConcurrent, noLimit, maxAttemptsPerTask);
+        const executor = new DAGExecutor(taskGraph, _allowedSteps, maxConcurrent, noLimit, maxAttemptsPerTask);
 
         try {
             await executor.run(buildTaskGraph);
@@ -482,7 +480,7 @@ const chooseAction = async (i, args) => {
         logger.startSpinner('Analyzing task dependencies...');
         return { step: step3() };
     }
-}
+};
 
 const allHasTodo = () => {
     if (!fs.existsSync(state.claudiomiroFolder)) {
@@ -513,7 +511,7 @@ const allHasTodo = () => {
     }
 
     return true;
-}
+};
 
 /**
  * Builds the task graph by reading dependencies from each TASK.md
@@ -555,12 +553,12 @@ const buildTaskGraph = () => {
         // or
         //   @dependencies TASK1, TASK2, TASK3
         const depsMatch = taskMd.match(
-          /^\s*@dependencies\s*(?:\[(.*?)\]|(.+))\s*$/mi
+            /^\s*@dependencies\s*(?:\[(.*?)\]|(.+))\s*$/mi,
         );
 
         if (!depsMatch) {
-          // No @dependencies line -> incomplete graph
-          return null;
+            // No @dependencies line -> incomplete graph
+            return null;
         }
 
         hasAnyDependencyTag = true;
@@ -570,8 +568,8 @@ const buildTaskGraph = () => {
 
         // Allow empty: "@dependencies []" or "@dependencies" (if you want to permit it)
         const deps = raw
-          ? raw.split(',').filter( s => (s || '').toLowerCase() != 'none').map(s => s.trim()).filter(Boolean)
-          : [];
+            ? raw.split(',').filter( s => (s || '').toLowerCase() != 'none').map(s => s.trim()).filter(Boolean)
+            : [];
 
         // Optional: dedupe and prevent self-dependency
         const uniqueDeps = Array.from(new Set(deps)).filter(d => d !== task);
@@ -591,14 +589,14 @@ const buildTaskGraph = () => {
         const finalDeps = Array.from(new Set(allDepsWithSubtasks)).filter(d => d !== task);
 
         graph[task] = {
-          deps: finalDeps,
-          status: isTaskApproved(task) ? 'completed' : 'pending',
+            deps: finalDeps,
+            status: isTaskApproved(task) ? 'completed' : 'pending',
         };
     }
 
     // Return the graph if all tasks have @dependencies
     return hasAnyDependencyTag ? graph : null;
-}
+};
 
 const init = async (args) => {
     // Initialize state.folder before using it
@@ -609,7 +607,7 @@ const init = async (args) => {
         !arg.startsWith('--prompt') &&
         !arg.startsWith('--maxConcurrent') &&
         arg !== '--no-limit' &&
-        !arg.startsWith('--limit=')
+        !arg.startsWith('--limit='),
     );
     const folderArg = filteredArgs[0] || process.cwd();
     state.setFolder(folderArg);
@@ -636,6 +634,6 @@ const init = async (args) => {
 
         i++;
     }
-}
+};
 
 module.exports = { init };

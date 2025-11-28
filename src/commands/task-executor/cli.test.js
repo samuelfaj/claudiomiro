@@ -49,12 +49,12 @@ state.initializeCache = jest.fn();
 
 Object.defineProperty(state, 'folder', {
     get: () => mockFolder,
-    configurable: true
+    configurable: true,
 });
 
 Object.defineProperty(state, 'claudiomiroFolder', {
     get: () => mockClaudiomiroFolder,
-    configurable: true
+    configurable: true,
 });
 
 state.setExecutorType = jest.fn((type) => {
@@ -63,7 +63,7 @@ state.setExecutorType = jest.fn((type) => {
 
 Object.defineProperty(state, 'executorType', {
     get: () => mockExecutorType,
-    configurable: true
+    configurable: true,
 });
 
 // Now require the module under test

@@ -43,7 +43,7 @@ class Logger {
             `║          CLAUDIOMIRO v${version}           ║`,
             '║     AI-Powered Development Agent      ║',
             '║                                       ║',
-            '╚═══════════════════════════════════════╝'
+            '╚═══════════════════════════════════════╝',
         ].join('\n'));
         this.withOutput(() => {
             console.log('\n' + title + '\n');
@@ -102,7 +102,7 @@ class Logger {
             margin: 1,
             borderStyle: 'round',
             borderColor: 'cyan',
-            ...options
+            ...options,
         };
         this.withOutput(() => {
             console.log(boxen(message, boxConfig));
@@ -121,7 +121,7 @@ class Logger {
         this.spinner = ora({
             text: chalk.cyan(text),
             color: 'cyan',
-            spinner: 'dots'
+            spinner: 'dots',
         }).start();
     }
 
@@ -250,7 +250,7 @@ class Logger {
         return new Promise((resolve) => {
             const rl = readline.createInterface({
                 input: process.stdin,
-                output: process.stdout
+                output: process.stdout,
             });
 
             this.withOutput(() => {

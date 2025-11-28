@@ -2,17 +2,17 @@
 jest.mock('../../shared/utils/logger', () => ({
     info: jest.fn(),
     error: jest.fn(),
-    warning: jest.fn()
+    warning: jest.fn(),
 }));
 
 jest.mock('../../shared/config/state', () => ({
     setFolder: jest.fn(),
     folder: '/test/folder',
-    claudiomiroFolder: '/test/folder/.claudiomiro'
+    claudiomiroFolder: '/test/folder/.claudiomiro',
 }));
 
 jest.mock('./executor', () => ({
-    fixCommand: jest.fn().mockResolvedValue(undefined)
+    fixCommand: jest.fn().mockResolvedValue(undefined),
 }));
 
 const logger = require('../../shared/utils/logger');

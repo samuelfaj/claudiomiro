@@ -49,7 +49,7 @@ const askForPrompt = () => {
     return new Promise((resolve) => {
         const rl = readline.createInterface({
             input: process.stdin,
-            output: process.stdout
+            output: process.stdout,
         });
 
         rl.question(chalk.cyan('  Enter your prompt: '), (answer) => {
@@ -70,7 +70,7 @@ const generateResponse = async (client, prompt) => {
     try {
         const response = await client.generate(prompt, {
             maxTokens: 512,
-            temperature: 0.7
+            temperature: 0.7,
         });
 
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
@@ -115,7 +115,7 @@ const run = async (args) => {
         model: config.model,
         host: config.host,
         port: config.port,
-        timeout: config.timeout
+        timeout: config.timeout,
     });
 
     // Check health

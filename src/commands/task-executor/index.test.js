@@ -1,6 +1,6 @@
 // Mock cli module BEFORE requiring index
 jest.mock('./cli', () => ({
-    init: jest.fn().mockResolvedValue(undefined)
+    init: jest.fn().mockResolvedValue(undefined),
 }));
 
 const { run } = require('./index');

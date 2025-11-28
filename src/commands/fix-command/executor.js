@@ -3,9 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
-const { executeClaude } = require("../../shared/executors/claude-executor");
+const { executeClaude } = require('../../shared/executors/claude-executor');
 const { getLocalLLMService } = require('../../shared/services/local-llm');
-const { log } = require('console');
 
 /**
  * Analyzes a failed fix attempt using Local LLM
@@ -26,7 +25,7 @@ const analyzeFailedFix = async (command, previousError, currentError) => {
         const validation = await llm.validateFix(
             command,
             previousError,
-            `Previous fix attempt resulted in: ${currentError}`
+            `Previous fix attempt resulted in: ${currentError}`,
         );
 
         if (validation && !validation.valid) {
@@ -64,7 +63,7 @@ const executeCommand = async (command) => {
         const child = spawn(shell, [...shellArgs, command], {
             cwd: state.folder,
             stdio: ['ignore', 'pipe', 'pipe'],
-            shell: false
+            shell: false,
         });
 
         // Ensure state is properly initialized and claudiomiro folder exists
@@ -99,7 +98,7 @@ const executeCommand = async (command) => {
             let lineCount = 0;
 
             // Process and print text line by line
-            const lines = text.split("\n");
+            const lines = text.split('\n');
             for (const line of lines) {
                 if (line.length > max) {
                     // Break long line into multiple lines
@@ -155,7 +154,7 @@ const executeCommand = async (command) => {
             resolve({
                 success,
                 exitCode: code,
-                output: outputBuffer
+                output: outputBuffer,
             });
         });
 
@@ -169,7 +168,7 @@ const executeCommand = async (command) => {
                 success: false,
                 exitCode: -1,
                 output: error.message,
-                error: error.message
+                error: error.message,
             });
         });
     });
@@ -219,7 +218,6 @@ const fixCommand = async (command, maxAttempts) => {
     }
 
     throw new Error(`All ${maxAttempts} attempts to fix the command "${command}" have failed. Please check the command and try again.`);
-}
-
+};
 
 module.exports = { fixCommand, executeCommand };

@@ -6,23 +6,23 @@ const mockExecuteDeepSeek = jest.fn();
 const mockExecuteGlm = jest.fn();
 
 jest.mock('./claude-executor', () => ({
-    executeClaude: mockExecuteClaude
+    executeClaude: mockExecuteClaude,
 }));
 
 jest.mock('./codex-executor', () => ({
-    executeCodex: mockExecuteCodex
+    executeCodex: mockExecuteCodex,
 }));
 
 jest.mock('./gemini-executor', () => ({
-    executeGemini: mockExecuteGemini
+    executeGemini: mockExecuteGemini,
 }));
 
 jest.mock('./deep-seek-executor', () => ({
-    executeDeepSeek: mockExecuteDeepSeek
+    executeDeepSeek: mockExecuteDeepSeek,
 }));
 
 jest.mock('./glm-executor', () => ({
-    executeGlm: mockExecuteGlm
+    executeGlm: mockExecuteGlm,
 }));
 
 const {
@@ -31,7 +31,7 @@ const {
     executeCodex,
     executeGemini,
     executeDeepSeek,
-    executeGlm
+    executeGlm,
 } = require('./index');
 
 describe('src/shared/executors/index.js', () => {

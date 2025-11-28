@@ -36,7 +36,7 @@ CORRECTION LEVEL: 3 (ALL ISSUES)
 IMPORTANT: Fix ALL issues including BLOCKERS, WARNINGS, and SUGGESTIONS.
 - Address every identified issue with code modifications
 - Be thorough in applying improvements
-`
+`,
     };
     return instructions[level];
 };
@@ -68,7 +68,7 @@ const getLevelName = (level) => {
     const names = {
         1: 'blockers only',
         2: 'blockers + warnings',
-        3: 'all issues'
+        3: 'all issues',
     };
     return names[level];
 };

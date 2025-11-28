@@ -7,7 +7,7 @@ const getMultilineInput = () => {
         const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
-            terminal: true
+            terminal: true,
         });
 
         let lines = [];
@@ -54,7 +54,7 @@ const getSimpleInput = (question) => {
         const rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
-            terminal: true
+            terminal: true,
         });
 
         rl.question(chalk.cyan(question), (answer) => {
@@ -99,12 +99,12 @@ const askClarificationQuestions = async (questionsJson) => {
         const q = questions[i];
         const questionNum = q.id || (i + 1);
 
-        console.log(chalk.bold.cyan(`─────────────────────────────────────────────────────────`));
+        console.log(chalk.bold.cyan('─────────────────────────────────────────────────────────'));
         console.log(chalk.bold.white(`Question ${questionNum}/${questions.length}: ${q.title}`));
         if (q.category) {
             console.log(chalk.gray(`Category: ${q.category}`));
         }
-        console.log(chalk.bold.cyan(`─────────────────────────────────────────────────────────`));
+        console.log(chalk.bold.cyan('─────────────────────────────────────────────────────────'));
         console.log();
 
         if (q.context) {
@@ -145,7 +145,7 @@ const askClarificationQuestions = async (questionsJson) => {
             questionId: questionNum,
             question: q.title,
             category: q.category || 'General',
-            answer: answer
+            answer: answer,
         });
         console.log();
     }
@@ -156,7 +156,7 @@ const askClarificationQuestions = async (questionsJson) => {
     // Return answers as JSON
     const answersData = {
         timestamp: new Date().toISOString(),
-        answers: answers
+        answers: answers,
     };
 
     return JSON.stringify(answersData, null, 2);

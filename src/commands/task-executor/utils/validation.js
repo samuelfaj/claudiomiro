@@ -1,5 +1,4 @@
 const fs = require('fs');
-const path = require('path');
 
 // Local LLM service for enhanced completion detection (lazy loaded)
 let localLLMService = null;
@@ -76,9 +75,9 @@ const isFullyImplementedAsync = async (file) => {
     return {
         completed,
         confidence: 0.8,
-        reason: 'Heuristic check'
+        reason: 'Heuristic check',
     };
-}
+};
 
 const hasApprovedCodeReview = (file) => {
     if (!fs.existsSync(file)) {
@@ -103,11 +102,11 @@ const hasApprovedCodeReview = (file) => {
     }
 
     return false;
-}
+};
 
 module.exports = {
     isFullyImplemented,
     isFullyImplementedAsync,
     isFullyImplementedFromContent,
-    hasApprovedCodeReview
+    hasApprovedCodeReview,
 };

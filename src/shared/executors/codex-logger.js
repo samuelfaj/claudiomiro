@@ -5,7 +5,7 @@ const ITEM_ICONS = {
     file_change: '📝',
     mcp_tool_call: '🔌',
     web_search: '🌐',
-    default: '🛠️'
+    default: '🛠️',
 };
 
 const formatCommandExecution = (item) => {
@@ -53,7 +53,7 @@ const formatWebSearch = (item) => {
     return `${ITEM_ICONS.web_search} ${query}`;
 };
 
-const formatItem = (item, eventType) => {
+const _formatItem = (item, eventType) => {
     if (!item || eventType !== 'item.completed') {
         return null;
     }
@@ -76,7 +76,7 @@ const formatItem = (item, eventType) => {
     }
 };
 
-const formatTurnCompleted = (event) => {
+const _formatTurnCompleted = (event) => {
     if (!event.usage) {
         return '✅ Turn completed';
     }
@@ -100,7 +100,7 @@ const formatTurnCompleted = (event) => {
     return `✅ Turn completed${suffix}`;
 };
 
-const formatTurnFailed = (event) => {
+const _formatTurnFailed = (event) => {
     const error = event.error?.message || event.error || 'Unknown error';
     return `❌ Turn failed: ${error}`;
 };
@@ -128,7 +128,7 @@ const processCodexEvent = (line) => {
             return json.item.text;
         }
         if(json.item.command !== undefined){
-            return `> ` + json.item.command;
+            return '> ' + json.item.command;
         }
         // If item exists but has no text or command, fall through to truncation
     }
@@ -149,11 +149,11 @@ const processCodexEvent = (line) => {
             }
 
             if(type && type.includes('exec_command')){
-                return `Executing command...`;
+                return 'Executing command...';
             }
 
             if(type && type.includes('agent_reasoning')){
-                return `Agent reasoning...`;
+                return 'Agent reasoning...';
             }
 
             return type;

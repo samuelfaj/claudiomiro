@@ -33,8 +33,8 @@ const step0 = async (sameBranch = false, promptText = null) => {
         : '## FIRST STEP: \n\nCreate a git branch for this task\n\n';
 
     const replace = (text) => {
-        return text.replace('{{TASK}}', task).replaceAll(`{{claudiomiroFolder}}`, `${state.claudiomiroFolder}`);
-    }
+        return text.replace('{{TASK}}', task).replaceAll('{{claudiomiroFolder}}', `${state.claudiomiroFolder}`);
+    };
 
     // Check if clarification questions already exist (skip if resuming)
     const clarificationAnswersPath = folder('CLARIFICATION_ANSWERS.json');
@@ -58,8 +58,8 @@ const step0 = async (sameBranch = false, promptText = null) => {
     logger.startSpinner('Exploring codebase and generating clarification questions...');
 
     await executeClaude(
-        `If the repository uses Husky, lint-staged, or any other Git hooks, verify that they are properly configured and functioning.` +
-        `If no such hooks exist, take no action.`
+        'If the repository uses Husky, lint-staged, or any other Git hooks, verify that they are properly configured and functioning.' +
+        'If no such hooks exist, take no action.',
     );
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
@@ -107,6 +107,6 @@ const step0 = async (sameBranch = false, promptText = null) => {
         // No questions were generated - create empty answers file to proceed
         fs.writeFileSync(clarificationAnswersPath, '[]');
     }
-}
+};
 
 module.exports = { step0 };

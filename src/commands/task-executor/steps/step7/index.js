@@ -26,7 +26,7 @@ const step7 = async (maxIterations = 20) => {
         throw new Error('state.claudiomiroFolder is not defined. Cannot run step7.');
     }
 
-    const bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
+    const _bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
     const passedPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
 
     // CRITICAL: Verify this is a Claudiomiro-managed session on a NEW branch
@@ -116,7 +116,7 @@ const step7 = async (maxIterations = 20) => {
     const args = [
         '--level=2',
         '--no-clear',
-        state.folder
+        state.folder,
     ];
 
     // Add iteration limit
@@ -126,7 +126,7 @@ const step7 = async (maxIterations = 20) => {
         args.unshift(`--limit=${maxIterations}`);
     }
 
-    logger.info(`🔧 Using fix-branch (level: 2 - blockers + warnings)`);
+    logger.info('🔧 Using fix-branch (level: 2 - blockers + warnings)');
 
     try {
         await runFixBranch(args);

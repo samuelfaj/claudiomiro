@@ -6,19 +6,18 @@ jest.mock('../../shared/utils/logger', () => ({
     error: jest.fn(),
     success: jest.fn(),
     startSpinner: jest.fn(),
-    stopSpinner: jest.fn()
+    stopSpinner: jest.fn(),
 }));
 jest.mock('../../shared/config/state', () => ({
     setFolder: jest.fn(),
     folder: '/test/folder',
-    claudiomiroFolder: '/test/folder/.claudiomiro'
+    claudiomiroFolder: '/test/folder/.claudiomiro',
 }));
 jest.mock('../../shared/executors/claude-executor', () => ({
-    executeClaude: jest.fn()
+    executeClaude: jest.fn(),
 }));
 
 const fs = require('fs');
-const path = require('path');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
 const { executeClaude } = require('../../shared/executors/claude-executor');
@@ -155,7 +154,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             const originalFolder = state.claudiomiroFolder;
             Object.defineProperty(state, 'claudiomiroFolder', {
                 get: jest.fn().mockReturnValueOnce(null).mockReturnValue('/test/folder/.claudiomiro'),
-                configurable: true
+                configurable: true,
             });
             fs.existsSync.mockReturnValue(false);
 
@@ -166,7 +165,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             // Restore
             Object.defineProperty(state, 'claudiomiroFolder', {
                 value: originalFolder,
-                configurable: true
+                configurable: true,
             });
         });
     });
@@ -264,7 +263,6 @@ describe('src/commands/loop-fixes/executor.js', () => {
 
         test('should continue loop when verification finds new tasks', async () => {
             let iterationCount = 0;
-            let verificationRound = 0;
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {

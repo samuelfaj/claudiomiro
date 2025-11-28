@@ -16,11 +16,11 @@ const CACHE_FILE_NAME = 'context-cache.json';
  * @returns {string|null} Hash string or null if file doesn't exist
  */
 const computeFileHash = (filePath) => {
-  if (!fs.existsSync(filePath)) {
-    return null;
-  }
-  const content = fs.readFileSync(filePath, 'utf8');
-  return crypto.createHash('md5').update(content).digest('hex');
+    if (!fs.existsSync(filePath)) {
+        return null;
+    }
+    const content = fs.readFileSync(filePath, 'utf8');
+    return crypto.createHash('md5').update(content).digest('hex');
 };
 
 /**
@@ -29,11 +29,11 @@ const computeFileHash = (filePath) => {
  * @returns {string} Path to cache file
  */
 const getCachePath = (claudiomiroFolder) => {
-  const cacheDir = path.join(claudiomiroFolder, 'cache');
-  if (!fs.existsSync(cacheDir)) {
-    fs.mkdirSync(cacheDir, { recursive: true });
-  }
-  return path.join(cacheDir, CACHE_FILE_NAME);
+    const cacheDir = path.join(claudiomiroFolder, 'cache');
+    if (!fs.existsSync(cacheDir)) {
+        fs.mkdirSync(cacheDir, { recursive: true });
+    }
+    return path.join(cacheDir, CACHE_FILE_NAME);
 };
 
 /**
@@ -42,25 +42,25 @@ const getCachePath = (claudiomiroFolder) => {
  * @returns {object} Cache object or empty cache structure
  */
 const loadCache = (claudiomiroFolder) => {
-  const cachePath = getCachePath(claudiomiroFolder);
+    const cachePath = getCachePath(claudiomiroFolder);
 
-  if (!fs.existsSync(cachePath)) {
-    return createEmptyCache();
-  }
-
-  try {
-    const cacheContent = fs.readFileSync(cachePath, 'utf8');
-    const cache = JSON.parse(cacheContent);
-
-    // Validate cache version
-    if (cache.version !== CACHE_VERSION) {
-      return createEmptyCache();
+    if (!fs.existsSync(cachePath)) {
+        return createEmptyCache();
     }
 
-    return cache;
-  } catch (error) {
-    return createEmptyCache();
-  }
+    try {
+        const cacheContent = fs.readFileSync(cachePath, 'utf8');
+        const cache = JSON.parse(cacheContent);
+
+        // Validate cache version
+        if (cache.version !== CACHE_VERSION) {
+            return createEmptyCache();
+        }
+
+        return cache;
+    } catch (error) {
+        return createEmptyCache();
+    }
 };
 
 /**
@@ -69,9 +69,9 @@ const loadCache = (claudiomiroFolder) => {
  * @param {object} cache - Cache object to save
  */
 const saveCache = (claudiomiroFolder, cache) => {
-  const cachePath = getCachePath(claudiomiroFolder);
-  cache.lastUpdated = new Date().toISOString();
-  fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf8');
+    const cachePath = getCachePath(claudiomiroFolder);
+    cache.lastUpdated = new Date().toISOString();
+    fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2), 'utf8');
 };
 
 /**
@@ -79,18 +79,18 @@ const saveCache = (claudiomiroFolder, cache) => {
  * @returns {object} Empty cache
  */
 const createEmptyCache = () => ({
-  version: CACHE_VERSION,
-  created: new Date().toISOString(),
-  lastUpdated: new Date().toISOString(),
-  aiPrompt: {
-    hash: null,
-    summary: null,
-    lastProcessed: null
-  },
-  completedTasks: {},
-  researchIndex: {},
-  lastProcessedTask: null,
-  codebasePatterns: {}
+    version: CACHE_VERSION,
+    created: new Date().toISOString(),
+    lastUpdated: new Date().toISOString(),
+    aiPrompt: {
+        hash: null,
+        summary: null,
+        lastProcessed: null,
+    },
+    completedTasks: {},
+    researchIndex: {},
+    lastProcessedTask: null,
+    codebasePatterns: {},
 });
 
 /**
@@ -100,9 +100,9 @@ const createEmptyCache = () => ({
  * @returns {boolean} True if changed or not cached
  */
 const hasAiPromptChanged = (claudiomiroFolder, cache) => {
-  const aiPromptPath = path.join(claudiomiroFolder, 'AI_PROMPT.md');
-  const currentHash = computeFileHash(aiPromptPath);
-  return currentHash !== cache.aiPrompt.hash;
+    const aiPromptPath = path.join(claudiomiroFolder, 'AI_PROMPT.md');
+    const currentHash = computeFileHash(aiPromptPath);
+    return currentHash !== cache.aiPrompt.hash;
 };
 
 /**
@@ -112,13 +112,13 @@ const hasAiPromptChanged = (claudiomiroFolder, cache) => {
  * @param {string} summary - Condensed summary of AI_PROMPT.md
  */
 const updateAiPromptCache = (claudiomiroFolder, cache, summary) => {
-  const aiPromptPath = path.join(claudiomiroFolder, 'AI_PROMPT.md');
-  cache.aiPrompt = {
-    hash: computeFileHash(aiPromptPath),
-    summary: summary,
-    lastProcessed: new Date().toISOString()
-  };
-  saveCache(claudiomiroFolder, cache);
+    const aiPromptPath = path.join(claudiomiroFolder, 'AI_PROMPT.md');
+    cache.aiPrompt = {
+        hash: computeFileHash(aiPromptPath),
+        summary: summary,
+        lastProcessed: new Date().toISOString(),
+    };
+    saveCache(claudiomiroFolder, cache);
 };
 
 /**
@@ -127,17 +127,17 @@ const updateAiPromptCache = (claudiomiroFolder, cache, summary) => {
  * @returns {string|null} Cached summary or null
  */
 const getCachedAiPromptSummary = (claudiomiroFolder) => {
-  const cache = loadCache(claudiomiroFolder);
+    const cache = loadCache(claudiomiroFolder);
 
-  if (!cache.aiPrompt.summary) {
-    return null;
-  }
+    if (!cache.aiPrompt.summary) {
+        return null;
+    }
 
-  if (hasAiPromptChanged(claudiomiroFolder, cache)) {
-    return null;
-  }
+    if (hasAiPromptChanged(claudiomiroFolder, cache)) {
+        return null;
+    }
 
-  return cache.aiPrompt.summary;
+    return cache.aiPrompt.summary;
 };
 
 /**
@@ -147,13 +147,13 @@ const getCachedAiPromptSummary = (claudiomiroFolder) => {
  * @param {object} taskSummary - Summary of completed task
  */
 const addCompletedTask = (claudiomiroFolder, taskId, taskSummary) => {
-  const cache = loadCache(claudiomiroFolder);
-  cache.completedTasks[taskId] = {
-    ...taskSummary,
-    addedAt: new Date().toISOString()
-  };
-  cache.lastProcessedTask = taskId;
-  saveCache(claudiomiroFolder, cache);
+    const cache = loadCache(claudiomiroFolder);
+    cache.completedTasks[taskId] = {
+        ...taskSummary,
+        addedAt: new Date().toISOString(),
+    };
+    cache.lastProcessedTask = taskId;
+    saveCache(claudiomiroFolder, cache);
 };
 
 /**
@@ -163,30 +163,30 @@ const addCompletedTask = (claudiomiroFolder, taskId, taskSummary) => {
  * @returns {object} Object with new completed tasks
  */
 const getNewCompletedTasks = (claudiomiroFolder, afterTask = null) => {
-  const cache = loadCache(claudiomiroFolder);
+    const cache = loadCache(claudiomiroFolder);
 
-  if (!afterTask) {
-    return cache.completedTasks;
-  }
-
-  const tasks = cache.completedTasks;
-  const afterTaskEntry = tasks[afterTask];
-
-  if (!afterTaskEntry) {
-    return tasks;
-  }
-
-  const afterTime = new Date(afterTaskEntry.addedAt).getTime();
-  const newTasks = {};
-
-  for (const [taskId, taskData] of Object.entries(tasks)) {
-    const taskTime = new Date(taskData.addedAt).getTime();
-    if (taskTime > afterTime) {
-      newTasks[taskId] = taskData;
+    if (!afterTask) {
+        return cache.completedTasks;
     }
-  }
 
-  return newTasks;
+    const tasks = cache.completedTasks;
+    const afterTaskEntry = tasks[afterTask];
+
+    if (!afterTaskEntry) {
+        return tasks;
+    }
+
+    const afterTime = new Date(afterTaskEntry.addedAt).getTime();
+    const newTasks = {};
+
+    for (const [taskId, taskData] of Object.entries(tasks)) {
+        const taskTime = new Date(taskData.addedAt).getTime();
+        if (taskTime > afterTime) {
+            newTasks[taskId] = taskData;
+        }
+    }
+
+    return newTasks;
 };
 
 /**
@@ -195,8 +195,8 @@ const getNewCompletedTasks = (claudiomiroFolder, afterTask = null) => {
  * @returns {string|null} Last processed task ID
  */
 const getLastProcessedTask = (claudiomiroFolder) => {
-  const cache = loadCache(claudiomiroFolder);
-  return cache.lastProcessedTask;
+    const cache = loadCache(claudiomiroFolder);
+    return cache.lastProcessedTask;
 };
 
 /**
@@ -204,10 +204,10 @@ const getLastProcessedTask = (claudiomiroFolder) => {
  * @param {string} claudiomiroFolder - Path to .claudiomiro folder
  */
 const clearCache = (claudiomiroFolder) => {
-  const cachePath = getCachePath(claudiomiroFolder);
-  if (fs.existsSync(cachePath)) {
-    fs.unlinkSync(cachePath);
-  }
+    const cachePath = getCachePath(claudiomiroFolder);
+    if (fs.existsSync(cachePath)) {
+        fs.unlinkSync(cachePath);
+    }
 };
 
 /**
@@ -216,8 +216,8 @@ const clearCache = (claudiomiroFolder) => {
  * @returns {object} All completed tasks
  */
 const getAllCompletedTasks = (claudiomiroFolder) => {
-  const cache = loadCache(claudiomiroFolder);
-  return cache.completedTasks;
+    const cache = loadCache(claudiomiroFolder);
+    return cache.completedTasks;
 };
 
 /**
@@ -226,13 +226,13 @@ const getAllCompletedTasks = (claudiomiroFolder) => {
  * @param {object} patterns - Detected patterns
  */
 const storeCodebasePatterns = (claudiomiroFolder, patterns) => {
-  const cache = loadCache(claudiomiroFolder);
-  cache.codebasePatterns = {
-    ...cache.codebasePatterns,
-    ...patterns,
-    lastUpdated: new Date().toISOString()
-  };
-  saveCache(claudiomiroFolder, cache);
+    const cache = loadCache(claudiomiroFolder);
+    cache.codebasePatterns = {
+        ...cache.codebasePatterns,
+        ...patterns,
+        lastUpdated: new Date().toISOString(),
+    };
+    saveCache(claudiomiroFolder, cache);
 };
 
 /**
@@ -241,25 +241,25 @@ const storeCodebasePatterns = (claudiomiroFolder, patterns) => {
  * @returns {object} Codebase patterns
  */
 const getCodebasePatterns = (claudiomiroFolder) => {
-  const cache = loadCache(claudiomiroFolder);
-  return cache.codebasePatterns;
+    const cache = loadCache(claudiomiroFolder);
+    return cache.codebasePatterns;
 };
 
 module.exports = {
-  loadCache,
-  saveCache,
-  createEmptyCache,
-  computeFileHash,
-  getCachePath,
-  hasAiPromptChanged,
-  updateAiPromptCache,
-  getCachedAiPromptSummary,
-  addCompletedTask,
-  getNewCompletedTasks,
-  getLastProcessedTask,
-  clearCache,
-  getAllCompletedTasks,
-  storeCodebasePatterns,
-  getCodebasePatterns,
-  CACHE_VERSION
+    loadCache,
+    saveCache,
+    createEmptyCache,
+    computeFileHash,
+    getCachePath,
+    hasAiPromptChanged,
+    updateAiPromptCache,
+    getCachedAiPromptSummary,
+    addCompletedTask,
+    getNewCompletedTasks,
+    getLastProcessedTask,
+    clearCache,
+    getAllCompletedTasks,
+    storeCodebasePatterns,
+    getCodebasePatterns,
+    CACHE_VERSION,
 };

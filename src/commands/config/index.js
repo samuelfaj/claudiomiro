@@ -18,39 +18,39 @@ const CONFIG_SCHEMA = {
         description: 'Ollama model for local LLM co-pilot (e.g., qwen2.5-coder:7b)',
         type: 'string',
         default: '',
-        examples: ['qwen2.5-coder:7b', 'codellama:7b', 'deepseek-coder:6.7b']
+        examples: ['qwen2.5-coder:7b', 'codellama:7b', 'deepseek-coder:6.7b'],
     },
     OLLAMA_HOST: {
         name: 'Ollama Host',
         description: 'Ollama server hostname',
         type: 'string',
-        default: 'localhost'
+        default: 'localhost',
     },
     OLLAMA_PORT: {
         name: 'Ollama Port',
         description: 'Ollama server port',
         type: 'number',
-        default: '11434'
+        default: '11434',
     },
     OLLAMA_TIMEOUT: {
         name: 'Ollama Timeout',
         description: 'Request timeout in milliseconds',
         type: 'number',
-        default: '30000'
+        default: '30000',
     },
     CLAUDIOMIRO_LLM_CACHE: {
         name: 'LLM Response Cache',
         description: 'Enable caching of LLM responses',
         type: 'boolean',
-        default: 'true'
+        default: 'true',
     },
     CLAUDIOMIRO_EXECUTOR: {
         name: 'Default AI Executor',
         description: 'Default AI model to use',
         type: 'choice',
         choices: ['claude', 'codex', 'gemini', 'deepseek', 'glm'],
-        default: 'claude'
-    }
+        default: 'claude',
+    },
 };
 
 const MENU_OPTIONS = {
@@ -58,7 +58,7 @@ const MENU_OPTIONS = {
     EDIT: 'edit',
     RESET: 'reset',
     EXPORT: 'export',
-    EXIT: 'exit'
+    EXIT: 'exit',
 };
 
 /**
@@ -100,7 +100,7 @@ const applyConfigToEnv = (config) => {
 /**
  * Get config value with default fallback
  */
-const getConfigValue = (config, key) => {
+const _getConfigValue = (config, key) => {
     if (config[key] !== undefined && config[key] !== '') {
         return config[key];
     }
@@ -160,9 +160,9 @@ const editConfigValue = async (config, key) => {
             choices: [
                 { name: 'Enabled (true)', value: 'true' },
                 { name: 'Disabled (false)', value: 'false' },
-                { name: 'Use default', value: '' }
+                { name: 'Use default', value: '' },
             ],
-            default: currentValue || ''
+            default: currentValue || '',
         });
     } else if (schema.type === 'choice') {
         const choices = schema.choices.map(c => ({ name: c, value: c }));
@@ -171,7 +171,7 @@ const editConfigValue = async (config, key) => {
         newValue = await select({
             message: `Select ${key}:`,
             choices,
-            default: currentValue || ''
+            default: currentValue || '',
         });
     } else {
         newValue = await input({
@@ -182,7 +182,7 @@ const editConfigValue = async (config, key) => {
                     return 'Please enter a valid number';
                 }
                 return true;
-            }
+            },
         });
     }
 
@@ -207,7 +207,7 @@ const showEditMenu = async (config) => {
 
         return {
             name: `${status} ${schema.name} ${chalk.gray(`[${displayValue}]`)}`,
-            value: key
+            value: key,
         };
     });
 
@@ -216,7 +216,7 @@ const showEditMenu = async (config) => {
     const selected = await select({
         message: 'Select setting to edit:',
         choices,
-        pageSize: 10
+        pageSize: 10,
     });
 
     return selected;
@@ -258,7 +258,7 @@ const exportConfig = (config) => {
 const resetConfig = async () => {
     const confirmed = await confirm({
         message: 'Are you sure you want to reset all configuration to defaults?',
-        default: false
+        default: false,
     });
 
     if (confirmed) {
@@ -283,8 +283,8 @@ const showMainMenu = async () => {
             { name: `${chalk.cyan('*')} Edit configuration`, value: MENU_OPTIONS.EDIT },
             { name: `${chalk.yellow('*')} Export as shell commands`, value: MENU_OPTIONS.EXPORT },
             { name: `${chalk.red('*')} Reset to defaults`, value: MENU_OPTIONS.RESET },
-            { name: `${chalk.gray('←')} Exit`, value: MENU_OPTIONS.EXIT }
-        ]
+            { name: `${chalk.gray('←')} Exit`, value: MENU_OPTIONS.EXIT },
+        ],
     });
 };
 
@@ -321,7 +321,7 @@ const run = async (args) => {
                     printConfig(config);
                     break;
 
-                case MENU_OPTIONS.EDIT:
+                case MENU_OPTIONS.EDIT: {
                     let editing = true;
                     while (editing) {
                         const selectedKey = await showEditMenu(config);
@@ -334,17 +334,19 @@ const run = async (args) => {
                         }
                     }
                     break;
+                }
 
                 case MENU_OPTIONS.EXPORT:
                     exportConfig(config);
                     break;
 
-                case MENU_OPTIONS.RESET:
+                case MENU_OPTIONS.RESET: {
                     const newConfig = await resetConfig();
                     if (newConfig !== null) {
                         config = newConfig;
                     }
                     break;
+                }
 
                 case MENU_OPTIONS.EXIT:
                     running = false;
@@ -370,5 +372,5 @@ module.exports = {
     applyConfigToEnv,
     CONFIG_FILE,
     PACKAGE_ROOT,
-    CONFIG_SCHEMA
+    CONFIG_SCHEMA,
 };

@@ -26,7 +26,7 @@ const preAnalyzeFixContext = async (userPrompt, pendingBefore, pendingAfter, las
             const validation = await llm.validateFix(
                 userPrompt,
                 `${pendingBefore} pending items before, ${pendingAfter} after`,
-                lastError
+                lastError,
             );
 
             if (validation && validation.issues && validation.issues.length > 0) {
@@ -213,7 +213,7 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
                     userPrompt,
                     previousPendingCount,
                     pendingBefore,
-                    lastIterationError
+                    lastIterationError,
                 );
             }
 

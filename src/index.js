@@ -1,5 +1,4 @@
 const logger = require('./shared/utils/logger');
-const state = require('./shared/config/state');
 const { checkForUpdatesAsync } = require('./shared/utils/auto-update');
 
 /**
@@ -60,34 +59,41 @@ const init = async () => {
     }
 
     switch (command) {
-        case 'help':
+        case 'help': {
             const { run: runHelp } = require('./commands/help');
             await runHelp(args);
             break;
-        case 'config':
+        }
+        case 'config': {
             const { run: runConfig } = require('./commands/config');
             await runConfig(args);
             break;
-        case 'test-local-llm':
+        }
+        case 'test-local-llm': {
             const { run: runTestLocalLlm } = require('./commands/test-local-llm');
             await runTestLocalLlm(args);
             break;
-        case 'task-executor':
+        }
+        case 'task-executor': {
             const { run: runTaskExecutor } = require('./commands/task-executor');
             await runTaskExecutor(args);
             break;
-        case 'fix-command':
+        }
+        case 'fix-command': {
             const { run: runFixCommand } = require('./commands/fix-command');
             await runFixCommand(args);
             break;
-        case 'loop-fixes':
+        }
+        case 'loop-fixes': {
             const { run: runLoopFixes } = require('./commands/loop-fixes');
             await runLoopFixes(args);
             break;
-        case 'fix-branch':
+        }
+        case 'fix-branch': {
             const { run: runFixBranch } = require('./commands/fix-branch');
             await runFixBranch(args);
             break;
+        }
         default:
             logger.error(`Unknown command: ${command}`);
             process.exit(1);

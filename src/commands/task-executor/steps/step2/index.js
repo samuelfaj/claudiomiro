@@ -11,14 +11,14 @@ const { getLocalLLMService } = require('../../../../shared/services/local-llm');
  * With Local LLM validation for quality check
  */
 const step2 = async () => {
-    const folder = (file) => path.join(state.claudiomiroFolder, file);
+    const _folder = (file) => path.join(state.claudiomiroFolder, file);
 
     logger.newline();
     logger.startSpinner('Creating tasks...');
 
     const replace = (text) => {
-        return text.replaceAll(`{{claudiomiroFolder}}`, `${state.claudiomiroFolder}`);
-    }
+        return text.replaceAll('{{claudiomiroFolder}}', `${state.claudiomiroFolder}`);
+    };
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
     await executeClaude(replace(prompt));
@@ -32,13 +32,13 @@ const step2 = async () => {
             !fs.existsSync(path.join(state.claudiomiroFolder, 'TASK0')) &&
             !fs.existsSync(path.join(state.claudiomiroFolder, 'TASK1'))
         ) {
-            throw new Error('Error creating tasks')
+            throw new Error('Error creating tasks');
         }
 
         // Validate decomposition with Local LLM (if available)
         await validateDecompositionWithLLM();
     }
-}
+};
 
 /**
  * Validates task decomposition using Local LLM
@@ -78,7 +78,7 @@ const validateDecompositionWithLLM = async () => {
             tasks.push({
                 name: taskFolder,
                 description,
-                dependencies
+                dependencies,
             });
         }
 

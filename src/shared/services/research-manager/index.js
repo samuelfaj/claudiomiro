@@ -20,23 +20,23 @@
  */
 
 const {
-  loadResearchIndex,
-  saveResearchIndex,
-  extractTopics,
-  calculateSimilarity,
-  indexResearch,
-  findSimilarResearch,
-  getReusableResearch,
-  clearResearchIndex
+    loadResearchIndex,
+    saveResearchIndex,
+    extractTopics,
+    calculateSimilarity,
+    indexResearch,
+    findSimilarResearch,
+    getReusableResearch,
+    clearResearchIndex,
 } = require('./research-indexer');
 
 module.exports = {
-  loadResearchIndex,
-  saveResearchIndex,
-  extractTopics,
-  calculateSimilarity,
-  indexResearch,
-  findSimilarResearch,
-  getReusableResearch,
-  clearResearchIndex
+    loadResearchIndex,
+    saveResearchIndex,
+    extractTopics,
+    calculateSimilarity,
+    indexResearch,
+    findSimilarResearch,
+    getReusableResearch,
+    clearResearchIndex,
 };

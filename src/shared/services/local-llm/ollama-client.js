@@ -10,165 +10,165 @@ const path = require('path');
 // Lazy load state to avoid circular dependencies
 let state = null;
 const getState = () => {
-  if (!state) {
-    try {
-      state = require('../../config/state');
-    } catch {
-      state = { claudiomiroFolder: null };
+    if (!state) {
+        try {
+            state = require('../../config/state');
+        } catch {
+            state = { claudiomiroFolder: null };
+        }
     }
-  }
-  return state;
+    return state;
 };
 
 class OllamaClient {
-  constructor(options = {}) {
-    this.host = options.host || process.env.OLLAMA_HOST || 'localhost';
-    this.port = parseInt(options.port || process.env.OLLAMA_PORT) || 11434;
-    this.model = options.model || null; // No default - must be specified
-    this.timeout = parseInt(options.timeout || process.env.OLLAMA_TIMEOUT) || 300000; // 5 minutes default
-  }
+    constructor(options = {}) {
+        this.host = options.host || process.env.OLLAMA_HOST || 'localhost';
+        this.port = parseInt(options.port || process.env.OLLAMA_PORT) || 11434;
+        this.model = options.model || null; // No default - must be specified
+        this.timeout = parseInt(options.timeout || process.env.OLLAMA_TIMEOUT) || 300000; // 5 minutes default
+    }
 
-  /**
+    /**
    * Log Ollama activity to log.txt
    * @param {string} action - Action being performed
    * @param {string} details - Details of the action
    * @param {string} [response] - Response received (optional)
    * @private
    */
-  _logToFile(action, details, response = null) {
-    try {
-      const currentState = getState();
-      if (!currentState.claudiomiroFolder) return;
+    _logToFile(action, details, response = null) {
+        try {
+            const currentState = getState();
+            if (!currentState.claudiomiroFolder) return;
 
-      const logFilePath = path.join(currentState.claudiomiroFolder, 'log.txt');
-      const timestamp = new Date().toISOString();
+            const logFilePath = path.join(currentState.claudiomiroFolder, 'log.txt');
+            const timestamp = new Date().toISOString();
 
-      let logEntry = `\n[${timestamp}] [Ollama] ${action}\n`;
-      logEntry += `-`.repeat(60) + '\n';
-      logEntry += `Model: ${this.model}\n`;
-      logEntry += `Host: ${this.host}:${this.port}\n`;
+            let logEntry = `\n[${timestamp}] [Ollama] ${action}\n`;
+            logEntry += '-'.repeat(60) + '\n';
+            logEntry += `Model: ${this.model}\n`;
+            logEntry += `Host: ${this.host}:${this.port}\n`;
 
-      if (details) {
-        // Truncate long prompts for readability
-        const truncatedDetails = details.length > 2000
-          ? details.slice(0, 2000) + '\n... [truncated, ' + details.length + ' chars total]'
-          : details;
-        logEntry += `Details:\n${truncatedDetails}\n`;
-      }
+            if (details) {
+                // Truncate long prompts for readability
+                const truncatedDetails = details.length > 2000
+                    ? details.slice(0, 2000) + '\n... [truncated, ' + details.length + ' chars total]'
+                    : details;
+                logEntry += `Details:\n${truncatedDetails}\n`;
+            }
 
-      if (response !== null) {
-        const truncatedResponse = typeof response === 'string' && response.length > 1000
-          ? response.slice(0, 1000) + '\n... [truncated, ' + response.length + ' chars total]'
-          : typeof response === 'object'
-            ? JSON.stringify(response, null, 2).slice(0, 1000)
-            : String(response);
-        logEntry += `Response:\n${truncatedResponse}\n`;
-      }
+            if (response !== null) {
+                const truncatedResponse = typeof response === 'string' && response.length > 1000
+                    ? response.slice(0, 1000) + '\n... [truncated, ' + response.length + ' chars total]'
+                    : typeof response === 'object'
+                        ? JSON.stringify(response, null, 2).slice(0, 1000)
+                        : String(response);
+                logEntry += `Response:\n${truncatedResponse}\n`;
+            }
 
-      logEntry += `-`.repeat(60) + '\n';
+            logEntry += '-'.repeat(60) + '\n';
 
-      fs.appendFileSync(logFilePath, logEntry);
-    } catch {
-      // Silently ignore logging errors
+            fs.appendFileSync(logFilePath, logEntry);
+        } catch {
+            // Silently ignore logging errors
+        }
     }
-  }
 
-  /**
+    /**
    * Check if Ollama server is available and model is loaded
    * @returns {Promise<{available: boolean, models: string[]}>}
    */
-  async healthCheck() {
-    this._logToFile('Health Check', 'Checking Ollama server availability...');
-    try {
-      const response = await this._request('GET', '/api/tags');
-      const models = (response.models || []).map(m => m.name);
-      const hasModel = models.some(m => m.startsWith(this.model.split(':')[0]));
+    async healthCheck() {
+        this._logToFile('Health Check', 'Checking Ollama server availability...');
+        try {
+            const response = await this._request('GET', '/api/tags');
+            const models = (response.models || []).map(m => m.name);
+            const hasModel = models.some(m => m.startsWith(this.model.split(':')[0]));
 
-      const result = {
-        available: true,
-        models,
-        hasModel,
-        selectedModel: this.model
-      };
-      this._logToFile('Health Check - SUCCESS', `Available models: ${models.join(', ')}`, result);
-      return result;
-    } catch (error) {
-      const result = {
-        available: false,
-        models: [],
-        hasModel: false,
-        error: error.message
-      };
-      this._logToFile('Health Check - FAILED', `Error: ${error.message}`, result);
-      return result;
+            const result = {
+                available: true,
+                models,
+                hasModel,
+                selectedModel: this.model,
+            };
+            this._logToFile('Health Check - SUCCESS', `Available models: ${models.join(', ')}`, result);
+            return result;
+        } catch (error) {
+            const result = {
+                available: false,
+                models: [],
+                hasModel: false,
+                error: error.message,
+            };
+            this._logToFile('Health Check - FAILED', `Error: ${error.message}`, result);
+            return result;
+        }
     }
-  }
 
-  /**
+    /**
    * Generate text completion from prompt
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Generation options
    * @returns {Promise<string>}
    */
-  async generate(prompt, options = {}) {
-    this._logToFile('Generate', `Prompt:\n${prompt}`, null);
-    const response = await this._request('POST', '/api/generate', {
-      model: this.model,
-      prompt,
-      stream: false,
-      options: {
-        temperature: options.temperature ?? 0.1,
-        num_predict: options.maxTokens || 256,
-        top_p: options.topP ?? 0.9,
-        stop: options.stop || []
-      }
-    });
+    async generate(prompt, options = {}) {
+        this._logToFile('Generate', `Prompt:\n${prompt}`, null);
+        const response = await this._request('POST', '/api/generate', {
+            model: this.model,
+            prompt,
+            stream: false,
+            options: {
+                temperature: options.temperature ?? 0.1,
+                num_predict: options.maxTokens || 256,
+                top_p: options.topP ?? 0.9,
+                stop: options.stop || [],
+            },
+        });
 
-    const result = response.response || '';
-    this._logToFile('Generate - Response', `Options: ${JSON.stringify(options)}`, result);
-    return result;
-  }
+        const result = response.response || '';
+        this._logToFile('Generate - Response', `Options: ${JSON.stringify(options)}`, result);
+        return result;
+    }
 
-  /**
+    /**
    * Generate with structured JSON output
    * @param {string} prompt - The prompt to send
    * @param {Object} options - Generation options
    * @returns {Promise<Object>}
    */
-  async generateJSON(prompt, options = {}) {
-    this._logToFile('GenerateJSON - Start', prompt, null);
-    const fullPrompt = `${prompt}\n\nRespond with valid JSON only, no additional text.`;
+    async generateJSON(prompt, options = {}) {
+        this._logToFile('GenerateJSON - Start', prompt, null);
+        const fullPrompt = `${prompt}\n\nRespond with valid JSON only, no additional text.`;
 
-    const response = await this.generate(fullPrompt, {
-      ...options,
-      temperature: options.temperature ?? 0.05 // Lower temp for JSON
-    });
+        const response = await this.generate(fullPrompt, {
+            ...options,
+            temperature: options.temperature ?? 0.05, // Lower temp for JSON
+        });
 
-    // Try to extract JSON from response
-    const jsonMatch = response.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-    if (jsonMatch) {
-      try {
-        const parsed = JSON.parse(jsonMatch[0]);
-        this._logToFile('GenerateJSON - SUCCESS', 'Parsed JSON successfully', parsed);
-        return parsed;
-      } catch (e) {
-        this._logToFile('GenerateJSON - FAILED', `Invalid JSON: ${e.message}`, response);
-        throw new Error(`Invalid JSON response: ${response}`);
-      }
+        // Try to extract JSON from response
+        const jsonMatch = response.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+        if (jsonMatch) {
+            try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                this._logToFile('GenerateJSON - SUCCESS', 'Parsed JSON successfully', parsed);
+                return parsed;
+            } catch (e) {
+                this._logToFile('GenerateJSON - FAILED', `Invalid JSON: ${e.message}`, response);
+                throw new Error(`Invalid JSON response: ${response}`);
+            }
+        }
+
+        this._logToFile('GenerateJSON - FAILED', 'No JSON found in response', response);
+        throw new Error(`No JSON found in response: ${response}`);
     }
 
-    this._logToFile('GenerateJSON - FAILED', 'No JSON found in response', response);
-    throw new Error(`No JSON found in response: ${response}`);
-  }
-
-  /**
+    /**
    * Classify content into predefined topics
    * @param {string} content - Content to classify
    * @param {string[]} topics - Available topic categories
    * @returns {Promise<string[]>}
    */
-  async classify(content, topics) {
-    const prompt = `Classify this content into relevant topics.
+    async classify(content, topics) {
+        const prompt = `Classify this content into relevant topics.
 
 Available topics: ${topics.join(', ')}
 
@@ -177,25 +177,25 @@ ${content.slice(0, 1500)}
 
 Return a JSON array of matching topics (max 5). Example: ["topic1", "topic2"]`;
 
-    try {
-      const result = await this.generateJSON(prompt, { maxTokens: 100 });
-      if (Array.isArray(result)) {
-        return result.filter(t => topics.includes(t));
-      }
-      return [];
-    } catch {
-      return [];
+        try {
+            const result = await this.generateJSON(prompt, { maxTokens: 100 });
+            if (Array.isArray(result)) {
+                return result.filter(t => topics.includes(t));
+            }
+            return [];
+        } catch {
+            return [];
+        }
     }
-  }
 
-  /**
+    /**
    * Summarize content
    * @param {string} content - Content to summarize
    * @param {number} maxTokens - Maximum tokens in summary
    * @returns {Promise<string>}
    */
-  async summarize(content, maxTokens = 500) {
-    const prompt = `Summarize this content concisely. Focus on:
+    async summarize(content, maxTokens = 500) {
+        const prompt = `Summarize this content concisely. Focus on:
 - Key functionality and purpose
 - Important dependencies and relationships
 - Critical implementation details
@@ -205,17 +205,17 @@ ${content}
 
 Summary (${maxTokens} tokens max):`;
 
-    return this.generate(prompt, { maxTokens });
-  }
+        return this.generate(prompt, { maxTokens });
+    }
 
-  /**
+    /**
    * Extract a specific section from markdown
    * @param {string} markdown - Full markdown content
    * @param {string} sectionName - Name of section to extract
    * @returns {Promise<string>}
    */
-  async extractSection(markdown, sectionName) {
-    const prompt = `Extract the "${sectionName}" section from this markdown.
+    async extractSection(markdown, sectionName) {
+        const prompt = `Extract the "${sectionName}" section from this markdown.
 Return ONLY the section content without the header.
 If the section is not found, return "NOT_FOUND".
 
@@ -224,18 +224,18 @@ ${markdown.slice(0, 3000)}
 
 Section content:`;
 
-    const result = await this.generate(prompt, { maxTokens: 1000 });
-    return result.trim() === 'NOT_FOUND' ? '' : result;
-  }
+        const result = await this.generate(prompt, { maxTokens: 1000 });
+        return result.trim() === 'NOT_FOUND' ? '' : result;
+    }
 
-  /**
+    /**
    * Analyze task dependencies
    * @param {string} taskContent - Task description
    * @param {string[]} availableTasks - List of available task names
    * @returns {Promise<{explicit: string[], implicit: string[], reasoning: string}>}
    */
-  async analyzeDependencies(taskContent, availableTasks) {
-    const prompt = `Analyze this task and identify its dependencies.
+    async analyzeDependencies(taskContent, availableTasks) {
+        const prompt = `Analyze this task and identify its dependencies.
 
 Task:
 ${taskContent.slice(0, 2000)}
@@ -249,20 +249,20 @@ Rules:
 
 Return JSON: {"explicit": ["TASK1"], "implicit": ["TASK2"], "reasoning": "brief explanation"}`;
 
-    try {
-      return await this.generateJSON(prompt, { maxTokens: 300 });
-    } catch {
-      return { explicit: [], implicit: [], reasoning: 'Failed to analyze' };
+        try {
+            return await this.generateJSON(prompt, { maxTokens: 300 });
+        } catch {
+            return { explicit: [], implicit: [], reasoning: 'Failed to analyze' };
+        }
     }
-  }
 
-  /**
+    /**
    * Check if a task is fully completed
    * @param {string} todoContent - TODO.md content
    * @returns {Promise<{completed: boolean, confidence: number, reason: string}>}
    */
-  async checkCompletion(todoContent) {
-    const prompt = `Analyze this TODO.md and determine if the task is FULLY completed.
+    async checkCompletion(todoContent) {
+        const prompt = `Analyze this TODO.md and determine if the task is FULLY completed.
 
 Check for:
 1. "Fully implemented: YES" or similar declaration
@@ -274,21 +274,21 @@ ${todoContent.slice(0, 2000)}
 
 Return JSON: {"completed": true/false, "confidence": 0.0-1.0, "reason": "brief explanation"}`;
 
-    try {
-      return await this.generateJSON(prompt, { maxTokens: 150 });
-    } catch {
-      return { completed: false, confidence: 0, reason: 'Failed to analyze' };
+        try {
+            return await this.generateJSON(prompt, { maxTokens: 150 });
+        } catch {
+            return { completed: false, confidence: 0, reason: 'Failed to analyze' };
+        }
     }
-  }
 
-  /**
+    /**
    * Summarize multiple context files for token reduction
    * @param {Array<{path: string, content: string}>} files - Files to summarize
    * @param {string} taskDescription - Task description for relevance
    * @returns {Promise<Array<{path: string, summary: string, relevance: number}>>}
    */
-  async summarizeContext(files, taskDescription) {
-    const prompt = `You are a code context summarizer. Summarize each file focusing on what's relevant to the task.
+    async summarizeContext(files, taskDescription) {
+        const prompt = `You are a code context summarizer. Summarize each file focusing on what's relevant to the task.
 
 Task: ${taskDescription.slice(0, 500)}
 
@@ -304,25 +304,25 @@ For each file, provide:
 
 Return JSON array: [{"path": "file.js", "summary": "...", "relevance": 0.8}, ...]`;
 
-    try {
-      const result = await this.generateJSON(prompt, { maxTokens: 1000 });
-      if (Array.isArray(result)) {
-        return result;
-      }
-      return files.map(f => ({ path: f.path, summary: f.content.slice(0, 200), relevance: 0.5 }));
-    } catch {
-      return files.map(f => ({ path: f.path, summary: f.content.slice(0, 200), relevance: 0.5 }));
+        try {
+            const result = await this.generateJSON(prompt, { maxTokens: 1000 });
+            if (Array.isArray(result)) {
+                return result;
+            }
+            return files.map(f => ({ path: f.path, summary: f.content.slice(0, 200), relevance: 0.5 }));
+        } catch {
+            return files.map(f => ({ path: f.path, summary: f.content.slice(0, 200), relevance: 0.5 }));
+        }
     }
-  }
 
-  /**
+    /**
    * Rank files by relevance to a task
    * @param {string[]} filePaths - File paths to rank
    * @param {string} taskDescription - Task description
    * @returns {Promise<Array<{path: string, relevance: number, reason: string}>>}
    */
-  async rankFileRelevance(filePaths, taskDescription) {
-    const prompt = `Rank these files by relevance to the task.
+    async rankFileRelevance(filePaths, taskDescription) {
+        const prompt = `Rank these files by relevance to the task.
 
 Task: ${taskDescription.slice(0, 500)}
 
@@ -337,24 +337,24 @@ For each file, estimate relevance (0.0-1.0) based on:
 Return JSON array: [{"path": "file.js", "relevance": 0.8, "reason": "brief reason"}, ...]
 Order by relevance descending. Only include files with relevance > 0.3`;
 
-    try {
-      const result = await this.generateJSON(prompt, { maxTokens: 800 });
-      if (Array.isArray(result)) {
-        return result.sort((a, b) => b.relevance - a.relevance);
-      }
-      return filePaths.map(p => ({ path: p, relevance: 0.5, reason: 'Default' }));
-    } catch {
-      return filePaths.map(p => ({ path: p, relevance: 0.5, reason: 'Default' }));
+        try {
+            const result = await this.generateJSON(prompt, { maxTokens: 800 });
+            if (Array.isArray(result)) {
+                return result.sort((a, b) => b.relevance - a.relevance);
+            }
+            return filePaths.map(p => ({ path: p, relevance: 0.5, reason: 'Default' }));
+        } catch {
+            return filePaths.map(p => ({ path: p, relevance: 0.5, reason: 'Default' }));
+        }
     }
-  }
 
-  /**
+    /**
    * Validate task decomposition quality
    * @param {Array<{name: string, description: string, dependencies: string[]}>} tasks - Decomposed tasks
    * @returns {Promise<{valid: boolean, issues: string[], suggestions: string[]}>}
    */
-  async validateDecomposition(tasks) {
-    const prompt = `Validate this task decomposition for quality issues.
+    async validateDecomposition(tasks) {
+        const prompt = `Validate this task decomposition for quality issues.
 
 Tasks:
 ${tasks.map(t => `
@@ -376,21 +376,21 @@ Return JSON: {
   "circularDeps": [["TASK1", "TASK2"]]
 }`;
 
-    try {
-      return await this.generateJSON(prompt, { maxTokens: 500 });
-    } catch {
-      return { valid: true, issues: [], suggestions: [], circularDeps: [] };
+        try {
+            return await this.generateJSON(prompt, { maxTokens: 500 });
+        } catch {
+            return { valid: true, issues: [], suggestions: [], circularDeps: [] };
+        }
     }
-  }
 
-  /**
+    /**
    * Pre-screen code for obvious issues before full review
    * @param {string} code - Code to review
    * @param {string} language - Programming language
    * @returns {Promise<{passed: boolean, issues: Array<{type: string, message: string, severity: string}>}>}
    */
-  async prescreenCode(code, language = 'javascript') {
-    const prompt = `Pre-screen this ${language} code for obvious issues.
+    async prescreenCode(code, language = 'javascript') {
+        const prompt = `Pre-screen this ${language} code for obvious issues.
 
 Code:
 \`\`\`${language}
@@ -412,22 +412,22 @@ Return JSON: {
   "summary": "Overall assessment in one sentence"
 }`;
 
-    try {
-      return await this.generateJSON(prompt, { maxTokens: 500 });
-    } catch {
-      return { passed: true, issues: [], summary: 'Pre-screening unavailable' };
+        try {
+            return await this.generateJSON(prompt, { maxTokens: 500 });
+        } catch {
+            return { passed: true, issues: [], summary: 'Pre-screening unavailable' };
+        }
     }
-  }
 
-  /**
+    /**
    * Validate a proposed fix before applying
    * @param {string} command - The command that failed
    * @param {string} error - The error message
    * @param {string} proposedFix - The proposed fix
    * @returns {Promise<{valid: boolean, confidence: number, issues: string[]}>}
    */
-  async validateFix(command, error, proposedFix) {
-    const prompt = `Validate if this proposed fix is likely to work.
+    async validateFix(command, error, proposedFix) {
+        const prompt = `Validate if this proposed fix is likely to work.
 
 Original command: ${command}
 Error: ${error.slice(0, 500)}
@@ -446,22 +446,22 @@ Return JSON: {
   "recommendation": "apply|review|reject"
 }`;
 
-    try {
-      return await this.generateJSON(prompt, { maxTokens: 300 });
-    } catch {
-      return { valid: true, confidence: 0.5, issues: [], recommendation: 'apply' };
+        try {
+            return await this.generateJSON(prompt, { maxTokens: 300 });
+        } catch {
+            return { valid: true, confidence: 0.5, issues: [], recommendation: 'apply' };
+        }
     }
-  }
 
-  /**
+    /**
    * Pre-screen git diff for critical bugs
    * @param {string} diff - Git diff content
    * @returns {Promise<{issues: Array, summary: string, hasCritical: boolean}>}
    */
-  async prescreenDiff(diff) {
-    this._logToFile('PrescreenDiff - Start', `Git diff length: ${diff.length} chars`, null);
+    async prescreenDiff(diff) {
+        this._logToFile('PrescreenDiff - Start', `Git diff length: ${diff.length} chars`, null);
 
-    const prompt = `You are a code security analyzer. Scan this git diff for CRITICAL bugs only.
+        const prompt = `You are a code security analyzer. Scan this git diff for CRITICAL bugs only.
 
 CRITICAL bugs to detect (HIGH PRIORITY):
 1. Hardcoded secrets, API keys, passwords (any string that looks like a credential)
@@ -495,25 +495,25 @@ Return JSON with this EXACT structure:
 
 If no critical issues found, return: {"issues": [], "summary": "No critical issues detected", "hasCritical": false}`;
 
-    try {
-      const result = await this.generateJSON(prompt, { maxTokens: 800 });
-      this._logToFile('PrescreenDiff - SUCCESS', `Found ${result.issues?.length || 0} issues`, result);
-      return result;
-    } catch (error) {
-      this._logToFile('PrescreenDiff - FAILED', `Error: ${error.message}`, null);
-      return { issues: [], summary: 'Pre-screening failed', hasCritical: false };
+        try {
+            const result = await this.generateJSON(prompt, { maxTokens: 800 });
+            this._logToFile('PrescreenDiff - SUCCESS', `Found ${result.issues?.length || 0} issues`, result);
+            return result;
+        } catch (error) {
+            this._logToFile('PrescreenDiff - FAILED', `Error: ${error.message}`, null);
+            return { issues: [], summary: 'Pre-screening failed', hasCritical: false };
+        }
     }
-  }
 
-  /**
+    /**
    * Analyze validator/test output to extract actionable errors
    * @param {string} command - Command that was run
    * @param {string} output - Command output
    * @param {number} exitCode - Exit code
    * @returns {Promise<{errors: Array, summary: string, canAutoFix: boolean}>}
    */
-  async analyzeValidatorOutput(command, output, exitCode) {
-    const prompt = `Analyze this test/linter output and extract actionable error information.
+    async analyzeValidatorOutput(command, output, exitCode) {
+        const prompt = `Analyze this test/linter output and extract actionable error information.
 
 Command: ${command}
 Exit code: ${exitCode}
@@ -538,21 +538,21 @@ Return JSON:
 
 If exitCode is 0 and no errors, return: {"errors": [], "summary": "All checks passed", "canAutoFix": false}`;
 
-    try {
-      return await this.generateJSON(prompt, { maxTokens: 600 });
-    } catch {
-      return { errors: [], summary: 'Analysis failed', canAutoFix: false };
+        try {
+            return await this.generateJSON(prompt, { maxTokens: 600 });
+        } catch {
+            return { errors: [], summary: 'Analysis failed', canAutoFix: false };
+        }
     }
-  }
 
-  /**
+    /**
    * Generate a commit message from changes
    * @param {string} diff - Git diff or change summary
    * @param {string} taskDescription - Task description
    * @returns {Promise<{title: string, body: string}>}
    */
-  async generateCommitMessage(diff, taskDescription) {
-    const prompt = `Generate a concise git commit message for these changes.
+    async generateCommitMessage(diff, taskDescription) {
+        const prompt = `Generate a concise git commit message for these changes.
 
 Task: ${taskDescription.slice(0, 300)}
 
@@ -569,22 +569,22 @@ Return JSON: {
   "body": "- Change 1\\n- Change 2"
 }`;
 
-    try {
-      return await this.generateJSON(prompt, { maxTokens: 300 });
-    } catch {
-      return { title: 'Update code', body: '- Various changes' };
+        try {
+            return await this.generateJSON(prompt, { maxTokens: 300 });
+        } catch {
+            return { title: 'Update code', body: '- Various changes' };
+        }
     }
-  }
 
-  /**
+    /**
    * Generate a PR description from changes
    * @param {string} summary - Summary of changes (from CODE_REVIEW.md or similar)
    * @param {string} changedFiles - List of changed files
    * @param {string} commitMessages - Recent commit messages
    * @returns {Promise<{title: string, body: string}>}
    */
-  async generatePRDescription(summary, changedFiles, commitMessages) {
-    const prompt = `Generate a professional Pull Request description.
+    async generatePRDescription(summary, changedFiles, commitMessages) {
+        const prompt = `Generate a professional Pull Request description.
 
 Summary of changes:
 ${summary.slice(0, 1500)}
@@ -606,65 +606,65 @@ Return JSON: {
   "body": "## Summary\\nBrief description of changes.\\n\\n## Changes\\n- Change 1\\n- Change 2\\n\\n## Test Plan\\n- [ ] Test case 1\\n- [ ] Test case 2"
 }`;
 
-    try {
-      return await this.generateJSON(prompt, { maxTokens: 600 });
-    } catch {
-      return {
-        title: 'Update implementation',
-        body: '## Summary\nVarious improvements and updates.\n\n## Changes\n- Code updates\n\n## Test Plan\n- [ ] Manual testing'
-      };
+        try {
+            return await this.generateJSON(prompt, { maxTokens: 600 });
+        } catch {
+            return {
+                title: 'Update implementation',
+                body: '## Summary\nVarious improvements and updates.\n\n## Changes\n- Code updates\n\n## Test Plan\n- [ ] Manual testing',
+            };
+        }
     }
-  }
 
-  /**
+    /**
    * Internal HTTP request handler
    * @private
    */
-  _request(method, path, body) {
-    return new Promise((resolve, reject) => {
-      const options = {
-        hostname: this.host,
-        port: this.port,
-        path,
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        },
-        timeout: this.timeout
-      };
+    _request(method, path, body) {
+        return new Promise((resolve, reject) => {
+            const options = {
+                hostname: this.host,
+                port: this.port,
+                path,
+                method,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                },
+                timeout: this.timeout,
+            };
 
-      const req = http.request(options, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) {
-            try {
-              resolve(JSON.parse(data));
-            } catch {
-              resolve(data);
+            const req = http.request(options, (res) => {
+                let data = '';
+                res.on('data', chunk => data += chunk);
+                res.on('end', () => {
+                    if (res.statusCode >= 200 && res.statusCode < 300) {
+                        try {
+                            resolve(JSON.parse(data));
+                        } catch {
+                            resolve(data);
+                        }
+                    } else {
+                        reject(new Error(`HTTP ${res.statusCode}: ${data}`));
+                    }
+                });
+            });
+
+            req.on('error', (error) => {
+                reject(new Error(`Connection failed: ${error.message}`));
+            });
+
+            req.on('timeout', () => {
+                req.destroy();
+                reject(new Error('Request timeout'));
+            });
+
+            if (body) {
+                req.write(JSON.stringify(body));
             }
-          } else {
-            reject(new Error(`HTTP ${res.statusCode}: ${data}`));
-          }
+            req.end();
         });
-      });
-
-      req.on('error', (error) => {
-        reject(new Error(`Connection failed: ${error.message}`));
-      });
-
-      req.on('timeout', () => {
-        req.destroy();
-        reject(new Error('Request timeout'));
-      });
-
-      if (body) {
-        req.write(JSON.stringify(body));
-      }
-      req.end();
-    });
-  }
+    }
 }
 
 module.exports = OllamaClient;

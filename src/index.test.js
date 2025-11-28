@@ -20,29 +20,29 @@ describe('src/index.js', () => {
             banner: jest.fn(),
             info: jest.fn(),
             error: jest.fn(),
-            warning: jest.fn()
+            warning: jest.fn(),
         }));
 
         jest.doMock('./shared/config/state', () => ({
             setFolder: jest.fn(),
             folder: '/test/folder',
-            claudiomiroFolder: '/test/folder/.claudiomiro'
+            claudiomiroFolder: '/test/folder/.claudiomiro',
         }));
 
         jest.doMock('./shared/utils/auto-update', () => ({
-            checkForUpdatesAsync: jest.fn()
+            checkForUpdatesAsync: jest.fn(),
         }));
 
         jest.doMock('./commands/task-executor', () => ({
-            run: jest.fn().mockResolvedValue(undefined)
+            run: jest.fn().mockResolvedValue(undefined),
         }));
 
         jest.doMock('./commands/fix-command', () => ({
-            run: jest.fn().mockResolvedValue(undefined)
+            run: jest.fn().mockResolvedValue(undefined),
         }));
 
         jest.doMock('./commands/loop-fixes', () => ({
-            run: jest.fn().mockResolvedValue(undefined)
+            run: jest.fn().mockResolvedValue(undefined),
         }));
 
         // Now require the module and get references to mocks

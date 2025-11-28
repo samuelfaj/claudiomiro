@@ -23,7 +23,7 @@ const overwriteBlock = (lines) => {
     }
     // Volta para o topo do bloco
     process.stdout.write(`\x1b[${lines}A`);
-}
+};
 
 const runDeepSeek = (text, taskName = null) => {
     return new Promise((resolve, reject) => {
@@ -44,7 +44,7 @@ const runDeepSeek = (text, taskName = null) => {
 
         const deepSeek = spawn('sh', ['-c', command], {
             cwd: state.folder,
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
         });
 
         const logFilePath = path.join(state.claudiomiroFolder, 'log.txt');
@@ -116,11 +116,11 @@ const runDeepSeek = (text, taskName = null) => {
                 }
 
                 // Imprime cabeçalho
-                console.log(`💬 DeepSeek:`);
+                console.log('💬 DeepSeek:');
                 lineCount++;
 
                 // Processa e imprime o texto linha por linha
-                const lines = text.split("\n");
+                const lines = text.split('\n');
                 for (const line of lines) {
                     if (line.length > max) {
                         // Quebra linha longa em múltiplas linhas
@@ -136,7 +136,7 @@ const runDeepSeek = (text, taskName = null) => {
 
                 // Atualiza contador para próximo overwrite
                 overwriteBlockLines = lineCount;
-            }
+            };
 
             for (const line of lines) {
                 const text = processDeepSeekMessage(line);
@@ -182,7 +182,6 @@ const runDeepSeek = (text, taskName = null) => {
 
             logStream.write(`\n\n[${new Date().toISOString()}] DeepSeek execution completed with code ${code}\n`);
             logStream.end();
-
 
             logger.newline();
             logger.separator();

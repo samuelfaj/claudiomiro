@@ -132,7 +132,7 @@ const parseDependenciesAsync = async (content, availableTasks = []) => {
                         explicit: allExplicit,
                         implicit,
                         all: [...new Set([...allExplicit, ...implicit])],
-                        reasoning: analysis.reasoning
+                        reasoning: analysis.reasoning,
                     };
                 }
             }
@@ -146,7 +146,7 @@ const parseDependenciesAsync = async (content, availableTasks = []) => {
         explicit,
         implicit: [],
         all: explicit,
-        reasoning: 'Regex extraction only'
+        reasoning: 'Regex extraction only',
     };
 };
 
@@ -160,12 +160,12 @@ const buildDeadlockContext = (tasks, pendingTasks) => {
         pendingTasks: pendingTasks.map(([name, task]) => ({
             name,
             deps: task.deps,
-            waitingFor: task.deps.filter(d => !tasks[d] || tasks[d].status !== 'completed')
+            waitingFor: task.deps.filter(d => !tasks[d] || tasks[d].status !== 'completed'),
         })),
         completedTasks: Object.entries(tasks)
             .filter(([, t]) => t.status === 'completed')
             .map(([name]) => name),
-        cycles
+        cycles,
     };
 
     return context;
@@ -326,5 +326,5 @@ module.exports = {
     detectCycles,
     parseDependencies,
     parseDependenciesAsync,
-    rebuildTaskGraphFromFiles
+    rebuildTaskGraphFromFiles,
 };

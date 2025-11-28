@@ -6,7 +6,7 @@
 // Mock dependencies before requiring the module
 jest.mock('../../shared/services/local-llm/ollama-client');
 jest.mock('../../shared/config/local-llm', () => ({
-    parseLocalLLMConfig: jest.fn()
+    parseLocalLLMConfig: jest.fn(),
 }));
 jest.mock('readline');
 
@@ -28,7 +28,7 @@ describe('test-local-llm command', () => {
         // Default readline mock - empty input
         mockRl = {
             question: jest.fn((_, callback) => callback('')),
-            close: jest.fn()
+            close: jest.fn(),
         };
         readline.createInterface.mockReturnValue(mockRl);
     });
@@ -54,7 +54,7 @@ describe('test-local-llm command', () => {
                 available: true,
                 selectedModel: 'qwen2.5-coder:7b',
                 hasModel: true,
-                models: ['qwen2.5-coder:7b', 'codellama:7b']
+                models: ['qwen2.5-coder:7b', 'codellama:7b'],
             };
 
             printStatus(status);
@@ -67,7 +67,7 @@ describe('test-local-llm command', () => {
         test('should display error when not available', () => {
             const status = {
                 available: false,
-                error: 'Connection refused'
+                error: 'Connection refused',
             };
 
             printStatus(status);
@@ -84,7 +84,7 @@ describe('test-local-llm command', () => {
                 available: true,
                 selectedModel: 'model0:latest',
                 hasModel: true,
-                models
+                models,
             };
 
             printStatus(status);
@@ -97,14 +97,14 @@ describe('test-local-llm command', () => {
     describe('generateResponse', () => {
         test('should generate and display response', async () => {
             const mockClient = {
-                generate: jest.fn().mockResolvedValue('Test response from LLM')
+                generate: jest.fn().mockResolvedValue('Test response from LLM'),
             };
 
             const result = await generateResponse(mockClient, 'Test prompt');
 
             expect(mockClient.generate).toHaveBeenCalledWith('Test prompt', {
                 maxTokens: 512,
-                temperature: 0.7
+                temperature: 0.7,
             });
             expect(result).toBe('Test response from LLM');
 
@@ -115,7 +115,7 @@ describe('test-local-llm command', () => {
 
         test('should display error on failure', async () => {
             const mockClient = {
-                generate: jest.fn().mockRejectedValue(new Error('Generation failed'))
+                generate: jest.fn().mockRejectedValue(new Error('Generation failed')),
             };
 
             await expect(generateResponse(mockClient, 'Test prompt')).rejects.toThrow('Generation failed');
@@ -143,16 +143,16 @@ describe('test-local-llm command', () => {
                 model: 'qwen2.5-coder:7b',
                 host: 'localhost',
                 port: 11434,
-                timeout: 30000
+                timeout: 30000,
             });
 
             const mockHealthCheck = jest.fn().mockResolvedValue({
                 available: false,
-                error: 'Connection refused'
+                error: 'Connection refused',
             });
 
             OllamaClient.mockImplementation(() => ({
-                healthCheck: mockHealthCheck
+                healthCheck: mockHealthCheck,
             }));
 
             await run([]);
@@ -166,17 +166,17 @@ describe('test-local-llm command', () => {
                 model: 'qwen2.5-coder:7b',
                 host: 'localhost',
                 port: 11434,
-                timeout: 30000
+                timeout: 30000,
             });
 
             const mockHealthCheck = jest.fn().mockResolvedValue({
                 available: true,
                 hasModel: false,
-                models: ['codellama:7b']
+                models: ['codellama:7b'],
             });
 
             OllamaClient.mockImplementation(() => ({
-                healthCheck: mockHealthCheck
+                healthCheck: mockHealthCheck,
             }));
 
             await run([]);
@@ -194,21 +194,21 @@ describe('test-local-llm command', () => {
                 model: 'qwen2.5-coder:7b',
                 host: 'localhost',
                 port: 11434,
-                timeout: 30000
+                timeout: 30000,
             });
 
             const mockHealthCheck = jest.fn().mockResolvedValue({
                 available: true,
                 hasModel: true,
                 selectedModel: 'qwen2.5-coder:7b',
-                models: ['qwen2.5-coder:7b']
+                models: ['qwen2.5-coder:7b'],
             });
 
             const mockGenerate = jest.fn().mockResolvedValue('Generated response');
 
             OllamaClient.mockImplementation(() => ({
                 healthCheck: mockHealthCheck,
-                generate: mockGenerate
+                generate: mockGenerate,
             }));
 
             await run(['--prompt=Hello world']);
@@ -222,21 +222,21 @@ describe('test-local-llm command', () => {
                 model: 'qwen2.5-coder:7b',
                 host: 'localhost',
                 port: 11434,
-                timeout: 30000
+                timeout: 30000,
             });
 
             const mockHealthCheck = jest.fn().mockResolvedValue({
                 available: true,
                 hasModel: true,
                 selectedModel: 'qwen2.5-coder:7b',
-                models: ['qwen2.5-coder:7b']
+                models: ['qwen2.5-coder:7b'],
             });
 
             const mockGenerate = jest.fn().mockResolvedValue('Generated response');
 
             OllamaClient.mockImplementation(() => ({
                 healthCheck: mockHealthCheck,
-                generate: mockGenerate
+                generate: mockGenerate,
             }));
 
             await run(['--prompt="Test with quotes"']);
@@ -250,21 +250,21 @@ describe('test-local-llm command', () => {
                 model: 'qwen2.5-coder:7b',
                 host: 'localhost',
                 port: 11434,
-                timeout: 30000
+                timeout: 30000,
             });
 
             const mockHealthCheck = jest.fn().mockResolvedValue({
                 available: true,
                 hasModel: true,
                 selectedModel: 'qwen2.5-coder:7b',
-                models: ['qwen2.5-coder:7b']
+                models: ['qwen2.5-coder:7b'],
             });
 
             const mockGenerate = jest.fn().mockResolvedValue('Generated response');
 
             OllamaClient.mockImplementation(() => ({
                 healthCheck: mockHealthCheck,
-                generate: mockGenerate
+                generate: mockGenerate,
             }));
 
             // Override readline mock for this test
@@ -281,21 +281,21 @@ describe('test-local-llm command', () => {
                 model: 'qwen2.5-coder:7b',
                 host: 'localhost',
                 port: 11434,
-                timeout: 30000
+                timeout: 30000,
             });
 
             const mockHealthCheck = jest.fn().mockResolvedValue({
                 available: true,
                 hasModel: true,
                 selectedModel: 'qwen2.5-coder:7b',
-                models: ['qwen2.5-coder:7b']
+                models: ['qwen2.5-coder:7b'],
             });
 
             const mockGenerate = jest.fn().mockResolvedValue('Generated response');
 
             OllamaClient.mockImplementation(() => ({
                 healthCheck: mockHealthCheck,
-                generate: mockGenerate
+                generate: mockGenerate,
             }));
 
             // Use default empty input from beforeEach

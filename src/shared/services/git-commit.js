@@ -26,7 +26,7 @@ const generateCommitMessageLocally = async (taskDescription) => {
             diff = execSync('git diff --staged --stat', {
                 cwd: state.folder,
                 encoding: 'utf-8',
-                maxBuffer: 50 * 1024 // 50KB max
+                maxBuffer: 50 * 1024, // 50KB max
             }).trim();
 
             // If no staged changes, get unstaged
@@ -34,7 +34,7 @@ const generateCommitMessageLocally = async (taskDescription) => {
                 diff = execSync('git diff --stat', {
                     cwd: state.folder,
                     encoding: 'utf-8',
-                    maxBuffer: 50 * 1024
+                    maxBuffer: 50 * 1024,
                 }).trim();
             }
         } catch (e) {
@@ -45,7 +45,7 @@ const generateCommitMessageLocally = async (taskDescription) => {
 
         const commitMessage = await llm.generateCommitMessage(
             diff || 'Various code changes',
-            taskDescription || 'Implementation task'
+            taskDescription || 'Implementation task',
         );
 
         logger.debug(`[Git] Commit message generated locally: ${commitMessage.title}`);
@@ -76,7 +76,7 @@ const smartCommit = async (options = {}) => {
     try {
         const status = execSync('git status --porcelain', {
             cwd: state.folder,
-            encoding: 'utf-8'
+            encoding: 'utf-8',
         }).trim();
         hasChanges = status.length > 0;
     } catch (error) {
@@ -113,7 +113,7 @@ const smartCommit = async (options = {}) => {
         execSync('git add .', {
             cwd: state.folder,
             encoding: 'utf-8',
-            stdio: 'pipe'
+            stdio: 'pipe',
         });
 
         // Build commit message (title + body)
@@ -130,7 +130,7 @@ const smartCommit = async (options = {}) => {
         execSync(`git commit -m "${escapedMessage}"`, {
             cwd: state.folder,
             encoding: 'utf-8',
-            stdio: 'pipe'
+            stdio: 'pipe',
         });
 
         logger.success('✅ Commit successful via shell');
@@ -143,7 +143,7 @@ const smartCommit = async (options = {}) => {
                     cwd: state.folder,
                     encoding: 'utf-8',
                     stdio: 'pipe',
-                    timeout: 60000 // 60s timeout for push
+                    timeout: 60000, // 60s timeout for push
                 });
                 logger.success('✅ Push successful');
             } catch (pushError) {
@@ -200,14 +200,14 @@ const generatePRDescriptionLocally = async () => {
             changedFiles = execSync('git diff --name-only HEAD~5..HEAD 2>/dev/null || git diff --name-only', {
                 cwd: state.folder,
                 encoding: 'utf-8',
-                maxBuffer: 50 * 1024
+                maxBuffer: 50 * 1024,
             }).trim();
 
             // Get recent commit messages
             commitMessages = execSync('git log --oneline -10 2>/dev/null || echo "Various changes"', {
                 cwd: state.folder,
                 encoding: 'utf-8',
-                maxBuffer: 50 * 1024
+                maxBuffer: 50 * 1024,
             }).trim();
 
             // Try to read CODE_REVIEW.md files for summary
@@ -233,7 +233,7 @@ const generatePRDescriptionLocally = async () => {
         const prDescription = await llm.generatePRDescription(
             summary || 'Implementation updates',
             changedFiles || '',
-            commitMessages || ''
+            commitMessages || '',
         );
 
         logger.debug(`[Git] PR description generated locally: ${prDescription.title}`);
@@ -274,7 +274,7 @@ const _tryCreatePRViaShell = async () => {
             cwd: state.folder,
             encoding: 'utf-8',
             stdio: 'pipe',
-            timeout: 60000
+            timeout: 60000,
         });
 
         logger.success('✅ PR created successfully via shell');
@@ -331,16 +331,16 @@ const commitOrFix = async (prompt, taskName = null) => {
     try {
         await executeClaude(
             `${prompt}${localCommitHint}\n\n` +
-            `HARD RULES:\n` +
-            ` - NEVER mention that you are an AI model\n` +
-            ` - NEVER mention Authored or Co-Authored\n` +
-            ` - NEVER mention any AI model (example: Claude, ChatGPT, GLM, Deepseek)\n` +
-            ` - The Authorship must be the user and only the user\n` +
-            ` - NOBODY can know that AI was used\n` +
-            ` - If you need to commit, use git commit -m "message"\n` +
-            ` - If you need to push, use git push\n` +
-            ` - If you need to create a PR, use the available git tools (GitHub, GitLab, etc.)\n`,
-            taskName
+            'HARD RULES:\n' +
+            ' - NEVER mention that you are an AI model\n' +
+            ' - NEVER mention Authored or Co-Authored\n' +
+            ' - NEVER mention any AI model (example: Claude, ChatGPT, GLM, Deepseek)\n' +
+            ' - The Authorship must be the user and only the user\n' +
+            ' - NOBODY can know that AI was used\n' +
+            ' - If you need to commit, use git commit -m "message"\n' +
+            ' - If you need to push, use git push\n' +
+            ' - If you need to create a PR, use the available git tools (GitHub, GitLab, etc.)\n',
+            taskName,
         );
 
         logger.newline();
@@ -352,6 +352,6 @@ const commitOrFix = async (prompt, taskName = null) => {
         logger.warning(`⚠️  Git commit/PR process failed: ${e.message}`);
         return true;
     }
-}
+};
 
 module.exports = { commitOrFix, generateCommitMessageLocally, generatePRDescriptionLocally, smartCommit };

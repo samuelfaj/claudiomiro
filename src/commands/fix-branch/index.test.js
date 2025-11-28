@@ -1,4 +1,3 @@
-const path = require('path');
 const fs = require('fs');
 
 // Mock dependencies
@@ -77,7 +76,7 @@ describe('fix-branch command', () => {
             expect(result).toContain('CORRECTION LEVEL: 1');
             expect(fs.readFileSync).toHaveBeenCalledWith(
                 expect.stringContaining('prompt.md'),
-                'utf-8'
+                'utf-8',
             );
         });
 
@@ -115,7 +114,7 @@ describe('fix-branch command', () => {
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('CORRECTION LEVEL: 1'),
                 20,
-                { clearFolder: true }
+                { clearFolder: true },
             );
         });
 
@@ -125,7 +124,7 @@ describe('fix-branch command', () => {
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('Mock fixed prompt content'),
                 5,
-                { clearFolder: true }
+                { clearFolder: true },
             );
         });
 
@@ -135,7 +134,7 @@ describe('fix-branch command', () => {
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('Mock fixed prompt content'),
                 Infinity,
-                { clearFolder: true }
+                { clearFolder: true },
             );
         });
 
@@ -159,7 +158,7 @@ describe('fix-branch command', () => {
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('Mock fixed prompt content'),
                 Infinity,
-                { clearFolder: true }
+                { clearFolder: true },
             );
         });
 
@@ -167,10 +166,10 @@ describe('fix-branch command', () => {
             await run([]);
 
             expect(logger.info).toHaveBeenCalledWith(
-                'Starting fix-branch (Staff+ Engineer Code Review)...'
+                'Starting fix-branch (Staff+ Engineer Code Review)...',
             );
             expect(logger.info).toHaveBeenCalledWith(
-                expect.stringContaining('level: 1 - blockers only')
+                expect.stringContaining('level: 1 - blockers only'),
             );
         });
 
@@ -181,7 +180,7 @@ describe('fix-branch command', () => {
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('Mock fixed prompt content'),
                 3,
-                { clearFolder: true }
+                { clearFolder: true },
             );
         });
 
@@ -206,7 +205,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -216,7 +215,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -226,10 +225,10 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
                 expect(logger.info).toHaveBeenCalledWith(
-                    expect.stringContaining('level: 2 - blockers + warnings')
+                    expect.stringContaining('level: 2 - blockers + warnings'),
                 );
             });
 
@@ -239,22 +238,22 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 3'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
                 expect(logger.info).toHaveBeenCalledWith(
-                    expect.stringContaining('level: 3 - all issues')
+                    expect.stringContaining('level: 3 - all issues'),
                 );
             });
 
             test('should throw error for invalid level', async () => {
                 await expect(run(['--level=4'])).rejects.toThrow(
-                    'Invalid level. Use --level=1, --level=2, or --level=3'
+                    'Invalid level. Use --level=1, --level=2, or --level=3',
                 );
             });
 
             test('should throw error for invalid level 0', async () => {
                 await expect(run(['--level=0'])).rejects.toThrow(
-                    'Invalid level. Use --level=1, --level=2, or --level=3'
+                    'Invalid level. Use --level=1, --level=2, or --level=3',
                 );
             });
 
@@ -264,7 +263,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -274,7 +273,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -284,7 +283,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -294,7 +293,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -304,7 +303,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
                     5,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -314,7 +313,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 3'),
                     Infinity,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -325,7 +324,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
                     20,
-                    { clearFolder: true }
+                    { clearFolder: true },
                 );
             });
 
@@ -335,7 +334,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
                     20,
-                    { clearFolder: false }
+                    { clearFolder: false },
                 );
             });
 
@@ -346,7 +345,7 @@ describe('fix-branch command', () => {
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
                     5,
-                    { clearFolder: false }
+                    { clearFolder: false },
                 );
             });
         });

@@ -22,7 +22,7 @@ const step8 = async (tasks, shouldPush = true) => {
         const commitResult = await smartCommit({
             taskName: null, // Final commit, no specific task
             shouldPush,
-            createPR: shouldPush // Create PR if pushing
+            createPR: shouldPush, // Create PR if pushing
         });
 
         if (commitResult.method === 'shell') {
@@ -39,6 +39,6 @@ const step8 = async (tasks, shouldPush = true) => {
 
     logger.info(`✅ Claudiomiro has been successfully executed. Check out: ${state.folder}`);
     process.exit(0);
-}
+};
 
 module.exports = { step8 };

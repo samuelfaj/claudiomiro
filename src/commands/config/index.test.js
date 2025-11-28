@@ -19,7 +19,7 @@ const {
     applyConfigToEnv,
     CONFIG_FILE,
     PACKAGE_ROOT,
-    CONFIG_SCHEMA
+    CONFIG_SCHEMA,
 } = require('./index');
 
 describe('config command', () => {
@@ -107,7 +107,7 @@ describe('config command', () => {
 
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 CONFIG_FILE,
-                JSON.stringify({ CLAUDIOMIRO_LOCAL_LLM: 'test' }, null, 2)
+                JSON.stringify({ CLAUDIOMIRO_LOCAL_LLM: 'test' }, null, 2),
             );
         });
     });
@@ -116,7 +116,7 @@ describe('config command', () => {
         test('should set environment variables from config', () => {
             applyConfigToEnv({
                 CLAUDIOMIRO_LOCAL_LLM: 'qwen2.5-coder:7b',
-                OLLAMA_HOST: 'remote-host'
+                OLLAMA_HOST: 'remote-host',
             });
 
             expect(process.env.CLAUDIOMIRO_LOCAL_LLM).toBe('qwen2.5-coder:7b');
@@ -128,7 +128,7 @@ describe('config command', () => {
 
             applyConfigToEnv({
                 CLAUDIOMIRO_LOCAL_LLM: '',
-                OLLAMA_HOST: 'localhost'
+                OLLAMA_HOST: 'localhost',
             });
 
             expect(process.env.CLAUDIOMIRO_LOCAL_LLM).toBeUndefined();
@@ -137,7 +137,7 @@ describe('config command', () => {
 
         test('should convert numbers to strings', () => {
             applyConfigToEnv({
-                OLLAMA_PORT: 8080
+                OLLAMA_PORT: 8080,
             });
 
             expect(process.env.OLLAMA_PORT).toBe('8080');

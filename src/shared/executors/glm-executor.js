@@ -23,7 +23,7 @@ const overwriteBlock = (lines) => {
     }
     // Volta para o topo do bloco
     process.stdout.write(`\x1b[${lines}A`);
-}
+};
 
 const runGlm = (text, taskName = null) => {
     return new Promise((resolve, reject) => {
@@ -44,7 +44,7 @@ const runGlm = (text, taskName = null) => {
 
         const glm = spawn('sh', ['-c', command], {
             cwd: state.folder,
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
         });
 
         const logFilePath = path.join(state.claudiomiroFolder, 'log.txt');
@@ -116,11 +116,11 @@ const runGlm = (text, taskName = null) => {
                 }
 
                 // Imprime cabeçalho
-                console.log(`💬 Glm:`);
+                console.log('💬 Glm:');
                 lineCount++;
 
                 // Processa e imprime o texto linha por linha
-                const lines = text.split("\n");
+                const lines = text.split('\n');
                 for (const line of lines) {
                     if (line.length > max) {
                         // Quebra linha longa em múltiplas linhas
@@ -136,7 +136,7 @@ const runGlm = (text, taskName = null) => {
 
                 // Atualiza contador para próximo overwrite
                 overwriteBlockLines = lineCount;
-            }
+            };
 
             for (const line of lines) {
                 const text = processGlmMessage(line);
@@ -182,7 +182,6 @@ const runGlm = (text, taskName = null) => {
 
             logStream.write(`\n\n[${new Date().toISOString()}] Glm execution completed with code ${code}\n`);
             logStream.end();
-
 
             logger.newline();
             logger.separator();

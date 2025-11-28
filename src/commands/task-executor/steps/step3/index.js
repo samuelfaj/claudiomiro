@@ -40,7 +40,7 @@ const step3 = async () => {
                 fs.writeFileSync(
                     taskPath,
                     `@dependencies []\n${taskContent}`,
-                    'utf-8'
+                    'utf-8',
                 );
                 logger.stopSpinner();
                 logger.success('Empty dependencies added to single task');
@@ -65,7 +65,7 @@ const step3 = async () => {
 
         return {
             name: task,
-            content: `### ${task}\n\n${taskContent}\n\n${promptContent}`
+            content: `### ${task}\n\n${taskContent}\n\n${promptContent}`,
         };
     });
 

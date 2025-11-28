@@ -11,7 +11,7 @@ jest.mock('./logger', () => ({
     warning: jest.fn(),
     info: jest.fn(),
     success: jest.fn(),
-    error: jest.fn()
+    error: jest.fn(),
 }));
 
 const logger = require('./logger');
@@ -26,7 +26,7 @@ describe('auto-update', () => {
 
         // Mock fs.readFileSync to return a mock package.json
         fs.readFileSync.mockReturnValue(JSON.stringify({
-            version: mockCurrentVersion
+            version: mockCurrentVersion,
         }));
     });
 
@@ -46,7 +46,7 @@ describe('auto-update', () => {
         test('should handle package.json with different version format', () => {
             // Arrange
             fs.readFileSync.mockReturnValue(JSON.stringify({
-                version: '0.0.1-beta'
+                version: '0.0.1-beta',
             }));
 
             // Act
@@ -71,8 +71,8 @@ describe('auto-update', () => {
                 `npm view ${mockPackageName} version`,
                 {
                     encoding: 'utf-8',
-                    stdio: ['pipe', 'pipe', 'pipe']
-                }
+                    stdio: ['pipe', 'pipe', 'pipe'],
+                },
             );
         });
 
@@ -113,7 +113,7 @@ describe('auto-update', () => {
             expect(result).toEqual({
                 updateAvailable: true,
                 currentVersion: mockCurrentVersion,
-                latestVersion: mockLatestVersion
+                latestVersion: mockLatestVersion,
             });
         });
 
@@ -154,7 +154,7 @@ describe('auto-update', () => {
             expect(result).toEqual({
                 updateAvailable: false,
                 currentVersion: mockCurrentVersion,
-                latestVersion: mockCurrentVersion
+                latestVersion: mockCurrentVersion,
             });
         });
 
@@ -171,7 +171,7 @@ describe('auto-update', () => {
             expect(result).toEqual({
                 updateAvailable: false,
                 currentVersion: mockCurrentVersion,
-                latestVersion: null
+                latestVersion: null,
             });
         });
 
@@ -189,7 +189,7 @@ describe('auto-update', () => {
             // Assert
             expect(execSync).toHaveBeenCalledWith(
                 `npm install -g ${mockPackageName}@latest`,
-                { stdio: 'inherit' }
+                { stdio: 'inherit' },
             );
             expect(logger.success).toHaveBeenCalledWith(`Successfully updated to version ${mockLatestVersion}`);
             expect(logger.info).toHaveBeenCalledWith('Please restart the command.');
@@ -242,7 +242,7 @@ describe('auto-update', () => {
             // Assert
             expect(execSync).toHaveBeenCalledWith(
                 'npm view claudiomiro version',
-                expect.any(Object)
+                expect.any(Object),
             );
         });
     });

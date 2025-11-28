@@ -10,7 +10,7 @@ const getExecutor = (type) => {
         'codex': executeCodex,
         'gemini': executeGemini,
         'deep-seek': executeDeepSeek,
-        'glm': executeGlm
+        'glm': executeGlm,
     };
 
     const executor = executors[type];
@@ -26,5 +26,5 @@ module.exports = {
     executeCodex,
     executeGemini,
     executeDeepSeek,
-    executeGlm
+    executeGlm,
 };

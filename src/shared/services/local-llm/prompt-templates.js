@@ -5,31 +5,31 @@
  */
 
 const TOPIC_CATEGORIES = [
-  'authentication',
-  'api',
-  'database',
-  'testing',
-  'config',
-  'middleware',
-  'service',
-  'controller',
-  'component',
-  'validation',
-  'error',
-  'logging',
-  'cache',
-  'queue',
-  'file',
-  'security',
-  'ui',
-  'state'
+    'authentication',
+    'api',
+    'database',
+    'testing',
+    'config',
+    'middleware',
+    'service',
+    'controller',
+    'component',
+    'validation',
+    'error',
+    'logging',
+    'cache',
+    'queue',
+    'file',
+    'security',
+    'ui',
+    'state',
 ];
 
 const templates = {
-  /**
+    /**
    * Topic classification prompt
    */
-  classifyTopics: (content, topics = TOPIC_CATEGORIES) => `Task: Classify content into topics.
+    classifyTopics: (content, topics = TOPIC_CATEGORIES) => `Task: Classify content into topics.
 Topics: ${topics.join(', ')}
 
 Content:
@@ -37,10 +37,10 @@ ${content.slice(0, 1500)}
 
 Output JSON array of matching topics (max 5):`,
 
-  /**
+    /**
    * Section extraction prompt
    */
-  extractSection: (markdown, sectionName) => `Task: Extract section "${sectionName}" from markdown.
+    extractSection: (markdown, sectionName) => `Task: Extract section "${sectionName}" from markdown.
 Rules:
 - Return ONLY section content (no header)
 - If not found, return: NOT_FOUND
@@ -50,10 +50,10 @@ ${markdown.slice(0, 3000)}
 
 Section content:`,
 
-  /**
+    /**
    * Context summarization prompt
    */
-  summarizeContext: (content, maxTokens = 500) => `Task: Summarize this content in ${maxTokens} tokens.
+    summarizeContext: (content, maxTokens = 500) => `Task: Summarize this content in ${maxTokens} tokens.
 Focus on:
 - Main purpose/functionality
 - Key dependencies
@@ -64,10 +64,10 @@ ${content}
 
 Summary:`,
 
-  /**
+    /**
    * Dependency analysis prompt
    */
-  analyzeDependencies: (taskContent, availableTasks) => `Task: Identify task dependencies.
+    analyzeDependencies: (taskContent, availableTasks) => `Task: Identify task dependencies.
 
 Task description:
 ${taskContent.slice(0, 2000)}
@@ -82,10 +82,10 @@ Rules:
 Output JSON:
 {"explicit": [], "implicit": [], "reasoning": ""}`,
 
-  /**
+    /**
    * Completion check prompt
    */
-  checkCompletion: (todoContent) => `Task: Check if task is fully completed.
+    checkCompletion: (todoContent) => `Task: Check if task is fully completed.
 
 Look for:
 1. "Fully implemented: YES" statement
@@ -98,10 +98,10 @@ ${todoContent.slice(0, 2000)}
 Output JSON:
 {"completed": true/false, "confidence": 0.0-1.0, "reason": ""}`,
 
-  /**
+    /**
    * Research similarity prompt
    */
-  compareResearch: (research1, research2) => `Task: Compare two research documents for similarity.
+    compareResearch: (research1, research2) => `Task: Compare two research documents for similarity.
 
 Research 1:
 ${research1.slice(0, 1000)}
@@ -112,20 +112,20 @@ ${research2.slice(0, 1000)}
 Output JSON:
 {"similarity": 0.0-1.0, "sharedTopics": [], "canReuse": true/false}`,
 
-  /**
+    /**
    * Code pattern extraction prompt
    */
-  extractPatterns: (code) => `Task: Extract coding patterns from this code.
+    extractPatterns: (code) => `Task: Extract coding patterns from this code.
 
 Code:
 ${code.slice(0, 2000)}
 
 List patterns found (naming, structure, error handling):`,
 
-  /**
+    /**
    * Intent classification prompt
    */
-  classifyIntent: (userRequest) => `Task: Classify user intent.
+    classifyIntent: (userRequest) => `Task: Classify user intent.
 Categories: feature, bugfix, refactor, docs, test, config, other
 
 Request:
@@ -134,10 +134,10 @@ ${userRequest.slice(0, 500)}
 Output JSON:
 {"intent": "category", "confidence": 0.0-1.0, "entities": []}`,
 
-  /**
+    /**
    * File relevance scoring prompt
    */
-  scoreFileRelevance: (taskDescription, filePath, fileContent) => `Task: Score file relevance to task.
+    scoreFileRelevance: (taskDescription, filePath, fileContent) => `Task: Score file relevance to task.
 
 Task: ${taskDescription.slice(0, 300)}
 File: ${filePath}
@@ -147,10 +147,10 @@ ${fileContent.slice(0, 500)}
 Output JSON:
 {"relevance": 0.0-1.0, "reason": ""}`,
 
-  /**
+    /**
    * Git diff pre-screening prompt for critical bug detection
    */
-  prescreenDiff: (diff) => `Task: Pre-screen git diff for CRITICAL bugs only.
+    prescreenDiff: (diff) => `Task: Pre-screen git diff for CRITICAL bugs only.
 
 CRITICAL bugs (report these):
 - Missing null/undefined checks (crashes)
@@ -173,10 +173,10 @@ ${diff.slice(0, 8000)}
 Output JSON:
 {"issues": [{"file": "path", "line": 0, "type": "security|logic|incomplete", "severity": "critical|warning", "description": "..."}], "summary": "...", "hasCritical": true/false}`,
 
-  /**
+    /**
    * Validator output analysis prompt
    */
-  analyzeValidatorOutput: (command, output, exitCode) => `Task: Analyze test/linter output for actionable errors.
+    analyzeValidatorOutput: (command, output, exitCode) => `Task: Analyze test/linter output for actionable errors.
 
 Command: ${command}
 Exit code: ${exitCode}
@@ -193,10 +193,10 @@ Extract:
 Output JSON:
 {"errors": [{"file": "path", "line": 0, "message": "...", "fixHint": "..."}], "summary": "...", "canAutoFix": true/false}`,
 
-  /**
+    /**
    * Commit message generation prompt
    */
-  generateCommitMessage: (diff, taskDescription) => `Task: Generate a concise git commit message.
+    generateCommitMessage: (diff, taskDescription) => `Task: Generate a concise git commit message.
 
 Rules:
 - Use conventional commits format (feat:, fix:, refactor:, etc.)
@@ -212,10 +212,10 @@ ${diff.slice(0, 1500)}
 Output JSON:
 {"title": "type: short description", "body": "- bullet point 1\\n- bullet point 2"}`,
 
-  /**
+    /**
    * PR description generation prompt
    */
-  generatePRDescription: (summary, changedFiles, commitMessages) => `Task: Generate a Pull Request description.
+    generatePRDescription: (summary, changedFiles, commitMessages) => `Task: Generate a Pull Request description.
 
 Rules:
 - Write a clear summary (2-3 sentences)
@@ -233,7 +233,7 @@ Recent commits:
 ${commitMessages.slice(0, 500)}
 
 Output JSON:
-{"title": "PR title (max 72 chars)", "body": "## Summary\\n...\\n\\n## Changes\\n- ...\\n\\n## Test Plan\\n- [ ] ..."}`
+{"title": "PR title (max 72 chars)", "body": "## Summary\\n...\\n\\n## Changes\\n- ...\\n\\n## Test Plan\\n- [ ] ..."}`,
 };
 
 /**
@@ -242,7 +242,7 @@ Output JSON:
  * @returns {Function|null}
  */
 function getTemplate(name) {
-  return templates[name] || null;
+    return templates[name] || null;
 }
 
 /**
@@ -250,12 +250,12 @@ function getTemplate(name) {
  * @returns {string[]}
  */
 function getTemplateNames() {
-  return Object.keys(templates);
+    return Object.keys(templates);
 }
 
 module.exports = {
-  templates,
-  getTemplate,
-  getTemplateNames,
-  TOPIC_CATEGORIES
+    templates,
+    getTemplate,
+    getTemplateNames,
+    TOPIC_CATEGORIES,
 };

@@ -43,7 +43,7 @@ const executeCodex = (text, taskName = null) => {
 
         const codex = spawn('sh', ['-c', command], {
             cwd: state.folder,
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
         });
 
         const logFilePath = path.join(state.claudiomiroFolder, 'codex-log.txt');

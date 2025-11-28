@@ -23,78 +23,78 @@
  */
 
 const {
-  loadCache,
-  saveCache,
-  clearCache,
-  getCachedAiPromptSummary,
-  updateAiPromptCache,
-  addCompletedTask,
-  getNewCompletedTasks,
-  getLastProcessedTask,
-  getAllCompletedTasks,
-  storeCodebasePatterns,
-  getCodebasePatterns,
-  hasAiPromptChanged,
-  CACHE_VERSION
+    loadCache,
+    saveCache,
+    clearCache,
+    getCachedAiPromptSummary,
+    updateAiPromptCache,
+    addCompletedTask,
+    getNewCompletedTasks,
+    getLastProcessedTask,
+    getAllCompletedTasks,
+    storeCodebasePatterns,
+    getCodebasePatterns,
+    hasAiPromptChanged,
+    CACHE_VERSION,
 } = require('./cache-manager');
 
 const {
-  getIncrementalContext,
-  buildConsolidatedContext,
-  buildConsolidatedContextAsync,
-  buildOptimizedContextAsync,
-  markTaskCompleted,
-  getContextFilePaths,
-  isTaskCompleted,
-  getTaskFolders,
-  createAiPromptSummary,
-  extractCodebasePatterns,
-  getRelevantSymbols,
-  getFileSummary,
-  // Async LLM-enhanced versions
-  extractContextSummaryAsync,
-  extractResearchPatternsAsync
+    getIncrementalContext,
+    buildConsolidatedContext,
+    buildConsolidatedContextAsync,
+    buildOptimizedContextAsync,
+    markTaskCompleted,
+    getContextFilePaths,
+    isTaskCompleted,
+    getTaskFolders,
+    createAiPromptSummary,
+    extractCodebasePatterns,
+    getRelevantSymbols,
+    getFileSummary,
+    // Async LLM-enhanced versions
+    extractContextSummaryAsync,
+    extractResearchPatternsAsync,
 } = require('./context-collector');
 
 module.exports = {
-  // Cache management
-  loadCache,
-  saveCache,
-  clearCache,
-  CACHE_VERSION,
+    // Cache management
+    loadCache,
+    saveCache,
+    clearCache,
+    CACHE_VERSION,
 
-  // AI_PROMPT caching
-  getCachedAiPromptSummary,
-  updateAiPromptCache,
-  hasAiPromptChanged,
-  createAiPromptSummary,
+    // AI_PROMPT caching
+    getCachedAiPromptSummary,
+    updateAiPromptCache,
+    hasAiPromptChanged,
+    createAiPromptSummary,
 
-  // Task tracking
-  addCompletedTask,
-  getNewCompletedTasks,
-  getLastProcessedTask,
-  getAllCompletedTasks,
-  markTaskCompleted,
-  isTaskCompleted,
-  getTaskFolders,
+    // Task tracking
+    addCompletedTask,
+    getNewCompletedTasks,
+    getLastProcessedTask,
+    getAllCompletedTasks,
+    markTaskCompleted,
+    isTaskCompleted,
+    getTaskFolders,
 
-  // Codebase patterns
-  storeCodebasePatterns,
-  getCodebasePatterns,
+    // Codebase patterns
+    storeCodebasePatterns,
+    getCodebasePatterns,
 
-  // Context collection
-  getIncrementalContext,
-  buildConsolidatedContext,
-  buildConsolidatedContextAsync,
-  buildOptimizedContextAsync,
-  getContextFilePaths,
-  extractCodebasePatterns,
+    // Context collection
+    getIncrementalContext,
+    buildConsolidatedContext,
+    buildConsolidatedContextAsync,
+    buildOptimizedContextAsync,
+    getContextFilePaths,
+    extractCodebasePatterns,
 
-  // LLM-enhanced extraction (async, with fallback)
-  extractContextSummaryAsync,
-  extractResearchPatternsAsync,
+    // LLM-enhanced extraction (async, with fallback)
+    extractContextSummaryAsync,
+    extractResearchPatternsAsync,
 
-  // Code index integration (uses semantic search with Ollama)
-  getRelevantSymbols,
-  getFileSummary
+    // Code index integration (uses semantic search with Ollama)
+    getRelevantSymbols,
+    getFileSummary,
 };
