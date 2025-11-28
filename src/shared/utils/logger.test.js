@@ -358,4 +358,77 @@ describe('Logger', () => {
             logger.stopSpinner();
         });
     });
+
+    describe('Ollama status', () => {
+        let originalEnv;
+
+        beforeEach(() => {
+            originalEnv = process.env.CLAUDIOMIRO_LOCAL_LLM;
+        });
+
+        afterEach(() => {
+            if (originalEnv !== undefined) {
+                process.env.CLAUDIOMIRO_LOCAL_LLM = originalEnv;
+            } else {
+                delete process.env.CLAUDIOMIRO_LOCAL_LLM;
+            }
+        });
+
+        test('getOllamaStatus() should show suggestion when Ollama not configured', () => {
+            delete process.env.CLAUDIOMIRO_LOCAL_LLM;
+            const status = logger.getOllamaStatus();
+            expect(status).toContain('Use Ollama and reduce token costs by 90%');
+        });
+
+        test('getOllamaStatus() should show suggestion when env is empty string', () => {
+            process.env.CLAUDIOMIRO_LOCAL_LLM = '';
+            const status = logger.getOllamaStatus();
+            expect(status).toContain('Use Ollama and reduce token costs by 90%');
+        });
+
+        test('getOllamaStatus() should show suggestion when env is "false"', () => {
+            process.env.CLAUDIOMIRO_LOCAL_LLM = 'false';
+            const status = logger.getOllamaStatus();
+            expect(status).toContain('Use Ollama and reduce token costs by 90%');
+        });
+
+        test('getOllamaStatus() should show suggestion when env is "0"', () => {
+            process.env.CLAUDIOMIRO_LOCAL_LLM = '0';
+            const status = logger.getOllamaStatus();
+            expect(status).toContain('Use Ollama and reduce token costs by 90%');
+        });
+
+        test('getOllamaStatus() should show suggestion when env is "true"', () => {
+            process.env.CLAUDIOMIRO_LOCAL_LLM = 'true';
+            const status = logger.getOllamaStatus();
+            expect(status).toContain('Use Ollama and reduce token costs by 90%');
+        });
+
+        test('getOllamaStatus() should show suggestion when env is "1"', () => {
+            process.env.CLAUDIOMIRO_LOCAL_LLM = '1';
+            const status = logger.getOllamaStatus();
+            expect(status).toContain('Use Ollama and reduce token costs by 90%');
+        });
+
+        test('getOllamaStatus() should show model name when Ollama is configured', () => {
+            process.env.CLAUDIOMIRO_LOCAL_LLM = 'qwen2.5-coder:7b';
+            const status = logger.getOllamaStatus();
+            expect(status).toContain('Ollama: qwen2.5-coder:7b');
+        });
+
+        test('getOllamaStatus() should show custom model name', () => {
+            process.env.CLAUDIOMIRO_LOCAL_LLM = 'llama3:8b';
+            const status = logger.getOllamaStatus();
+            expect(status).toContain('Ollama: llama3:8b');
+        });
+
+        test('banner() should display Ollama status', () => {
+            process.env.CLAUDIOMIRO_LOCAL_LLM = 'codellama:7b';
+            logger.banner();
+            expect(consoleLogSpy).toHaveBeenCalled();
+            // Banner calls console.log twice: once for title, once for status
+            const allOutput = consoleLogSpy.mock.calls.map(call => call[0]).join(' ');
+            expect(allOutput).toContain('Ollama: codellama:7b');
+        });
+    });
 });

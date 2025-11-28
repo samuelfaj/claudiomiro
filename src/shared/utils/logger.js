@@ -37,6 +37,8 @@ class Logger {
     // Banner inicial
     banner() {
         const version = packageJson.version;
+        const ollamaStatus = this.getOllamaStatus();
+
         const title = gradient.pastel.multiline([
             '╔═══════════════════════════════════════╗',
             '║                                       ║',
@@ -46,8 +48,28 @@ class Logger {
             '╚═══════════════════════════════════════╝',
         ].join('\n'));
         this.withOutput(() => {
-            console.log('\n' + title + '\n');
+            console.log('\n' + title);
+            console.log(ollamaStatus + '\n');
         });
+    }
+
+    // Get Ollama status message for banner
+    getOllamaStatus() {
+        const localLLMEnv = process.env.CLAUDIOMIRO_LOCAL_LLM;
+
+        // Check if Ollama is enabled with a valid model name
+        const isEnabled = localLLMEnv &&
+            localLLMEnv !== '' &&
+            localLLMEnv !== 'false' &&
+            localLLMEnv !== '0' &&
+            localLLMEnv !== 'true' &&
+            localLLMEnv !== '1';
+
+        if (isEnabled) {
+            return chalk.green(`🦙 Ollama: ${localLLMEnv}`);
+        }
+
+        return chalk.yellow('💡 Use Ollama and reduce token costs by 90%.');
     }
 
     // Logs básicos
