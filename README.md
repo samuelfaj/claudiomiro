@@ -6,7 +6,7 @@ Send your prompt:
 
 It **decomposes, codes, reviews, builds, tests, and commits**, autonomously, in parallel and while economizing tokens.
 
-🔥 [Use Ollama](./docs/HOW-TO-USE-OLLAMA.md) and **reduce even more token costs**
+🔥 [Use Ollama](./docs/HOW-TO-USE-OLLAMA.md) to cut token costs even further — **up to 90% additional savings**.
 
 ![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/claudiomiro_terminal.png?raw=true)
 
