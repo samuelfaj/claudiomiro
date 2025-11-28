@@ -8,7 +8,7 @@ It **decomposes, codes, reviews, builds, tests, and commits**, autonomously, in 
 
 🔥 [Use Ollama](./docs/HOW-TO-USE-OLLAMA.md) to cut token costs even further — **up to 90% additional savings**.
 
-![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/claudiomiro_terminal.png?raw=true)
+![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/assets/claudiomiro-terminal.jpg?raw=true)
 
 ## The AI Poductivity Paradox
 
