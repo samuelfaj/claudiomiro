@@ -2,6 +2,14 @@
 
 Claudiomiro integrates with [Ollama](https://ollama.ai) to run local LLMs that help reduce token consumption when using cloud AI providers like Claude, GPT, or Gemini.
 
+Fast Summary:
+```
+brew install ollama or curl -fsSL https://ollama.ai/install.sh | sh or ollama.ai/download
+ollama serve
+ollama pull qwen2.5-coder:7b
+claudiomiro --config CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b
+```
+
 ## Table of Contents
 
 - [What is Ollama?](#what-is-ollama)
@@ -236,8 +244,9 @@ Claudiomiro uses Ollama (running locally, for free) to preprocess and filter the
 ┌─────────────────────────────────────────────────────────────┐
 │                     Without Ollama                          │
 │                                                             │
-│  npm test output     ───────────────────►    Claude API     │
-│  (10,000 tokens)                              ($$$ cost)    │
+│  npm test output     ──────────────────►     Claude API     │
+│  (10,000 tokens)                            (10,000 tokens) |  
+|                                                ($$$$$ cost) │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
@@ -245,7 +254,7 @@ Claudiomiro uses Ollama (running locally, for free) to preprocess and filter the
 │                                                             │
 │  npm test output   ────►   Ollama     ────►   Claude API    │
 │  (10,000 tokens)           (FREE)             (500 tokens)  │
-│                          Filters to                         │
+│                          Filters to                ($ cost) │
 │                          errors only                        │
 └─────────────────────────────────────────────────────────────┘
 ```
