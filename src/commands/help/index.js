@@ -38,6 +38,20 @@ const COMMANDS = [
             { flag: '--limit=<n>', description: 'Maximum iterations (default: 20)' },
             { flag: '--no-limit', description: 'Run without iteration limit' }
         ]
+    },
+    {
+        name: 'claudiomiro --test-local-llm [options]',
+        description: 'Test the Local LLM (Ollama) integration - verify connection and send test prompts',
+        options: [
+            { flag: '--prompt="<text>"', description: 'Test prompt to send (or enter interactively)' }
+        ]
+    },
+    {
+        name: 'claudiomiro --config',
+        description: 'Interactive configuration manager - set and persist environment variables',
+        options: [
+            { flag: 'KEY=VALUE', description: 'Quick set a config value (e.g., CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b)' }
+        ]
     }
 ];
 
@@ -114,6 +128,12 @@ const printExamples = () => {
     console.log();
     console.log(chalk.gray('    # Staff+ code review - fix all issues'));
     console.log(chalk.white('    $ claudiomiro --fix-branch --level=3'));
+    console.log();
+    console.log(chalk.gray('    # Configure Claudiomiro interactively'));
+    console.log(chalk.white('    $ claudiomiro --config'));
+    console.log();
+    console.log(chalk.gray('    # Quick set a config value'));
+    console.log(chalk.white('    $ claudiomiro --config CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b'));
     console.log();
 };
 

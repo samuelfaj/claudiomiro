@@ -1,12 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 const state = require('../../../../shared/config/state');
+const logger = require('../../../../shared/utils/logger');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const {
+  buildConsolidatedContextAsync,
+  buildOptimizedContextAsync,
+  getContextFilePaths
+} = require('../../../../shared/services/context-cache');
 
 /**
  * Generates a comprehensive TODO.md file for a task
  * This file contains detailed implementation instructions, context references,
  * acceptance criteria, and verification steps
+ *
+ * Token-optimized: Uses Local LLM for context summarization when available
  *
  * @param {string} task - Task identifier (e.g., 'TASK1', 'TASK2.1')
  * @returns {Promise} Result of Claude execution
@@ -14,55 +22,61 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
 const generateTodo = async (task) => {
   const folder = (file) => path.join(state.claudiomiroFolder, task, file);
 
+  // Keep template reference - Claude needs to see the structure
   const TODOtemplate = fs.readFileSync(path.join(__dirname, '../../templates', 'TODO.md'), 'utf-8');
 
-  // Collect context files from previous tasks
-  const contextFiles = [
-    path.join(state.claudiomiroFolder, 'AI_PROMPT.md')
-  ];
+  // Read task description for code-index symbol search
+  const taskMdPath = folder('TASK.md');
+  const taskDescription = fs.existsSync(taskMdPath)
+    ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
+    : task;
 
-  const folders = fs.readdirSync(state.claudiomiroFolder)
-    .filter(f => {
-      const fullPath = path.join(state.claudiomiroFolder, f);
-      return f.startsWith('TASK') && fs.statSync(fullPath).isDirectory();
-    });
+  // Try optimized context with Local LLM (40-60% token reduction)
+  // Falls back to consolidated context if LLM not available
+  let consolidatedContext;
+  let tokenSavings = 0;
 
-  for (const f of folders) {
-    const taskPath = path.join(state.claudiomiroFolder, f);
-    // Include TODO.md (if completed), CONTEXT.md, RESEARCH.md and other relevant .md files
-    const filesToCheck = ['TODO.md', 'CONTEXT.md', 'RESEARCH.md', 'DECISIONS.md'];
+  try {
+    const optimizedResult = await buildOptimizedContextAsync(
+      state.claudiomiroFolder,
+      task,
+      state.folder,
+      taskDescription,
+      { maxFiles: 10, minRelevance: 0.3, summarize: true }
+    );
 
-    filesToCheck.forEach(file => {
-      const filePath = path.join(taskPath, file);
-      if (fs.existsSync(filePath)) {
-        // For TODO.md, only include if task is completed
-        if (file === 'TODO.md') {
-          const content = fs.readFileSync(filePath, 'utf8');
-          if (content.startsWith('Fully implemented: YES')) {
-            contextFiles.push(filePath);
-          }
-        } else {
-          contextFiles.push(filePath);
-        }
-      }
-    });
+    consolidatedContext = optimizedResult.context;
+    tokenSavings = optimizedResult.tokenSavings;
 
-    // Also include any other .md files (except the standard ones)
-    const otherMdFiles = fs.readdirSync(taskPath)
-      .filter(file => {
-        return file.endsWith('.md') &&
-          !['PROMPT.md', 'TASK.md', 'TODO.md', 'CODE_REVIEW.md'].includes(file) &&
-          !file.startsWith('TODO.old.');
-      });
-
-    for (const mdFile of otherMdFiles) {
-      contextFiles.push(path.join(taskPath, mdFile));
+    if (optimizedResult.method === 'llm-optimized' && tokenSavings > 0) {
+      logger.debug(`[Step4] Context optimized: ~${tokenSavings} tokens saved (${optimizedResult.filesIncluded} relevant files)`);
     }
+  } catch (error) {
+    // Fallback to standard consolidated context
+    consolidatedContext = await buildConsolidatedContextAsync(
+      state.claudiomiroFolder,
+      task,
+      state.folder,
+      taskDescription
+    );
   }
 
-  const contextSection = contextFiles.length > 0
-    ? `\n\n## RELATED CONTEXT FROM PREVIOUS TASKS:\nRead these files to understand patterns, decisions, and implementation details from previous tasks:\n${contextFiles.map(f => `- ${f}`).join('\n')}\n\n`
-    : '';
+  // Get minimal reference paths (not content)
+  const contextFilePaths = getContextFilePaths(state.claudiomiroFolder, task, {
+    includeContext: true,
+    includeResearch: true,
+    includeTodo: true,
+    onlyCompleted: true
+  });
+
+  // Build optimized context section with summary + reference paths
+  const contextSection = `\n\n## CONTEXT SUMMARY:
+${consolidatedContext}
+
+## REFERENCE FILES (read only if you need more detail):
+- ${path.join(state.claudiomiroFolder, 'AI_PROMPT.md')} (full environment context)
+${contextFilePaths.map(f => `- ${f}`).join('\n')}
+\n`;
 
   // Load prompt template
   let promptTemplate = fs.readFileSync(path.join(__dirname, 'prompt-generate-todo.md'), 'utf-8');

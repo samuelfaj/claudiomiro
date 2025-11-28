@@ -2,6 +2,20 @@ const logger = require('./shared/utils/logger');
 const state = require('./shared/config/state');
 const { checkForUpdatesAsync } = require('./shared/utils/auto-update');
 
+/**
+ * Load persisted configuration from ~/.claudiomiro/config.json
+ * and apply to environment variables
+ */
+const loadPersistedConfig = () => {
+    try {
+        const { loadConfig, applyConfigToEnv } = require('./commands/config');
+        const config = loadConfig();
+        applyConfigToEnv(config);
+    } catch (error) {
+        // Config module not available or error loading - ignore
+    }
+};
+
 const parseArgs = () => {
     const args = process.argv.slice(2);
     const helpArg = args.includes('--help') || args.includes('-h');
@@ -9,9 +23,17 @@ const parseArgs = () => {
     const fixCommandArg = args.find(arg => arg.startsWith('--fix-command='));
     const loopFixesArg = args.includes('--loop-fixes');
     const fixBranchArg = args.includes('--fix-branch');
+    const testLocalLlmArg = args.includes('--test-local-llm');
+    const configArg = args.includes('--config');
 
     if (helpArg || versionArg) {
         return { command: 'help', args };
+    }
+    if (configArg) {
+        return { command: 'config', args };
+    }
+    if (testLocalLlmArg) {
+        return { command: 'test-local-llm', args };
     }
     if (fixCommandArg) {
         return { command: 'fix-command', args };
@@ -28,8 +50,11 @@ const parseArgs = () => {
 const init = async () => {
     const { command, args } = parseArgs();
 
-    // Skip banner for help/version commands
-    if (command !== 'help') {
+    // Load persisted configuration (applies env vars from ~/.claudiomiro/config.json)
+    loadPersistedConfig();
+
+    // Skip banner for help/version/config commands
+    if (command !== 'help' && command !== 'config') {
         logger.banner();
         checkForUpdatesAsync('claudiomiro');
     }
@@ -38,6 +63,14 @@ const init = async () => {
         case 'help':
             const { run: runHelp } = require('./commands/help');
             await runHelp(args);
+            break;
+        case 'config':
+            const { run: runConfig } = require('./commands/config');
+            await runConfig(args);
+            break;
+        case 'test-local-llm':
+            const { run: runTestLocalLlm } = require('./commands/test-local-llm');
+            await runTestLocalLlm(args);
             break;
         case 'task-executor':
             const { run: runTaskExecutor } = require('./commands/task-executor');

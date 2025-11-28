@@ -1,4 +1,5 @@
 const path = require('path');
+const fs = require('fs');
 
 class State {
     constructor() {
@@ -18,6 +19,37 @@ class State {
 
     get claudiomiroFolder() {
         return this._claudiomiroFolder;
+    }
+
+    /**
+     * Gets the cache folder path
+     * @returns {string} Path to cache folder
+     */
+    get cacheFolder() {
+        return path.join(this._claudiomiroFolder, 'cache');
+    }
+
+    /**
+     * Initializes the cache folder if it doesn't exist
+     * Call this after setFolder() when starting a new session
+     */
+    initializeCache() {
+        if (!this._claudiomiroFolder) {
+            return;
+        }
+
+        const cacheDir = this.cacheFolder;
+        if (!fs.existsSync(cacheDir)) {
+            fs.mkdirSync(cacheDir, { recursive: true });
+        }
+    }
+
+    /**
+     * Checks if cache folder exists
+     * @returns {boolean} True if cache folder exists
+     */
+    hasCacheFolder() {
+        return fs.existsSync(this.cacheFolder);
     }
 
     setExecutorType(type) {

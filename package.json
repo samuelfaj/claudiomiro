@@ -1,6 +1,6 @@
 {
   "name": "claudiomiro",
-  "version": "1.9.7",
+  "version": "2.0.0",
   "main": "index.js",
   "bin": {
     "claudiomiro": "./index.js"
@@ -22,9 +22,11 @@
   "license": "ISC",
   "description": "CLI tool for autonomous task execution using Claude AI",
   "dependencies": {
+    "@ast-grep/napi": "^0.40.0",
     "@inquirer/prompts": "^7.8.6",
     "boxen": "^5.1.2",
     "chalk": "^4.1.2",
+    "diff": "^8.0.2",
     "gradient-string": "^2.0.2",
     "lodash": "^4.17.21",
     "log-symbols": "^4.1.0",

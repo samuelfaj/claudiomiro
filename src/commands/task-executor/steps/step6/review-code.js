@@ -1,11 +1,20 @@
 const fs = require('fs');
 const path = require('path');
 const state = require('../../../../shared/config/state');
+const logger = require('../../../../shared/utils/logger');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const {
+  buildConsolidatedContextAsync,
+  buildOptimizedContextAsync,
+  getContextFilePaths
+} = require('../../../../shared/services/context-cache');
+const { getLocalLLMService } = require('../../../../shared/services/local-llm');
 
 /**
  * Performs systematic code review of implemented task
  * Verifies completeness, correctness, testing, and adherence to requirements
+ *
+ * Token-optimized: Uses Local LLM for context summarization and pre-screening
  *
  * @param {string} task - Task identifier (e.g., 'TASK1')
  * @returns {Promise} Result of Claude execution
@@ -21,50 +30,117 @@ const reviewCode = async (task) => {
       fs.rmSync(folder('GITHUB_PR.md'));
     }
 
-    // Collect context files for comprehensive review
-    const contextFiles = [
+    // Read task description for code-index symbol search
+    const taskMdPath = folder('TASK.md');
+    const taskDescription = fs.existsSync(taskMdPath)
+      ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
+      : task;
+
+    // Try Local LLM pre-screening to catch obvious issues early
+    let prescreenSection = '';
+    const llm = getLocalLLMService();
+    if (llm) {
+      try {
+        await llm.initialize();
+        if (llm.isAvailable()) {
+          // Read recently modified files for pre-screening
+          const contextMdPath = folder('CONTEXT.md');
+          if (fs.existsSync(contextMdPath)) {
+            const contextContent = fs.readFileSync(contextMdPath, 'utf-8');
+            // Extract file paths from CONTEXT.md
+            const fileMatches = contextContent.match(/`([^`]+\.(js|ts|py|go|java|rb))`/g);
+            if (fileMatches && fileMatches.length > 0) {
+              const filesToCheck = fileMatches.slice(0, 3).map(m => m.replace(/`/g, ''));
+              for (const filePath of filesToCheck) {
+                const fullPath = path.join(state.folder, filePath);
+                if (fs.existsSync(fullPath)) {
+                  const code = fs.readFileSync(fullPath, 'utf-8');
+                  const prescreenResult = await llm.prescreenCode(code);
+                  if (!prescreenResult.passed || prescreenResult.issues.length > 0) {
+                    prescreenSection += `\n### Pre-screen: ${filePath}\n`;
+                    prescreenSection += prescreenResult.issues.map(i =>
+                      `- [${i.severity}] ${i.type}: ${i.message}`
+                    ).join('\n');
+                  }
+                }
+              }
+            }
+          }
+          if (prescreenSection) {
+            logger.debug(`[Step6] Pre-screening found issues to focus on`);
+          }
+        }
+      } catch (error) {
+        // Pre-screening failed, continue with normal review
+      }
+    }
+
+    // Try optimized context with Local LLM (40-60% token reduction)
+    let consolidatedContext;
+    try {
+      const optimizedResult = await buildOptimizedContextAsync(
+        state.claudiomiroFolder,
+        task,
+        state.folder,
+        taskDescription,
+        { maxFiles: 8, minRelevance: 0.4, summarize: true }
+      );
+      consolidatedContext = optimizedResult.context;
+
+      if (optimizedResult.method === 'llm-optimized' && optimizedResult.tokenSavings > 0) {
+        logger.debug(`[Step6] Context optimized: ~${optimizedResult.tokenSavings} tokens saved`);
+      }
+    } catch (error) {
+      // Fallback to standard consolidated context
+      consolidatedContext = await buildConsolidatedContextAsync(
+        state.claudiomiroFolder,
+        task,
+        state.folder,
+        taskDescription
+      );
+    }
+
+    // Get minimal reference file paths (for detailed reading if needed)
+    const contextFilePaths = [
       path.join(state.claudiomiroFolder, 'AI_PROMPT.md'),
       path.join(state.claudiomiroFolder, 'INITIAL_PROMPT.md')
-    ];
+    ].filter(f => fs.existsSync(f));
 
-    // Add RESEARCH.md and CONTEXT.md if they exist for this task
+    // Add current task's files
     if(fs.existsSync(folder('RESEARCH.md'))){
-      contextFiles.push(folder('RESEARCH.md'));
+      contextFilePaths.push(folder('RESEARCH.md'));
     }
     if(fs.existsSync(folder('CONTEXT.md'))){
-      contextFiles.push(folder('CONTEXT.md'));
+      contextFilePaths.push(folder('CONTEXT.md'));
     }
 
-    // Collect context from related tasks (dependencies)
-    const listFolders = (dir) => {
-      try {
-        return fs.readdirSync(dir).filter(f => {
-          try {
-            return fs.statSync(path.join(dir, f)).isDirectory();
-          } catch {
-            return false;
-          }
-        });
-      } catch {
-        return [];
-      }
-    };
+    // Add context files from other tasks (minimal list)
+    const otherContextPaths = getContextFilePaths(state.claudiomiroFolder, task, {
+      includeContext: true,
+      includeResearch: false, // Skip research from other tasks to save tokens
+      includeTodo: false,
+      onlyCompleted: true
+    });
+    contextFilePaths.push(...otherContextPaths);
 
-    const folders = listFolders(state.claudiomiroFolder).filter(f => f.startsWith('TASK'));
-    for(const f of folders){
-      if(f === task) continue; // Skip current task
-      const taskPath = path.join(state.claudiomiroFolder, f);
-      ['CONTEXT.md', 'RESEARCH.md'].forEach(file => {
-        const filePath = path.join(taskPath, file);
-        if(fs.existsSync(filePath) && !contextFiles.includes(filePath)){
-          contextFiles.push(filePath);
-        }
-      });
-    }
-
-    const contextSection = contextFiles.length > 0
-      ? `\n\n## 📚 CONTEXT FILES FOR COMPREHENSIVE REVIEW\nTo understand patterns, decisions, and system architecture, read these files:\n${contextFiles.map(f => `- ${f}`).join('\n')}\n\nThese provide:\n- Original requirements and user intent\n- Architectural decisions from previous tasks\n- Code patterns and conventions used\n- Integration points and contracts\n\n`
+    // Build optimized context section with summary + reference paths
+    // Include pre-screen results if available (helps focus the review)
+    const prescreenInfo = prescreenSection
+      ? `\n## 🔍 PRE-SCREENING RESULTS (Local LLM)\n*Issues detected before full review - focus on these:*${prescreenSection}\n`
       : '';
+
+    const contextSection = `\n\n## 📚 CONTEXT SUMMARY FOR REVIEW
+${consolidatedContext}
+${prescreenInfo}
+## REFERENCE FILES (read if more detail needed):
+${contextFilePaths.map(f => `- ${f}`).join('\n')}
+
+These provide:
+- Original requirements and user intent
+- Architectural decisions from previous tasks
+- Code patterns and conventions used
+- Integration points and contracts
+\n`;
 
     // Load prompt template
     let promptTemplate = fs.readFileSync(path.join(__dirname, 'prompt-review.md'), 'utf-8');

@@ -10,6 +10,7 @@ Claudiomiro provides several commands for different automation workflows.
 | [fix-command](./fix-command.md) | Run a command repeatedly until it succeeds |
 | [loop-fixes](./loop-fixes.md) | Continuous issue detection and fixing loop |
 | [fix-branch](./fix-branch.md) | Staff+ Engineer code review before PR |
+| [test-local-llm](./test-local-llm.md) | Test Ollama integration for local LLM features |
 | [help](./help.md) | Display help information and version |
 
 ## Quick Reference
@@ -37,6 +38,12 @@ Iteratively find and fix issues based on a custom prompt.
 claudiomiro --fix-branch [options]
 ```
 Comprehensive Staff+ code review of your branch before opening a PR.
+
+### Test Local LLM
+```bash
+claudiomiro --test-local-llm [--prompt="<prompt>"]
+```
+Test if Ollama integration is working correctly.
 
 ### Help
 ```bash
@@ -81,6 +88,12 @@ These options work across multiple commands:
 - Need comprehensive code review before merge
 - Want to catch blockers, warnings, and suggestions
 - Ensuring branch meets quality standards
+
+### Use `test-local-llm` when:
+- Setting up Ollama for the first time
+- Verifying local LLM integration is working
+- Debugging connection issues with Ollama
+- Testing different local models
 
 ## See Also
 

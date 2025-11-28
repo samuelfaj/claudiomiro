@@ -95,6 +95,9 @@ const run = async (args) => {
     const limitArg = args.find(arg => arg.startsWith('--limit='));
     const maxIterations = noLimit ? Infinity : (limitArg ? parseInt(limitArg.split('=')[1], 10) : 20);
 
+    // Parse --no-clear flag (used when running inside step7 to preserve .claudiomiro folder)
+    const noClear = args.includes('--no-clear');
+
     // Parse level argument
     const blockersOnly = args.includes('--blockers-only');
     const noSuggestions = args.includes('--no-suggestions');
@@ -124,7 +127,7 @@ const run = async (args) => {
     const fixedPrompt = getFixedPrompt(level);
 
     // Execute the loop with the fixed prompt
-    await loopFixes(fixedPrompt, maxIterations);
+    await loopFixes(fixedPrompt, maxIterations, { clearFolder: !noClear });
 };
 
 module.exports = { run, getFixedPrompt, getLevelInstructions, getLevelName };

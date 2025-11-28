@@ -1,3 +1,9 @@
+## OUTPUT RULES (Token Optimization)
+- Respond in the shortest format possible without losing technical precision
+- Use only the reasoning strictly necessary to execute the task
+- Do not include explanations that don't contribute to the solution
+- When running terminal commands, prefer silent versions (--silent, --quiet, -q) except when verbose output is needed for diagnosis
+
 Carefully analyze the task located at: {{taskFolder}}
 1. Evaluate complexity and parallelism
 	•	If this task can be divided into independent and asynchronous subtasks, perform this division in a logical and cohesive manner.

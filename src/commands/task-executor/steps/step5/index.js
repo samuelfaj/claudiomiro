@@ -4,6 +4,11 @@ const state = require('../../../../shared/config/state');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { generateResearchFile } = require('./generate-research');
 const { generateContextFile } = require('./generate-context');
+const {
+  buildConsolidatedContextAsync,
+  markTaskCompleted,
+  getContextFilePaths
+} = require('../../../../shared/services/context-cache');
 
 /**
  * Step 5: Task Execution
@@ -48,56 +53,54 @@ const step5 = async (task) => {
       fs.rmSync(folder('CODE_REVIEW.md'));
     }
 
-    const contextFiles = [
-      path.join(state.claudiomiroFolder, 'AI_PROMPT.md')
-    ];
+    // Read task description for code-index symbol search
+    const taskMdPath = folder('TASK.md');
+    const taskDescription = fs.existsSync(taskMdPath)
+      ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
+      : task;
 
-    const folders = listFolders(state.claudiomiroFolder).filter(f => f.includes('TASK'));
+    // Use incremental context collection instead of reading all files
+    // This significantly reduces token consumption by:
+    // 1. Using cached AI_PROMPT summary instead of full file
+    // 2. Only including new context since last processed task
+    // 3. Using consolidated summaries instead of full file paths
+    // 4. Adding relevant code symbols from code-index (if available)
 
-    for(const f of folders){
-      const taskPath = path.join(state.claudiomiroFolder, f);
-      const taskFiles = fs.readdirSync(taskPath).filter(file => {
-        // Exclude standard files and old TODO backups
-        if(['CODE_REVIEW.md', 'PROMPT.md', 'TASK.md'].includes(file)) return false;
-        if(file.includes('TODO.old.')) return false;
-        if(!file.endsWith('.md')) return false;
+    const consolidatedContext = await buildConsolidatedContextAsync(
+      state.claudiomiroFolder,
+      task,
+      state.folder,
+      taskDescription
+    );
 
-        // Include TODO.md only if task is fully implemented
-        if(file === 'TODO.md'){
-          const todoPath = path.join(taskPath, file);
-          const todoContent = fs.readFileSync(todoPath, 'utf8');
-          return todoContent.startsWith('Fully implemented: YES');
-        }
+    // Get minimal context file paths for reference (not full content)
+    const contextFilePaths = getContextFilePaths(state.claudiomiroFolder, task, {
+      includeContext: true,
+      includeResearch: false, // Current task's RESEARCH.md is added separately
+      includeTodo: false,
+      onlyCompleted: true
+    });
 
-        // Always include RESEARCH.md and CONTEXT.md - they contain valuable context
-        if(file === 'RESEARCH.md' || file === 'CONTEXT.md'){
-          return true;
-        }
-
-        return true;
-      });
-
-      for(const file of taskFiles){
-         const add = path.join(taskPath, file);
-         if(!contextFiles.includes(add)){
-             contextFiles.push(add);
-         }
-      }
-    }
-
-    // Add RESEARCH.md to context files if it exists for this task
+    // Add current task's RESEARCH.md if exists
     if(fs.existsSync(folder('RESEARCH.md'))){
-      contextFiles.push(folder('RESEARCH.md'));
+      contextFilePaths.push(folder('RESEARCH.md'));
     }
 
-    if(contextFiles.length > 0 && fs.existsSync(folder('TODO.md'))){
+    // Update TODO.md with consolidated context (much smaller than listing all files)
+    if(fs.existsSync(folder('TODO.md'))){
       let todo = fs.readFileSync(folder('TODO.md'), 'utf8');
 
-      if(!todo.includes('## PREVIOUS TASKS CONTEXT FILES AND RESEARCH:')){
-         todo += `\n\n## PREVIOUS TASKS CONTEXT FILES AND RESEARCH: ${contextFiles.map(f => `\n- ${f}`).join('')}\n\n`;
-      }
+      if(!todo.includes('## CONSOLIDATED CONTEXT:')){
+        // Add consolidated context summary instead of file list
+        const contextSection = `\n\n## CONSOLIDATED CONTEXT:
+${consolidatedContext}
 
-      fs.writeFileSync(folder('TODO.md'), todo, 'utf8');
+## REFERENCE FILES (read if more detail needed):
+${contextFilePaths.map(f => `- ${f}`).join('\n')}
+\n`;
+        todo += contextSection;
+        fs.writeFileSync(folder('TODO.md'), todo, 'utf8');
+      }
     }
 
 
@@ -154,6 +157,9 @@ const step5 = async (task) => {
 
       // Generate CONTEXT.md after successful execution
       await generateContextFile(task);
+
+      // Mark task as completed in cache for incremental context tracking
+      markTaskCompleted(state.claudiomiroFolder, task);
 
       return result;
     } catch (error) {

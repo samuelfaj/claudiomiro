@@ -67,6 +67,31 @@ claudiomiro --glm         # GLM
 - [DeepSeek Setup](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
 - [GLM Setup](./docs/HOW-TO-RUN-WITH-GLM.md)
 
+### Local LLM Co-Pilot (Optional)
+
+Reduce token consumption and latency by running a local LLM alongside the main AI:
+
+```bash
+# Enable local LLM co-pilot with Ollama
+CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b claudiomiro --prompt="Add authentication"
+```
+
+- [Local LLM Setup Guide](./docs/HOW-TO-RUN-WITH-LOCAL-LLM.md)
+
+### Configuration
+
+Manage persistent configuration interactively:
+
+```bash
+# Open interactive configuration manager
+claudiomiro --config
+
+# Quick set a value
+claudiomiro --config CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b
+```
+
+Configuration is stored globally and loaded automatically on startup.
+
 ## Requirements
 
 For best results, your project should have:

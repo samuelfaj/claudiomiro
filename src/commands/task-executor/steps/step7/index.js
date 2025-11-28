@@ -2,18 +2,17 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 const state = require('../../../../shared/config/state');
-const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
+const { run: runFixBranch } = require('../../../fix-branch');
 
 /**
  * Step 7: Global Critical Bug Sweep
  *
- * Performs a final critical analysis of ALL code changes in the branch:
- * 1. Analyzes git diff between current branch and base branch
- * 2. Hunts for CRITICAL severity bugs only (security, production-breaking issues)
- * 3. Self-corrects bugs in a loop until 0 critical bugs remain
- * 4. Generates BUGS.md to track progress and prevent infinite loops
- * 5. Creates CRITICAL_REVIEW_PASSED.md when complete
+ * Performs a final critical analysis of ALL code changes in the branch using fix-branch:
+ * 1. Validates the session (branch, files, changes)
+ * 2. Delegates to fix-branch with level=2 (Blockers + Warnings)
+ * 3. fix-branch creates BUGS.md to track progress
+ * 4. fix-branch creates CRITICAL_REVIEW_PASSED.md when complete
  *
  * This step runs ONCE after ALL tasks are completed, before step8 (final commit/PR).
  * It acts as a final safety net to catch critical bugs introduced across all tasks.
@@ -112,103 +111,30 @@ const step7 = async (maxIterations = 20) => {
     logger.info('🔍 Starting global critical bug sweep...');
     logger.info(`📍 Analyzing branch: ${state.branch || 'current branch'}`);
 
-    // Show max iterations info
+    // Delegate to fix-branch with level=2 (Blockers + Warnings) and --no-clear
+    // --no-clear prevents fix-branch from deleting the existing .claudiomiro folder
+    const args = [
+        '--level=2',
+        '--no-clear',
+        state.folder
+    ];
+
+    // Add iteration limit
     if (maxIterations === Infinity) {
-        logger.info('🔄 Max iterations: unlimited (--no-limit)');
+        args.unshift('--no-limit');
     } else {
-        logger.info(`🔄 Max iterations: ${maxIterations}`);
+        args.unshift(`--limit=${maxIterations}`);
     }
 
-    // Load prompt template
-    const promptPath = path.join(__dirname, 'prompt.md');
-    if (!fs.existsSync(promptPath)) {
-        throw new Error('Step 7 prompt.md not found');
+    logger.info(`🔧 Using fix-branch (level: 2 - blockers + warnings)`);
+
+    try {
+        await runFixBranch(args);
+        logger.success('✅ Step 7 completed - Critical review passed!');
+    } catch (error) {
+        logger.error(`❌ Step 7 failed: ${error.message}`);
+        throw error;
     }
-
-    let promptTemplate = fs.readFileSync(promptPath, 'utf-8');
-
-    // Self-correction loop
-    for (let iteration = 1; iteration <= maxIterations; iteration++) {
-        const iterationDisplay = maxIterations === Infinity ? `${iteration}` : `${iteration}/${maxIterations}`;
-        logger.info(`\n🔄 Iteration ${iterationDisplay}`);
-
-        // Replace placeholders
-        const prompt = promptTemplate
-            .replace(/\{\{iteration\}\}/g, iteration)
-            .replace(/\{\{maxIterations\}\}/g, maxIterations === Infinity ? 'unlimited' : maxIterations)
-            .replace(/\{\{bugsPath\}\}/g, bugsPath)
-            .replace(/\{\{passedPath\}\}/g, passedPath)
-            .replace(/\{\{claudiomiroFolder\}\}/g, state.claudiomiroFolder)
-            .replace(/\{\{branch\}\}/g, state.branch || 'HEAD');
-
-        logger.startSpinner(`Analyzing code changes for critical bugs...`);
-        try {
-            await executeClaude(prompt);
-        } catch (error) {
-            logger.stopSpinner();
-            logger.error(`⚠️  Claude execution failed on iteration ${iteration}: ${error.message}`);
-            throw new Error(`Step 7 failed during iteration ${iteration}: ${error.message}`);
-        }
-        logger.stopSpinner();
-
-        // Check if CRITICAL_REVIEW_PASSED.md was created
-        if (fs.existsSync(passedPath)) {
-            logger.success('✅ No critical bugs found - Review passed!');
-
-            // Log summary
-            if (fs.existsSync(bugsPath)) {
-                try {
-                    const bugsContent = fs.readFileSync(bugsPath, 'utf-8');
-                    const fixedCount = (bugsContent.match(/Status: FIXED/gi) || []).length;
-                    if (fixedCount > 0) {
-                        logger.info(`📊 Summary: ${fixedCount} critical bug(s) fixed across ${iteration} iteration(s)`);
-                    }
-                } catch (error) {
-                    logger.warning(`⚠️  Could not read BUGS.md for summary: ${error.message}`);
-                }
-            }
-
-            return;
-        }
-
-        // Check if BUGS.md was updated
-        if (!fs.existsSync(bugsPath)) {
-            logger.warning('⚠️  BUGS.md not found - Claude may not have detected or documented bugs properly');
-        } else {
-            try {
-                const bugsContent = fs.readFileSync(bugsPath, 'utf-8');
-                const pendingCount = (bugsContent.match(/Status: PENDING/gi) || []).length;
-                const fixedCount = (bugsContent.match(/Status: FIXED/gi) || []).length;
-
-                logger.info(`📋 Bugs tracked: ${fixedCount} fixed, ${pendingCount} pending`);
-
-                if (pendingCount === 0 && fixedCount === 0) {
-                    logger.warning('⚠️  BUGS.md exists but has no bugs listed - unexpected state');
-                }
-            } catch (error) {
-                logger.warning(`⚠️  Could not read BUGS.md: ${error.message}`);
-            }
-        }
-
-        // Continue to next iteration
-        logger.info('🔧 Continuing to next iteration for bug fixes...');
-    }
-
-    // Max iterations reached - still have bugs
-    const maxIterDisplay = maxIterations === Infinity ? 'unlimited' : maxIterations;
-    logger.error(`❌ Max iterations (${maxIterDisplay}) reached with critical bugs remaining`);
-
-    if (fs.existsSync(bugsPath)) {
-        logger.error('📋 See BUGS.md for details on remaining critical bugs');
-        try {
-            const bugsContent = fs.readFileSync(bugsPath, 'utf-8');
-            logger.error(`\n${bugsContent}`);
-        } catch (error) {
-            logger.error(`⚠️  Could not read BUGS.md: ${error.message}`);
-        }
-    }
-
-    throw new Error(`Critical bugs still present after ${maxIterDisplay} iterations. Manual intervention required.`);
 };
 
 module.exports = { step7 };

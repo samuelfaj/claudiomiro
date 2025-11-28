@@ -2,11 +2,17 @@ const fs = require('fs');
 const path = require('path');
 const state = require('../../../../shared/config/state');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const {
+  getReusableResearch,
+  indexResearch
+} = require('../../../../shared/services/research-manager');
 
 /**
  * Generates RESEARCH.md file with deep context analysis
  * Performs comprehensive codebase exploration to find similar patterns,
  * reusable components, and integration points before task execution
+ *
+ * Token-optimized: Reuses similar research when available (80%+ similarity)
  *
  * @param {string} task - Task identifier (e.g., 'TASK1', 'TASK2')
  * @returns {Promise<void>}
@@ -25,6 +31,34 @@ const generateResearchFile = async (task) => {
   }
 
   const logger = require('../../../../shared/utils/logger');
+
+  // Try to reuse similar research first (token optimization)
+  const taskContent = fs.existsSync(folder('TASK.md'))
+    ? fs.readFileSync(folder('TASK.md'), 'utf8')
+    : '';
+
+  const reusableResearch = getReusableResearch(state.claudiomiroFolder, taskContent);
+
+  if (reusableResearch) {
+    logger.info(`Reusing research from ${reusableResearch.sourceTask} (${Math.round(reusableResearch.similarity * 100)}% similar)`);
+
+    // Add adaptation note to reused research
+    const adaptedContent = `# RESEARCH.md (Adapted from ${reusableResearch.sourceTask})
+
+> ${reusableResearch.adaptationNote}
+
+${reusableResearch.content}
+
+---
+## Task-Specific Additions
+
+Review the content above and adapt as needed for this specific task.
+`;
+
+    fs.writeFileSync(folder('RESEARCH.md'), adaptedContent, 'utf8');
+    logger.success('Reused similar research (saved ~15K+ tokens)');
+    return;
+  }
 
   logger.startSpinner('Analyzing task and gathering context...');
 
@@ -59,6 +93,9 @@ const generateResearchFile = async (task) => {
       fs.rmSync(folder('RESEARCH.md'));
       throw new Error('Research phase incomplete: insufficient analysis');
     }
+
+    // Index the research for future reuse (token optimization)
+    indexResearch(state.claudiomiroFolder, task, taskContent, researchContent);
 
     logger.success('Research completed and saved to RESEARCH.md');
   } catch (error) {

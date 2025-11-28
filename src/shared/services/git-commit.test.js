@@ -1,12 +1,27 @@
 const logger = require('../utils/logger');
 const state = require('../config/state');
 const { executeClaude } = require('../executors/claude-executor');
-const { commitOrFix } = require('./git-commit');
+const { commitOrFix, generateCommitMessageLocally, smartCommit } = require('./git-commit');
+const { getLocalLLMService } = require('./local-llm');
 
 // Mock modules
-jest.mock('../utils/logger');
+jest.mock('fs');
+jest.mock('child_process');
+jest.mock('../utils/logger', () => ({
+  stopSpinner: jest.fn(),
+  info: jest.fn(),
+  warning: jest.fn(),
+  success: jest.fn(),
+  newline: jest.fn(),
+  separator: jest.fn(),
+  debug: jest.fn()
+}));
 jest.mock('../config/state');
 jest.mock('../executors/claude-executor');
+jest.mock('./local-llm');
+
+const fs = require('fs');
+const { execSync } = require('child_process');
 
 describe('git-commit', () => {
   beforeEach(() => {
@@ -15,6 +30,11 @@ describe('git-commit', () => {
 
     // Setup default mocks
     executeClaude.mockResolvedValue();
+    state.claudiomiroFolder = '/test/.claudiomiro';
+    state.folder = '/test';
+    fs.existsSync.mockReturnValue(false);
+    fs.readFileSync.mockReturnValue('Task description content');
+    getLocalLLMService.mockReturnValue(null); // Default: no local LLM
   });
 
   describe('commitOrFix', () => {
@@ -273,6 +293,244 @@ describe('git-commit', () => {
         // Reset for next iteration
         executeClaude.mockClear();
       }
+    });
+  });
+
+  describe('smartCommit', () => {
+    beforeEach(() => {
+      jest.clearAllMocks();
+      state.folder = '/test';
+      state.claudiomiroFolder = '/test/.claudiomiro';
+    });
+
+    describe('when no changes to commit', () => {
+      test('should return success with no changes message', async () => {
+        execSync.mockReturnValue('');
+
+        const result = await smartCommit();
+
+        expect(result).toEqual({
+          success: true,
+          method: 'shell',
+          message: 'No changes to commit'
+        });
+        expect(logger.info).toHaveBeenCalledWith('📝 No changes to commit');
+      });
+    });
+
+    describe('when git status fails', () => {
+      test('should fall back to Claude', async () => {
+        execSync.mockImplementation((cmd) => {
+          if (cmd === 'git status --porcelain') {
+            throw new Error('Git not installed');
+          }
+          return '';
+        });
+        executeClaude.mockResolvedValue();
+
+        const result = await smartCommit({ taskName: 'TASK1', shouldPush: true });
+
+        expect(result).toEqual({
+          success: true,
+          method: 'claude'
+        });
+        expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Using Claude for git operations'));
+      });
+    });
+
+    describe('when local LLM is not available', () => {
+      test('should fall back to Claude', async () => {
+        execSync.mockReturnValue('M file.js\n');
+        getLocalLLMService.mockReturnValue(null);
+        executeClaude.mockResolvedValue();
+
+        const result = await smartCommit();
+
+        expect(result).toEqual({
+          success: true,
+          method: 'claude'
+        });
+        expect(logger.debug).toHaveBeenCalledWith('[Git] Local LLM not available, falling back to Claude');
+      });
+    });
+
+    describe('when local LLM is available', () => {
+      let mockLLM;
+
+      beforeEach(() => {
+        mockLLM = {
+          initialize: jest.fn().mockResolvedValue(),
+          isAvailable: jest.fn().mockReturnValue(true),
+          generateCommitMessage: jest.fn().mockResolvedValue({
+            title: 'feat: add new feature',
+            body: 'This adds a new feature to the system'
+          })
+        };
+        getLocalLLMService.mockReturnValue(mockLLM);
+        execSync.mockImplementation((cmd) => {
+          if (cmd === 'git status --porcelain') return 'M file.js\n';
+          if (cmd === 'git diff --staged --stat') return 'file.js | 5 +++++\n';
+          return '';
+        });
+      });
+
+      test('should commit via shell with Ollama message', async () => {
+        const result = await smartCommit({ taskName: 'TASK1' });
+
+        expect(result).toEqual({
+          success: true,
+          method: 'shell'
+        });
+        expect(logger.success).toHaveBeenCalledWith('✅ Commit successful via shell');
+      });
+
+      test('should stage all changes before commit', async () => {
+        await smartCommit();
+
+        expect(execSync).toHaveBeenCalledWith('git add .', expect.objectContaining({
+          cwd: '/test'
+        }));
+      });
+
+      test('should include commit body when present', async () => {
+        mockLLM.generateCommitMessage.mockResolvedValue({
+          title: 'feat: new feature',
+          body: 'Detailed description here'
+        });
+
+        await smartCommit();
+
+        expect(execSync).toHaveBeenCalledWith(
+          expect.stringContaining('git commit -m'),
+          expect.any(Object)
+        );
+      });
+
+      test('should push when shouldPush is true', async () => {
+        await smartCommit({ shouldPush: true });
+
+        expect(execSync).toHaveBeenCalledWith('git push', expect.objectContaining({
+          cwd: '/test',
+          timeout: 60000
+        }));
+        expect(logger.success).toHaveBeenCalledWith('✅ Push successful');
+      });
+
+      test('should not push when shouldPush is false', async () => {
+        await smartCommit({ shouldPush: false });
+
+        const pushCalls = execSync.mock.calls.filter(call => call[0] === 'git push');
+        expect(pushCalls).toHaveLength(0);
+      });
+
+      test('should fall back to Claude when push fails and createPR is true', async () => {
+        execSync.mockImplementation((cmd) => {
+          if (cmd === 'git status --porcelain') return 'M file.js\n';
+          if (cmd === 'git diff --staged --stat') return 'file.js | 5 +++++\n';
+          if (cmd === 'git push') throw new Error('Push rejected');
+          return '';
+        });
+        executeClaude.mockResolvedValue();
+
+        const result = await smartCommit({ shouldPush: true, createPR: true });
+
+        expect(result).toEqual({
+          success: true,
+          method: 'claude'
+        });
+        expect(logger.warning).toHaveBeenCalledWith('⚠️ Push failed: Push rejected');
+      });
+
+      test('should return success when push fails but createPR is false', async () => {
+        execSync.mockImplementation((cmd) => {
+          if (cmd === 'git status --porcelain') return 'M file.js\n';
+          if (cmd === 'git diff --staged --stat') return 'file.js | 5 +++++\n';
+          if (cmd === 'git push') throw new Error('Push rejected');
+          return '';
+        });
+
+        const result = await smartCommit({ shouldPush: true, createPR: false });
+
+        expect(result).toEqual({
+          success: true,
+          method: 'shell',
+          message: 'Commit succeeded, push failed'
+        });
+      });
+
+      test('should use Claude for PR creation', async () => {
+        executeClaude.mockResolvedValue();
+
+        const result = await smartCommit({ createPR: true });
+
+        expect(result).toEqual({
+          success: true,
+          method: 'claude'
+        });
+        expect(logger.info).toHaveBeenCalledWith('🔗 Creating PR via Claude...');
+      });
+
+      test('should read TASK.md for task description', async () => {
+        fs.existsSync.mockReturnValue(true);
+        fs.readFileSync.mockReturnValue('Task description from file');
+
+        await smartCommit({ taskName: 'TASK1' });
+
+        expect(fs.existsSync).toHaveBeenCalledWith('/test/.claudiomiro/TASK1/TASK.md');
+        expect(fs.readFileSync).toHaveBeenCalledWith('/test/.claudiomiro/TASK1/TASK.md', 'utf-8');
+      });
+    });
+
+    describe('when shell commit fails', () => {
+      test('should fall back to Claude', async () => {
+        const mockLLM = {
+          initialize: jest.fn().mockResolvedValue(),
+          isAvailable: jest.fn().mockReturnValue(true),
+          generateCommitMessage: jest.fn().mockResolvedValue({
+            title: 'feat: new feature',
+            body: ''
+          })
+        };
+        getLocalLLMService.mockReturnValue(mockLLM);
+        execSync.mockImplementation((cmd) => {
+          if (cmd === 'git status --porcelain') return 'M file.js\n';
+          if (cmd === 'git diff --staged --stat') return 'file.js | 5 +++++\n';
+          if (cmd.startsWith('git commit')) throw new Error('Commit failed');
+          return '';
+        });
+        executeClaude.mockResolvedValue();
+
+        const result = await smartCommit();
+
+        expect(result).toEqual({
+          success: true,
+          method: 'claude'
+        });
+        expect(logger.debug).toHaveBeenCalledWith('[Git] Shell commit failed: Commit failed');
+      });
+    });
+
+    describe('default parameters', () => {
+      test('should use defaults when no options provided', async () => {
+        execSync.mockReturnValue('');
+
+        await smartCommit();
+
+        expect(logger.stopSpinner).toHaveBeenCalled();
+      });
+
+      test('should use taskName when provided', async () => {
+        execSync.mockReturnValue('M file.js\n');
+        getLocalLLMService.mockReturnValue(null);
+        executeClaude.mockResolvedValue();
+
+        await smartCommit({ taskName: 'TASK1' });
+
+        expect(executeClaude).toHaveBeenCalledWith(
+          expect.stringContaining('git add . and git commit'),
+          'TASK1'
+        );
+      });
     });
   });
 });

@@ -6,7 +6,13 @@ jest.mock('fs');
 jest.mock('path');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-  claudiomiroFolder: '/test/.claudiomiro'
+  claudiomiroFolder: '/test/.claudiomiro',
+  folder: '/test/project'
+}));
+// Mock context-cache service (token optimization)
+jest.mock('../../../../shared/services/context-cache', () => ({
+  buildConsolidatedContextAsync: jest.fn().mockResolvedValue('## Environment Summary\nMocked context'),
+  getContextFilePaths: jest.fn().mockReturnValue([])
 }));
 
 // Import after mocking
@@ -169,71 +175,69 @@ describe('review-code', () => {
       }
     });
 
-    test('should collect context from other tasks', async () => {
-      // Arrange
+    test('should include context files from context-cache service', async () => {
+      // Arrange - Mock context-cache to return files from other tasks
+      const { getContextFilePaths } = require('../../../../shared/services/context-cache');
+      getContextFilePaths.mockReturnValue([
+        '/test/.claudiomiro/TASK2/CONTEXT.md',
+        '/test/.claudiomiro/TASK3/CONTEXT.md'
+      ]);
+
       fs.existsSync.mockImplementation((filePath) => {
         if (filePath.includes('AI_PROMPT.md')) return true;
         if (filePath.includes('INITIAL_PROMPT.md')) return true;
-        if (filePath.includes('TASK2/CONTEXT.md')) return true;
-        if (filePath.includes('TASK2/RESEARCH.md')) return true;
-        if (filePath.includes('TASK3/CONTEXT.md')) return true;
         return false;
       });
-
-      fs.readdirSync.mockReturnValue(['TASK1', 'TASK2', 'TASK3']);
-      fs.statSync.mockReturnValue({ isDirectory: () => true });
 
       // Act
       await reviewCode(mockTask);
 
-      // Assert
+      // Assert - files returned by context-cache should be in reference section
       const actualCall = executeClaude.mock.calls[0][0];
       expect(actualCall).toContain('/test/.claudiomiro/TASK2/CONTEXT.md');
-      expect(actualCall).toContain('/test/.claudiomiro/TASK2/RESEARCH.md');
       expect(actualCall).toContain('/test/.claudiomiro/TASK3/CONTEXT.md');
     });
 
-    test('should skip current task when collecting from other tasks', async () => {
-      // Arrange - Set up scenario where TASK2 files exist but TASK1 files don't (except current task check)
-      fs.existsSync.mockImplementation((filePath) => {
-        if (filePath.includes('AI_PROMPT.md')) return true;
-        if (filePath.includes('INITIAL_PROMPT.md')) return true;
-        if (filePath.includes('TASK1/CONTEXT.md')) return false; // Current task files don't exist for initial check
-        if (filePath.includes('TASK2/CONTEXT.md')) return true; // Other task files exist
-        if (filePath.includes('TASK2/RESEARCH.md')) return true; // Other task files exist
-        return false;
-      });
+    test('should call context-cache service with current task excluded', async () => {
+      // Arrange
+      const { getContextFilePaths, buildConsolidatedContextAsync } = require('../../../../shared/services/context-cache');
 
-      fs.readdirSync.mockReturnValue(['TASK1', 'TASK2']);
-      fs.statSync.mockReturnValue({ isDirectory: () => true });
+      fs.existsSync.mockReturnValue(false);
 
       // Act
       await reviewCode(mockTask);
 
-      // Assert - should include TASK2 files (from other tasks) but not TASK1 files (skipped in other task collection)
-      const actualCall = executeClaude.mock.calls[0][0];
-      expect(actualCall).toContain('/test/.claudiomiro/TASK2/CONTEXT.md');
-      expect(actualCall).toContain('/test/.claudiomiro/TASK2/RESEARCH.md');
-      // TASK1/CONTEXT.md should not appear because it was skipped in "other tasks" collection
-      // and it returned false for the initial current task check
+      // Assert - context-cache service should be called with current task to be excluded
+      expect(buildConsolidatedContextAsync).toHaveBeenCalledWith(
+        '/test/.claudiomiro',
+        mockTask,
+        expect.anything(), // projectFolder (state.folder)
+        expect.any(String) // taskDescription
+      );
+      expect(getContextFilePaths).toHaveBeenCalledWith(
+        '/test/.claudiomiro',
+        mockTask,
+        expect.objectContaining({ onlyCompleted: true })
+      );
     });
 
-    test('should deduplicate context files', async () => {
-      // Arrange - Simulate same file appearing multiple times
+    test('should include each context file only once in reference list', async () => {
+      // Arrange - context-cache returns unique files (deduplication is handled by service)
+      const { getContextFilePaths } = require('../../../../shared/services/context-cache');
+      getContextFilePaths.mockReturnValue([
+        '/test/.claudiomiro/TASK2/CONTEXT.md'
+      ]);
+
       fs.existsSync.mockImplementation((filePath) => {
         if (filePath.includes('AI_PROMPT.md')) return true;
         if (filePath.includes('INITIAL_PROMPT.md')) return true;
-        if (filePath.includes('TASK2/CONTEXT.md')) return true;
         return false;
       });
-
-      fs.readdirSync.mockReturnValue(['TASK1', 'TASK2']);
-      fs.statSync.mockReturnValue({ isDirectory: () => true });
 
       // Act
       await reviewCode(mockTask);
 
-      // Assert - CONTEXT.md should appear only once in the context
+      // Assert - CONTEXT.md should appear only once in the reference list
       const prompt = executeClaude.mock.calls[0][0];
       const contextMatches = prompt.match(/TASK2\/CONTEXT\.md/g);
       expect(contextMatches ? contextMatches.length : 0).toBe(1);
@@ -428,40 +432,34 @@ describe('review-code', () => {
   });
 
   describe('context section building', () => {
-    test('should build context section when files exist', async () => {
+    test('should build context section with consolidated context', async () => {
       // Arrange
       fs.existsSync.mockImplementation((filePath) => {
         if (filePath.includes('AI_PROMPT.md')) return true;
         if (filePath.includes('INITIAL_PROMPT.md')) return true;
-        if (filePath.includes('TASK2/CONTEXT.md')) return true;
         return false;
       });
-
-      fs.readdirSync.mockReturnValue(['TASK1', 'TASK2']);
-      fs.statSync.mockReturnValue({ isDirectory: () => true });
 
       // Act
       await reviewCode(mockTask);
 
-      // Assert
+      // Assert - now uses consolidated context structure
       const actualCall = executeClaude.mock.calls[0][0];
-      expect(actualCall).toContain('## 📚 CONTEXT FILES FOR COMPREHENSIVE REVIEW');
-      expect(actualCall).toContain('AI_PROMPT.md');
-      expect(actualCall).toContain('INITIAL_PROMPT.md');
+      expect(actualCall).toContain('## 📚 CONTEXT SUMMARY FOR REVIEW');
+      expect(actualCall).toContain('REFERENCE FILES');
     });
 
-    test('should always include context section with base files', async () => {
-      // Arrange - even when all files return false, base files are always included
+    test('should always include context summary section', async () => {
+      // Arrange - even when all files return false, consolidated context is always included
       fs.existsSync.mockReturnValue(false);
 
       // Act
       await reviewCode(mockTask);
 
-      // Assert - context section is always built because AI_PROMPT.md and INITIAL_PROMPT.md are always added
+      // Assert - context section is always built using consolidated context
       const actualCall = executeClaude.mock.calls[0][0];
-      expect(actualCall).toContain('## 📚 CONTEXT FILES FOR COMPREHENSIVE REVIEW');
-      expect(actualCall).toContain('/test/.claudiomiro/AI_PROMPT.md');
-      expect(actualCall).toContain('/test/.claudiomiro/INITIAL_PROMPT.md');
+      expect(actualCall).toContain('## 📚 CONTEXT SUMMARY FOR REVIEW');
+      expect(actualCall).toContain('Environment Summary');
     });
   });
 });

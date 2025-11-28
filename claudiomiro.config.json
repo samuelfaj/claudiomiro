@@ -1,0 +1,5 @@
+{
+  "CLAUDIOMIRO_LOCAL_LLM": "qwen2.5-coder:7b",
+  "CLAUDIOMIRO_LLM_CACHE": "true",
+  "CLAUDIOMIRO_EXECUTOR": "claude"
+}

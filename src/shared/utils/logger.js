@@ -75,6 +75,15 @@ class Logger {
         });
     }
 
+    // Debug logs - only shown when DEBUG or CLAUDIOMIRO_DEBUG env var is set
+    debug(message) {
+        if (process.env.DEBUG || process.env.CLAUDIOMIRO_DEBUG) {
+            this.withOutput(() => {
+                console.log(`${this.getIndent()}${chalk.gray('[DEBUG]')} ${chalk.gray(message)}`);
+            });
+        }
+    }
+
     // Log de step/fase
     step(task, tasks, number, message) {
         const tasksText = chalk.bold.white(`[TASK ${task}/${tasks}]`);

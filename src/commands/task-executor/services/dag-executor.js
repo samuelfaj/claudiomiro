@@ -4,7 +4,7 @@ const os = require('os');
 const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
 const { step4, step5, step6, step7 } = require('../steps');
-const { isFullyImplemented, hasApprovedCodeReview } = require('../utils/validation');
+const { isFullyImplemented, isFullyImplementedAsync, hasApprovedCodeReview } = require('../utils/validation');
 const ParallelStateManager = require('./parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
@@ -168,16 +168,17 @@ class DAGExecutor {
         fs.rmSync(todoOldPath, { force: true });
       }
 
-      const isTaskApproved = () => {
+      const isTaskApproved = async () => {
         if (!fs.existsSync(todoPath)) {
           return false;
         }
 
-        return isFullyImplemented(todoPath) && hasApprovedCodeReview(codeReviewPath);
+        const completionResult = await isFullyImplementedAsync(todoPath);
+        return completionResult.completed && hasApprovedCodeReview(codeReviewPath);
       };
 
       // Verifica se já está completa
-      if (isTaskApproved()) {
+      if (await isTaskApproved()) {
         this.stateManager.updateTaskStatus(taskName, 'completed');
         this.tasks[taskName].status = 'completed';
         this.running.delete(taskName);
@@ -224,7 +225,8 @@ class DAGExecutor {
         attempts++;
 
         // Step 5: Implementação
-        if (!fs.existsSync(todoPath) || !isFullyImplemented(todoPath)) {
+        const completionCheck = await isFullyImplementedAsync(todoPath);
+        if (!fs.existsSync(todoPath) || !completionCheck.completed) {
           try {
             this.stateManager.updateTaskStep(taskName, `Step 5 - Implementing tasks (attempt ${attempts})`);
             await step5(taskName);
@@ -256,7 +258,7 @@ class DAGExecutor {
           await step6(taskName, shouldPush);
 
           // Se ainda não foi aprovado, continua o loop
-          if (!isTaskApproved()) {
+          if (!(await isTaskApproved())) {
             continue;
           }
         }
@@ -472,13 +474,35 @@ class DAGExecutor {
         logger.newline();
         logger.error('❌ STEP 7 FAILED: Critical bugs remain after maximum iterations');
         logger.error('');
-        logger.error('📋 Check the following file for details:');
-        logger.error(`   ${path.join(state.claudiomiroFolder, 'BUGS.md')}`);
-        logger.error('');
-        logger.error('💡 Next steps:');
-        logger.error('   1. Review BUGS.md to see which critical bugs were found');
-        logger.error('   2. Fix the bugs manually');
-        logger.error('   3. Run Claudiomiro again to verify fixes');
+
+        const bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
+        if (fs.existsSync(bugsPath)) {
+          logger.error('📋 Check the following file for details:');
+          logger.error(`   ${bugsPath}`);
+          logger.error('');
+          logger.error('💡 Next steps:');
+          logger.error('   1. Review BUGS.md to see which critical bugs were found');
+          logger.error('   2. Fix the bugs manually');
+          logger.error('   3. Run Claudiomiro again to verify fixes');
+        } else {
+          logger.error('⚠️  BUGS.md was not created by the analysis.');
+          logger.error('');
+          logger.error('💡 This could mean:');
+          logger.error('   1. Claude failed to execute properly during the bug sweep');
+          logger.error('   2. There was an issue with the analysis prompt or git diff');
+          logger.error('   3. The AI could not complete the analysis within the iteration limit');
+          logger.error('');
+          const logPath = path.join(state.claudiomiroFolder, 'log.txt');
+          if (fs.existsSync(logPath)) {
+            logger.error('📄 Check Claude execution log for details:');
+            logger.error(`   ${logPath}`);
+            logger.error('');
+          }
+          logger.error('💡 Next steps:');
+          logger.error('   1. Check the log.txt file above to see Claude output');
+          logger.error('   2. Check git diff manually: git diff main...HEAD');
+          logger.error('   3. Run Claudiomiro again with --debug flag for more details');
+        }
         logger.newline();
         throw error; // Propaga erro para impedir step8 e parar o processo
       }

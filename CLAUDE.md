@@ -495,6 +495,123 @@ Each executor has its own logger and implementation:
 - `deep-seek-executor.js` / `deep-seek-logger.js`
 - `glm-executor.js` / `glm-logger.js`
 
+### Local LLM (Ollama) Integration
+
+Claudiomiro supports optional Ollama integration for local LLM tasks like semantic search, context summarization, and code analysis.
+
+#### Critical Rules for Ollama Integration
+
+**ALWAYS IMPLEMENT FALLBACK** - This is non-negotiable:
+
+1. **Ollama is OPTIONAL** - Users may not have Ollama installed at all
+2. **Limited Models** - Users typically run small models like `qwen2.5-coder:7b` with limited capabilities
+3. **Graceful Degradation** - Every Ollama-powered feature MUST work without Ollama
+
+#### Why Fallback is Mandatory
+
+- Not all users have Ollama installed
+- Small local models (7B parameters) have limited reasoning
+- Network/service failures can occur anytime
+- Claudiomiro must work offline without local LLM
+
+#### Implementation Pattern
+
+**✅ CORRECT - Always with fallback:**
+```javascript
+async function semanticSearch(topic, symbols) {
+  // Try LLM-based search
+  const llm = getLocalLLM();
+  if (llm) {
+    try {
+      await llm.initialize();
+      if (llm.isAvailable()) {
+        const result = await llm.rankFileRelevance(symbols, topic);
+        if (result && result.length > 0) {
+          return result; // LLM succeeded
+        }
+      }
+    } catch {
+      // Fallback on any error
+    }
+  }
+
+  // FALLBACK: keyword-based search (always works)
+  return keywordSearch(topic, symbols);
+}
+```
+
+**❌ WRONG - No fallback:**
+```javascript
+async function semanticSearch(topic, symbols) {
+  const llm = getLocalLLM();
+  // ❌ Will crash if Ollama not available!
+  const result = await llm.rankFileRelevance(symbols, topic);
+  return result;
+}
+```
+
+#### Fallback Strategy Guidelines
+
+| Feature | With Ollama | Fallback (No Ollama) |
+|---------|-------------|----------------------|
+| Semantic search | LLM-ranked results | Keyword matching |
+| Context summarization | AI-generated summaries | Truncated content |
+| Symbol explanation | Natural language description | Basic template description |
+| Relevance scoring | LLM confidence score | Keyword frequency score |
+| Task classification | AI categorization | Regex pattern matching |
+
+#### Code Location
+
+- **LocalLLMService**: `src/shared/services/local-llm/index.js`
+- **OllamaClient**: `src/shared/services/local-llm/ollama-client.js`
+- **Fallback implementations**: `src/shared/services/local-llm/fallbacks/`
+
+#### Enabling Ollama
+
+```bash
+# Set environment variable with model name
+export CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b
+
+# Or in .claudiomiro.config.json
+{
+  "CLAUDIOMIRO_LOCAL_LLM": "qwen2.5-coder:7b"
+}
+```
+
+#### Testing Ollama Features
+
+Always test both scenarios:
+
+```javascript
+describe('semanticSearch', () => {
+  test('should work with Ollama available', async () => {
+    // Mock Ollama as available
+    // Verify LLM-enhanced results
+  });
+
+  test('should fallback when Ollama unavailable', async () => {
+    // Ensure no CLAUDIOMIRO_LOCAL_LLM env var
+    // Verify fallback results are returned
+    // Feature must still work!
+  });
+});
+```
+
+#### Quality Checklist for Ollama Features
+
+Before adding any Ollama-powered feature, verify:
+
+- [ ] Does the feature work WITHOUT Ollama? (mandatory)
+- [ ] Is the fallback logic tested?
+- [ ] Does the fallback provide reasonable results?
+- [ ] Is there a try/catch wrapping all LLM calls?
+- [ ] Does it check `llm.isAvailable()` before using?
+- [ ] Will small models (7B) handle this task well?
+
+**Remember**: The user experience must be seamless regardless of whether Ollama is installed!
+
+---
+
 ## Best Practices
 
 1. **Always write tests** - Code without tests doesn't enter the project

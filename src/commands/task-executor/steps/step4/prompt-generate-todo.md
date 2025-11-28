@@ -1,5 +1,11 @@
 # TODO.md Generation Task — Deep Context Analysis Required
 
+## OUTPUT RULES (Token Optimization)
+- Respond in the shortest format possible without losing technical precision
+- Use only the reasoning strictly necessary to execute the task
+- Do not include explanations that don't contribute to the solution
+- When running terminal commands, prefer silent versions (--silent, --quiet, -q) except when verbose output is needed for diagnosis
+
 ## 🎯 OBJECTIVE
 Create a comprehensive, executable TODO.md file that an autonomous agent can follow WITHOUT external clarification.
 
@@ -8,6 +14,19 @@ Your TODO.md MUST be:
 - **Precise**: Exact file paths, line numbers, concrete examples
 - **Actionable**: Step-by-step instructions with clear verification
 - **Context-rich**: Propagates environment, conventions, and codebase patterns
+
+---
+
+## 📚 CONSOLIDATED CONTEXT (Token-Optimized)
+
+The section below contains a **pre-built summary** of the project environment extracted from previous tasks. Use this summary as your PRIMARY source of context - it contains the essential information you need.
+
+**IMPORTANT: Token Optimization Strategy**
+- ✅ **USE the summary below FIRST** - it has tech stack, architecture, and conventions already extracted
+- ✅ **Reference files are listed** - read them ONLY if you need more specific details
+- ❌ **DO NOT re-read AI_PROMPT.md entirely** - the summary already has the key information
+- ❌ **DO NOT iterate all previous task folders** - completed task context is already summarized
+
 {{contextSection}}
 ---
 
@@ -165,14 +184,14 @@ Each item MUST include ALL subsections:
     # Development (adapt to actual project)
     [npm run dev / python main.py / go run . / dotnet run / etc.]
 
-    # Tests (ONLY affected paths - adapt to test runner)
-    [npm test path / pytest path / go test ./path / mvn test / etc.]
+    # Tests (ONLY affected paths - USE QUIET FLAGS)
+    [npm test path --silent / pytest path -q --tb=line / go test -json ./path / mvn test -q / etc.]
 
-    # Lint/Format (ONLY changed files - if applicable)
-    [eslint --fix path / black path / gofmt / rubocop / etc.]
+    # Lint/Format (ONLY changed files - USE QUIET FLAGS)
+    [eslint --fix path --quiet / black path --quiet / gofmt / rubocop --format simple / etc.]
 
-    # Type/Compile check (if applicable)
-    [tsc --noEmit / mypy path / go build / javac / etc.]
+    # Type/Compile check (USE MINIMAL OUTPUT)
+    [tsc --noEmit --pretty false / mypy path --no-error-summary / go build / javac / etc.]
     ```
 
   - **Risks & Mitigations:**
@@ -191,19 +210,19 @@ Each item MUST include ALL subsections:
 #### 4. Verification (Global)
 ```markdown
 ## Verification (global)
-- [ ] Run targeted tests ONLY for changed code (adapt commands to project):
+- [ ] Run targeted tests ONLY for changed code (USE QUIET/SILENT FLAGS):
       ```bash
-      # Examples - use actual project commands:
-      [test_command] path/to/changed/files
-      # npm test path / pytest path / go test ./path / mvn test -Dtest=Class
+      # Examples - use actual project commands with QUIET flags:
+      [test_command] path/to/changed/files --silent
+      # npm test path --silent / pytest path -q --tb=line / go test -json ./path / mvn test -q
 
-      [lint_command] path/to/changed/files
-      # eslint --fix path / black path / gofmt -w path / rubocop path
+      [lint_command] path/to/changed/files --quiet
+      # eslint --fix path --quiet / black path --quiet / gofmt -w path / rubocop --format simple
 
       [type_or_compile_check] (if applicable)
-      # tsc --noEmit / mypy path / go build / javac
+      # tsc --noEmit --pretty false / mypy path --no-error-summary / go build
       ```
-      **CRITICAL:** Do not run full-project checks (target only changed paths)
+      **CRITICAL:** Do not run full-project checks. Use quiet/silent flags to minimize output.
 - [ ] All acceptance criteria met (see below)
 - [ ] Code follows conventions from AI_PROMPT.md and PROMPT.md
 - [ ] Integration points properly implemented (contracts match dependencies)

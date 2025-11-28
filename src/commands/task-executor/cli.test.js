@@ -45,6 +45,8 @@ state.setFolder = jest.fn((folderPath) => {
     mockClaudiomiroFolder = path.join(mockFolder, '.claudiomiro');
 });
 
+state.initializeCache = jest.fn();
+
 Object.defineProperty(state, 'folder', {
     get: () => mockFolder,
     configurable: true

@@ -114,7 +114,8 @@ describe('fix-branch command', () => {
 
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('CORRECTION LEVEL: 1'),
-                20
+                20,
+                { clearFolder: true }
             );
         });
 
@@ -123,7 +124,8 @@ describe('fix-branch command', () => {
 
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('Mock fixed prompt content'),
-                5
+                5,
+                { clearFolder: true }
             );
         });
 
@@ -132,7 +134,8 @@ describe('fix-branch command', () => {
 
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('Mock fixed prompt content'),
-                Infinity
+                Infinity,
+                { clearFolder: true }
             );
         });
 
@@ -155,7 +158,8 @@ describe('fix-branch command', () => {
 
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('Mock fixed prompt content'),
-                Infinity
+                Infinity,
+                { clearFolder: true }
             );
         });
 
@@ -176,7 +180,8 @@ describe('fix-branch command', () => {
             expect(state.setFolder).toHaveBeenCalledWith('/my/project');
             expect(loopFixes).toHaveBeenCalledWith(
                 expect.stringContaining('Mock fixed prompt content'),
-                3
+                3,
+                { clearFolder: true }
             );
         });
 
@@ -200,7 +205,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
-                    20
+                    20,
+                    { clearFolder: true }
                 );
             });
 
@@ -209,7 +215,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
-                    20
+                    20,
+                    { clearFolder: true }
                 );
             });
 
@@ -218,7 +225,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
-                    20
+                    20,
+                    { clearFolder: true }
                 );
                 expect(logger.info).toHaveBeenCalledWith(
                     expect.stringContaining('level: 2 - blockers + warnings')
@@ -230,7 +238,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 3'),
-                    20
+                    20,
+                    { clearFolder: true }
                 );
                 expect(logger.info).toHaveBeenCalledWith(
                     expect.stringContaining('level: 3 - all issues')
@@ -254,7 +263,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
-                    20
+                    20,
+                    { clearFolder: true }
                 );
             });
 
@@ -263,7 +273,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
-                    20
+                    20,
+                    { clearFolder: true }
                 );
             });
 
@@ -272,7 +283,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 1'),
-                    20
+                    20,
+                    { clearFolder: true }
                 );
             });
 
@@ -281,7 +293,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
-                    20
+                    20,
+                    { clearFolder: true }
                 );
             });
 
@@ -290,7 +303,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
-                    5
+                    5,
+                    { clearFolder: true }
                 );
             });
 
@@ -299,7 +313,8 @@ describe('fix-branch command', () => {
 
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 3'),
-                    Infinity
+                    Infinity,
+                    { clearFolder: true }
                 );
             });
 
@@ -309,7 +324,29 @@ describe('fix-branch command', () => {
                 expect(state.setFolder).toHaveBeenCalledWith('/my/project');
                 expect(loopFixes).toHaveBeenCalledWith(
                     expect.stringContaining('CORRECTION LEVEL: 2'),
-                    20
+                    20,
+                    { clearFolder: true }
+                );
+            });
+
+            test('should use --no-clear flag to set clearFolder to false', async () => {
+                await run(['--no-clear']);
+
+                expect(loopFixes).toHaveBeenCalledWith(
+                    expect.stringContaining('CORRECTION LEVEL: 1'),
+                    20,
+                    { clearFolder: false }
+                );
+            });
+
+            test('should combine --no-clear with other options', async () => {
+                await run(['--level=2', '--limit=5', '--no-clear', '/my/project']);
+
+                expect(state.setFolder).toHaveBeenCalledWith('/my/project');
+                expect(loopFixes).toHaveBeenCalledWith(
+                    expect.stringContaining('CORRECTION LEVEL: 2'),
+                    5,
+                    { clearFolder: false }
                 );
             });
         });

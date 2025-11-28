@@ -1,3 +1,9 @@
+## OUTPUT RULES (Token Optimization)
+- Respond in the shortest format possible without losing technical precision
+- Use only the reasoning strictly necessary to execute the task
+- Do not include explanations that don't contribute to the solution
+- When running terminal commands, prefer silent versions (--silent, --quiet, -q) except when verbose output is needed for diagnosis
+
 ## OBJECTIVE
 Read the provided `{{claudiomiroFolder}}/AI_PROMPT.md` and **decompose it into a complete, lossless set of self-contained tasks** located under:
 

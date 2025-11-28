@@ -1,5 +1,11 @@
 # Verification Phase - Check for New Tasks
 
+## OUTPUT RULES (Token Optimization)
+- Respond in the shortest format possible without losing technical precision
+- Use only the reasoning strictly necessary to execute the task
+- Do not include explanations that don't contribute to the solution
+- When running terminal commands, prefer silent versions (--silent, --quiet, -q) except when verbose output is needed for diagnosis
+
 ## 🎯 YOUR ROLE
 
 You are in **VERIFICATION MODE**. Your **ONLY** job is to check if there are **NEW tasks** that match the user's original request.
@@ -17,17 +23,17 @@ You are in **VERIFICATION MODE**. Your **ONLY** job is to check if there are **N
 
 ## 📂 IMPORTANT FILES
 
-- **TODO.md**: `{{todoPath}}` - Contains all issues found and fixed so far
-- **NO_NEW_TASKS.md**: `{{noNewTasksPath}}` - Create this ONLY if you find NO new issues
+- **BUGS.md**: `{{bugsPath}}` - Contains all issues found and fixed so far
+- **CRITICAL_REVIEW_PASSED.md**: `{{passedPath}}` - Create this ONLY if you find NO new issues
 - **Working folder**: `{{claudiomiroFolder}}`
 
 ---
 
 ## 🔍 YOUR TASK
 
-### Step 1: Read TODO.md
+### Step 1: Read BUGS.md
 
-Read `{{todoPath}}` to understand:
+Read `{{bugsPath}}` to understand:
 - What issues were already identified
 - What has been fixed (`- [x]`)
 - What is still pending (`- [ ]`)
@@ -45,7 +51,7 @@ Based on the user's original request above:
 ### Step 3: Compare Findings
 
 Ask yourself:
-- Did I find any issues that are **NOT** already in TODO.md?
+- Did I find any issues that are **NOT** already in BUGS.md?
 - Are there problems that were missed in previous iterations?
 - Are there new edge cases or subtle issues?
 
@@ -53,14 +59,14 @@ Ask yourself:
 
 ## 📋 DECISION
 
-### If You Find NEW Issues (not in TODO.md):
+### If You Find NEW Issues (not in BUGS.md):
 
-1. **Add them** to TODO.md as new `- [ ]` items
-2. Follow the existing format in TODO.md
-3. **DO NOT** create NO_NEW_TASKS.md
+1. **Add them** to BUGS.md as new `- [ ]` items
+2. Follow the existing format in BUGS.md
+3. **DO NOT** create CRITICAL_REVIEW_PASSED.md
 4. **DO NOT** fix anything - just document
 
-**Example addition to TODO.md:**
+**Example addition to BUGS.md:**
 ```markdown
 ### NEW Issues Found (Verification)
 
@@ -71,11 +77,11 @@ Ask yourself:
 
 ### If You Find NO New Issues:
 
-1. Create the file: `{{noNewTasksPath}}`
+1. Create the file: `{{passedPath}}`
 2. Use this exact content:
 
 ```markdown
-# Verification Complete
+# Critical Review Passed
 
 **Verification Date**: [YYYY-MM-DD HH:MM:SS]
 **User Request**: {{userPrompt}}
@@ -88,7 +94,7 @@ All issues matching the user's request have been identified and addressed in pre
 
 ## Verification Summary
 
-- Total issues in TODO.md: [count]
+- Total issues in BUGS.md: [count]
 - Completed issues: [count]
 - Areas re-analyzed: [list areas you checked]
 
@@ -102,16 +108,16 @@ The codebase has been thoroughly analyzed. No additional issues matching the use
 ## ⚠️ CRITICAL RULES
 
 ### DO:
-- ✅ Read TODO.md first to know what was already found
+- ✅ Read BUGS.md first to know what was already found
 - ✅ Analyze the codebase thoroughly
-- ✅ Add new issues to TODO.md if you find them
-- ✅ Create NO_NEW_TASKS.md if you find NO new issues
+- ✅ Add new issues to BUGS.md if you find them
+- ✅ Create CRITICAL_REVIEW_PASSED.md if you find NO new issues
 
 ### DO NOT:
 - ❌ Fix any issues (this is verification only)
-- ❌ Create OVERVIEW.md (that's for the main loop)
-- ❌ Re-add issues that are already in TODO.md
-- ❌ Create NO_NEW_TASKS.md if you found new issues
+- ❌ Create CRITICAL_REVIEW_OVERVIEW.md (that's for the main loop)
+- ❌ Re-add issues that are already in BUGS.md
+- ❌ Create CRITICAL_REVIEW_PASSED.md if you found new issues
 - ❌ Skip the analysis - be thorough!
 
 ---
@@ -120,9 +126,9 @@ The codebase has been thoroughly analyzed. No additional issues matching the use
 
 Your output must be ONE of:
 
-1. **New issues found** → Update TODO.md with new `- [ ]` items. Do NOT create any other file.
+1. **New issues found** → Update BUGS.md with new `- [ ]` items. Do NOT create any other file.
 
-2. **No new issues** → Create `{{noNewTasksPath}}` with the template above.
+2. **No new issues** → Create `{{passedPath}}` with the template above.
 
 ---
 
@@ -131,8 +137,8 @@ Your output must be ONE of:
 1. You are ONLY verifying - not fixing
 2. Focus ONLY on the user's original request
 3. Be thorough - this is the final check before completion
-4. If in doubt, add the issue to TODO.md (better safe than sorry)
-5. Only create NO_NEW_TASKS.md if you're confident nothing was missed
+4. If in doubt, add the issue to BUGS.md (better safe than sorry)
+5. Only create CRITICAL_REVIEW_PASSED.md if you're confident nothing was missed
 
 ---
 
