@@ -236,15 +236,15 @@ Claudiomiro uses Ollama (running locally, for free) to preprocess and filter the
 ┌─────────────────────────────────────────────────────────────┐
 │                     Without Ollama                          │
 │                                                             │
-│  npm test output     ───────────────────►    Claude API    │
-│  (10,000 tokens)                              ($$$ cost)   │
+│  npm test output     ───────────────────►    Claude API     │
+│  (10,000 tokens)                              ($$$ cost)    │
 └─────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
 │                      With Ollama                            │
 │                                                             │
-│  npm test output     ────►   Ollama     ────►   Claude API │
-│  (10,000 tokens)            (FREE)              (500 tokens)│
+│  npm test output   ────►   Ollama     ────►   Claude API    │
+│  (10,000 tokens)           (FREE)             (500 tokens)  │
 │                          Filters to                         │
 │                          errors only                        │
 └─────────────────────────────────────────────────────────────┘

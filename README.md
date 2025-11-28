@@ -4,7 +4,7 @@
 
 Turn days of complex development into a fully automated process — without sacrificing production-grade code quality.
 
-**🔥 [Use Ollama](./docs/HOW-TO-USE-OLLAMA.md) and reduce on-token costs by 90%.**
+🔥 [Use Ollama](./docs/HOW-TO-USE-OLLAMA.md) and **reduce token costs by 90%.**
 
 ![Claudiomiro Terminal](https://github.com/samuelfaj/claudiomiro/blob/main/docs/claudiomiro_terminal.png?raw=true)
 
