@@ -1,6 +1,7 @@
 # Claudiomiro
 
-**Send your prompt — it decomposes, codes, reviews, builds, tests, and commits autonomously, in PARALLEL.**
+Send your prompt:
+**It decomposes, codes, reviews, builds, tests, and commits autonomously**, in parallel and while economizing tokens.
 
 Turn days of complex development into a fully automated process — without sacrificing production-grade code quality.
 
