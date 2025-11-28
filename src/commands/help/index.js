@@ -47,6 +47,14 @@ const COMMANDS = [
         ],
     },
     {
+        name: 'claudiomiro --token-optimizer --command="<cmd>" --filter="<text>"',
+        description: 'Run a command and filter output with Ollama to reduce token usage',
+        options: [
+            { flag: '--command="<cmd>"', description: 'Shell command to execute (e.g., "npx jest")' },
+            { flag: '--filter="<text>"', description: 'Filter instruction (e.g., "return only errors")' },
+        ],
+    },
+    {
         name: 'claudiomiro --config',
         description: 'Interactive configuration manager - set and persist environment variables',
         options: [
@@ -134,6 +142,9 @@ const printExamples = () => {
     console.log();
     console.log(chalk.gray('    # Quick set a config value'));
     console.log(chalk.white('    $ claudiomiro --config CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b'));
+    console.log();
+    console.log(chalk.gray('    # Filter command output with Ollama'));
+    console.log(chalk.white('    $ claudiomiro --token-optimizer --command="npm test" --filter="return only errors"'));
     console.log();
 };
 

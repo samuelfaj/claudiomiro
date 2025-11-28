@@ -23,6 +23,7 @@ const parseArgs = () => {
     const loopFixesArg = args.includes('--loop-fixes');
     const fixBranchArg = args.includes('--fix-branch');
     const testLocalLlmArg = args.includes('--test-local-llm');
+    const tokenOptimizerArg = args.includes('--token-optimizer');
     const configArg = args.includes('--config');
 
     if (helpArg || versionArg) {
@@ -33,6 +34,9 @@ const parseArgs = () => {
     }
     if (testLocalLlmArg) {
         return { command: 'test-local-llm', args };
+    }
+    if (tokenOptimizerArg) {
+        return { command: 'token-optimizer', args };
     }
     if (fixCommandArg) {
         return { command: 'fix-command', args };
@@ -72,6 +76,11 @@ const init = async () => {
         case 'test-local-llm': {
             const { run: runTestLocalLlm } = require('./commands/test-local-llm');
             await runTestLocalLlm(args);
+            break;
+        }
+        case 'token-optimizer': {
+            const { run: runTokenOptimizer } = require('./commands/token-optimizer');
+            await runTokenOptimizer(args);
             break;
         }
         case 'task-executor': {
