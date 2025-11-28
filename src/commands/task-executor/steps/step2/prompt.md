@@ -59,6 +59,59 @@ You are not summarizing — you are **preserving structure AND context through d
 
 ---
 
+## Task Scope (Multi-Repository Projects)
+
+When working with multi-repository projects (backend + frontend), every TASK.md MUST include an `@scope` tag on the second line:
+
+### Format
+```markdown
+@dependencies [TASK0, TASK1]
+@scope backend
+
+# Task: Title Here
+...
+```
+
+### Valid Scopes
+
+- **@scope backend** - Task modifies only backend repository code
+  - API endpoints, database models, server logic
+  - Backend tests, backend configuration
+
+- **@scope frontend** - Task modifies only frontend repository code
+  - UI components, frontend state, client logic
+  - Frontend tests, frontend configuration
+
+- **@scope integration** - Task requires both repositories OR verifies integration
+  - API contract verification
+  - End-to-end testing across both repos
+  - Changes that require coordinated updates
+
+### Scope Selection Guidelines
+
+1. If a task ONLY touches backend files → `@scope backend`
+2. If a task ONLY touches frontend files → `@scope frontend`
+3. If a task touches BOTH or verifies their interaction → `@scope integration`
+4. When in doubt, prefer `@scope integration`
+
+### Example
+
+```markdown
+@dependencies []
+@scope backend
+
+# Task: Create User API Endpoint
+
+## Summary
+Implement POST /api/users endpoint for user registration.
+
+...
+```
+
+**Note:** Missing @scope in multi-repo mode will cause task execution to fail.
+
+---
+
 ## 🧠 DEEP REASONING & METHODOLOGY
 
 ### 1. Recursive Breakdown

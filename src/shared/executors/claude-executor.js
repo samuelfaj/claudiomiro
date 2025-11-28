@@ -25,7 +25,7 @@ const overwriteBlock = (lines) => {
     process.stdout.write(`\x1b[${lines}A`);
 };
 
-const runClaude = (text, taskName = null) => {
+const runClaude = (text, taskName = null, options = {}) => {
     return new Promise((resolve, reject) => {
         const stateManager = taskName ? ParallelStateManager.getInstance() : null;
         const suppressStreamingLogs = Boolean(taskName) && stateManager && typeof stateManager.isUIRendererActive === 'function' && stateManager.isUIRendererActive();
@@ -42,7 +42,7 @@ const runClaude = (text, taskName = null) => {
         logger.newline();
 
         const claude = spawn('sh', ['-c', command], {
-            cwd: state.folder,
+            cwd: options.cwd || state.folder,
             stdio: ['ignore', 'pipe', 'pipe'],
         });
 
@@ -218,7 +218,7 @@ const runClaude = (text, taskName = null) => {
     });
 };
 
-const executeClaude = (text, taskName = null) => {
+const executeClaude = (text, taskName = null, options = {}) => {
     // Validate input before dispatching to any executor
     if(!text){
         return Promise.reject(new Error('no prompt'));
@@ -244,7 +244,7 @@ const executeClaude = (text, taskName = null) => {
         return executeGlm(text, taskName);
     }
 
-    return runClaude(text, taskName);
+    return runClaude(text, taskName, options);
 };
 
 module.exports = { executeClaude };
