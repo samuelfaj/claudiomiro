@@ -4,7 +4,7 @@ Turn days of complex development into a fully automated process — without sacr
 
 Send your prompt:
 
-**It decomposes, codes, reviews, builds, tests, and commits autonomously**, in parallel and while economizing tokens.
+**It decomposes, codes, reviews, builds, tests, and commits**, autonomously, in parallel and while economizing tokens.
 
 🔥 [Use Ollama](./docs/HOW-TO-USE-OLLAMA.md) and **reduce token costs by 90%.**
 
