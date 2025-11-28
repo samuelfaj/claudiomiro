@@ -2,9 +2,15 @@
 
 Claudiomiro integrates with [Ollama](https://ollama.ai) to run local LLMs that help reduce token consumption when using cloud AI providers like Claude, GPT, or Gemini.
 
-Fast Summary:
-```
-brew install ollama or curl -fsSL https://ollama.ai/install.sh | sh or ollama.ai/download
+**Fast Summary:**
+```sh
+# Mac
+brew install ollama
+
+# Linux
+curl -fsSL https://ollama.ai/install.sh
+
+# Then
 ollama serve
 ollama pull qwen2.5-coder:7b
 claudiomiro --config CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b
