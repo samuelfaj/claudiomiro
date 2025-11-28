@@ -10,6 +10,7 @@ Claudiomiro provides several commands for different automation workflows.
 | [fix-command](./fix-command.md) | Run a command repeatedly until it succeeds |
 | [loop-fixes](./loop-fixes.md) | Continuous issue detection and fixing loop |
 | [fix-branch](./fix-branch.md) | Staff+ Engineer code review before PR |
+| [token-optimizer](./token-optimizer.md) | Filter command output with local LLM to reduce tokens |
 | [test-local-llm](./test-local-llm.md) | Test Ollama integration for local LLM features |
 | [help](./help.md) | Display help information and version |
 
@@ -39,6 +40,12 @@ claudiomiro --fix-branch [options]
 ```
 Comprehensive Staff+ code review of your branch before opening a PR.
 
+### Token Optimizer
+```bash
+claudiomiro --token-optimizer --command="<cmd>" --filter="<instruction>"
+```
+Filter command output using local LLM to reduce token usage.
+
 ### Test Local LLM
 ```bash
 claudiomiro --test-local-llm [--prompt="<prompt>"]
@@ -60,6 +67,7 @@ These options work across multiple commands:
 |--------|-------------|
 | `--limit=<n>` | Maximum attempts/iterations |
 | `--no-limit` | Remove attempt limit |
+| `--verbose` | Show detailed progress logs |
 | `-h, --help` | Show help |
 | `-v, --version` | Show version |
 
@@ -88,6 +96,12 @@ These options work across multiple commands:
 - Need comprehensive code review before merge
 - Want to catch blockers, warnings, and suggestions
 - Ensuring branch meets quality standards
+
+### Use `token-optimizer` when:
+- Command output is too verbose to paste to AI assistants
+- You need to extract specific information from command output
+- Reducing token usage when sharing logs or test results
+- Quick summarization of errors, warnings, or specific patterns
 
 ### Use `test-local-llm` when:
 - Setting up Ollama for the first time

@@ -178,7 +178,7 @@ const executeTokenOptimizer = async (command, filterInstruction, options = {}) =
 
         if (filteredOutput) {
             const outputPath = saveOutput(combinedOutput, command);
-            return { filteredOutput: filteredOutput + `\n\nFull output saved to: ${outputPath}`, exitCode: result.exitCode, outputPath };
+            return { filteredOutput, exitCode: result.exitCode, outputPath };
         }
 
         // Fallback: return original output when LLM is not available
