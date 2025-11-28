@@ -12,7 +12,7 @@ const TOOL_ICONS = {
     'TodoWrite': '✅',
     'WebFetch': '🌐',
     'WebSearch': '🔎',
-    'default': '🛠️'
+    'default': '🛠️',
 };
 
 /**

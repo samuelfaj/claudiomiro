@@ -3,21 +3,21 @@ jest.mock('../../shared/utils/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),
-    success: jest.fn()
+    success: jest.fn(),
 }));
 
 jest.mock('../../shared/config/state', () => ({
     setFolder: jest.fn(),
     folder: '/test/folder',
-    claudiomiroFolder: '/test/folder/.claudiomiro'
+    claudiomiroFolder: '/test/folder/.claudiomiro',
 }));
 
 jest.mock('../../shared/services/prompt-reader', () => ({
-    getMultilineInput: jest.fn()
+    getMultilineInput: jest.fn(),
 }));
 
 jest.mock('./executor', () => ({
-    loopFixes: jest.fn()
+    loopFixes: jest.fn(),
 }));
 
 const logger = require('../../shared/utils/logger');

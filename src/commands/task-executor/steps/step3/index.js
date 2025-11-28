@@ -17,7 +17,8 @@ const step3 = async () => {
         .readdirSync(state.claudiomiroFolder)
         .filter(name => {
             const fullPath = path.join(state.claudiomiroFolder, name);
-            return fs.statSync(fullPath).isDirectory();
+            // Only include task folders (TASK0, TASK1, etc.), exclude cache and other directories
+            return fs.statSync(fullPath).isDirectory() && /^TASK\d+/.test(name);
         })
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
@@ -39,7 +40,7 @@ const step3 = async () => {
                 fs.writeFileSync(
                     taskPath,
                     `@dependencies []\n${taskContent}`,
-                    'utf-8'
+                    'utf-8',
                 );
                 logger.stopSpinner();
                 logger.success('Empty dependencies added to single task');
@@ -64,7 +65,7 @@ const step3 = async () => {
 
         return {
             name: task,
-            content: `### ${task}\n\n${taskContent}\n\n${promptContent}`
+            content: `### ${task}\n\n${taskContent}\n\n${promptContent}`,
         };
     });
 

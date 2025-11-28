@@ -4,6 +4,20 @@ const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
 const { executeClaude } = require('../../../shared/executors/claude-executor');
 
+// Local LLM service for enhanced dependency analysis (lazy loaded)
+let localLLMService = null;
+const getLocalLLM = () => {
+    if (!localLLMService) {
+        try {
+            const { getLocalLLMService } = require('../../../shared/services/local-llm');
+            localLLMService = getLocalLLMService();
+        } catch (error) {
+            localLLMService = null;
+        }
+    }
+    return localLLMService;
+};
+
 /**
  * Analyzes and resolves circular dependencies in task graph
  * Uses AI to intelligently break cycles while preserving logical task order
@@ -55,16 +69,19 @@ const resolveDeadlock = async (tasks, pendingTasks) => {
 
 /**
  * Rebuilds task graph from TASK.md files to get updated dependencies
+ * Uses Local LLM when available for enhanced dependency detection
  */
 const rebuildTaskGraphFromFiles = async (pendingTasks) => {
     const tasks = {};
+    const availableTaskNames = pendingTasks.map(([name]) => name);
 
     for (const [taskName] of pendingTasks) {
         const taskMdPath = path.join(state.claudiomiroFolder, taskName, 'TASK.md');
         if (fs.existsSync(taskMdPath)) {
             const content = fs.readFileSync(taskMdPath, 'utf-8');
-            const deps = parseDependencies(content);
-            tasks[taskName] = { deps, status: 'pending' };
+            // Use async version with Local LLM for enhanced dependency detection
+            const depsResult = await parseDependenciesAsync(content, availableTaskNames);
+            tasks[taskName] = { deps: depsResult.all, status: 'pending' };
         }
     }
 
@@ -72,7 +89,7 @@ const rebuildTaskGraphFromFiles = async (pendingTasks) => {
 };
 
 /**
- * Parses @dependencies from TASK.md content
+ * Parses @dependencies from TASK.md content (sync version - regex only)
  */
 const parseDependencies = (content) => {
     // Match @dependencies [TASK1, TASK2] or @dependencies TASK1, TASK2
@@ -89,6 +106,51 @@ const parseDependencies = (content) => {
 };
 
 /**
+ * Parses dependencies using Local LLM for enhanced analysis
+ * Can detect implicit dependencies in addition to explicit ones
+ * @param {string} content - TASK.md content
+ * @param {string[]} availableTasks - List of available task names
+ * @returns {Promise<{explicit: string[], implicit: string[], all: string[]}>}
+ */
+const parseDependenciesAsync = async (content, availableTasks = []) => {
+    // Always get explicit dependencies via regex
+    const explicit = parseDependencies(content);
+
+    // Try Local LLM for implicit dependency detection
+    const llm = getLocalLLM();
+    if (llm && availableTasks.length > 0) {
+        try {
+            await llm.initialize();
+            if (llm.isAvailable()) {
+                const analysis = await llm.analyzeDependencies(content, availableTasks);
+                if (analysis) {
+                    // Merge explicit (regex) with LLM results
+                    const allExplicit = [...new Set([...explicit, ...(analysis.explicit || [])])];
+                    const implicit = (analysis.implicit || []).filter(d => !allExplicit.includes(d));
+
+                    return {
+                        explicit: allExplicit,
+                        implicit,
+                        all: [...new Set([...allExplicit, ...implicit])],
+                        reasoning: analysis.reasoning,
+                    };
+                }
+            }
+        } catch (error) {
+            // Fall through to simple return
+        }
+    }
+
+    // Fallback to regex-only result
+    return {
+        explicit,
+        implicit: [],
+        all: explicit,
+        reasoning: 'Regex extraction only',
+    };
+};
+
+/**
  * Builds context about the deadlock for the AI
  */
 const buildDeadlockContext = (tasks, pendingTasks) => {
@@ -98,12 +160,12 @@ const buildDeadlockContext = (tasks, pendingTasks) => {
         pendingTasks: pendingTasks.map(([name, task]) => ({
             name,
             deps: task.deps,
-            waitingFor: task.deps.filter(d => !tasks[d] || tasks[d].status !== 'completed')
+            waitingFor: task.deps.filter(d => !tasks[d] || tasks[d].status !== 'completed'),
         })),
         completedTasks: Object.entries(tasks)
             .filter(([, t]) => t.status === 'completed')
             .map(([name]) => name),
-        cycles
+        cycles,
     };
 
     return context;
@@ -259,4 +321,10 @@ Analyze the circular dependencies and edit the TASK.md files to resolve the dead
 `;
 };
 
-module.exports = { resolveDeadlock, detectCycles, parseDependencies, rebuildTaskGraphFromFiles };
+module.exports = {
+    resolveDeadlock,
+    detectCycles,
+    parseDependencies,
+    parseDependenciesAsync,
+    rebuildTaskGraphFromFiles,
+};

@@ -12,7 +12,7 @@ const TOOL_ICONS = {
     'TodoWrite': '✅',
     'WebFetch': '🌐',
     'WebSearch': '🔎',
-    'default': '🛠️'
+    'default': '🛠️',
 };
 
 /**
@@ -48,7 +48,7 @@ const formatToolDescription = (toolName, input) => {
 /**
  * Processes assistant messages (Gemini)
  */
-const processAssistantMessage = (json) => {
+const _processAssistantMessage = (json) => {
     if (!json.message || !json.message.content) return null;
 
     let output = '';
@@ -77,7 +77,7 @@ const processAssistantMessage = (json) => {
 /**
  * Processes user messages (tool results)
  */
-const processUserMessage = () => {
+const _processUserMessage = () => {
     // For now, we don't show tool results to avoid clutter
     // Gemini already shows what's important in its text
     return null;
@@ -86,7 +86,7 @@ const processUserMessage = () => {
 /**
  * Processes system messages
  */
-const processSystemMessage = (json) => {
+const _processSystemMessage = (json) => {
     if (json.subtype === 'init') {
         return '🚀 Starting Gemini...';
     }
@@ -96,7 +96,7 @@ const processSystemMessage = (json) => {
 /**
  * Processes final result messages
  */
-const processResultMessage = (json) => {
+const _processResultMessage = (json) => {
     if (json.subtype === 'success') {
         const duration = (json.duration_ms / 1000).toFixed(1);
         const cost = json.total_cost_usd ? `$${json.total_cost_usd.toFixed(4)}` : '';

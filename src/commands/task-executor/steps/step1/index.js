@@ -31,8 +31,8 @@ const step1 = async (sameBranch = false) => {
         : '';
 
     const replace = (text) => {
-        return text.replace('{{TASK}}', taskContent).replaceAll(`{{claudiomiroFolder}}`, `${state.claudiomiroFolder}`);
-    }
+        return text.replace('{{TASK}}', taskContent).replaceAll('{{claudiomiroFolder}}', `${state.claudiomiroFolder}`);
+    };
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
 
@@ -46,6 +46,6 @@ const step1 = async (sameBranch = false) => {
     }
 
     logger.success('AI_PROMPT.md created successfully');
-}
+};
 
 module.exports = { step1 };

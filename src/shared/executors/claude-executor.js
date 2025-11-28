@@ -18,12 +18,12 @@ const overwriteBlock = (lines) => {
     // Move cursor up N lines and clear each one
     process.stdout.write(`\x1b[${lines}A`);
     for (let i = 0; i < lines; i++) {
-      process.stdout.write('\x1b[2K'); // clear line
-      process.stdout.write('\x1b[1B'); // move down one line
+        process.stdout.write('\x1b[2K'); // clear line
+        process.stdout.write('\x1b[1B'); // move down one line
     }
     // Return to the top of the block
     process.stdout.write(`\x1b[${lines}A`);
-  }
+};
 
 const runClaude = (text, taskName = null) => {
     return new Promise((resolve, reject) => {
@@ -37,13 +37,13 @@ const runClaude = (text, taskName = null) => {
         const command = `claude --dangerously-skip-permissions -p "$(cat '${tmpFile}')" --output-format stream-json --verbose`;
 
         logger.stopSpinner();
-        logger.command(`claude --dangerously-skip-permissions ...`);
+        logger.command('claude --dangerously-skip-permissions ...');
         logger.separator();
         logger.newline();
 
         const claude = spawn('sh', ['-c', command], {
             cwd: state.folder,
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
         });
 
         const logFilePath = path.join(state.claudiomiroFolder, 'log.txt');
@@ -114,11 +114,11 @@ const runClaude = (text, taskName = null) => {
                 }
 
                 // Imprime cabeçalho
-                console.log(`💬 Claude:`);
+                console.log('💬 Claude:');
                 lineCount++;
 
                 // Processa e imprime o texto linha por linha
-                const lines = text.split("\n");
+                const lines = text.split('\n');
                 for(const line of lines){
                     if(line.length > max){
                         // Quebra linha longa em múltiplas linhas
@@ -134,7 +134,7 @@ const runClaude = (text, taskName = null) => {
 
                 // Atualiza contador para próximo overwrite
                 overwriteBlockLines = lineCount;
-            }
+            };
 
             for (const line of lines) {
                 const text = processClaudeMessage(line);
@@ -177,10 +177,9 @@ const runClaude = (text, taskName = null) => {
 
             logger.newline();
             logger.newline();
-            
+
             logStream.write(`\n\n[${new Date().toISOString()}] Claude execution completed with code ${code}\n`);
             logStream.end();
-
 
             logger.newline();
             logger.separator();

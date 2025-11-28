@@ -8,16 +8,16 @@ const COMMANDS = [
         options: [
             { flag: '--executor=<name>', description: 'AI executor to use (claude, codex, gemini, deepseek, glm)' },
             { flag: '--model=<name>', description: 'Specific model to use with the executor' },
-            { flag: '--skip-research', description: 'Skip the research phase' }
-        ]
+            { flag: '--skip-research', description: 'Skip the research phase' },
+        ],
     },
     {
         name: 'claudiomiro --fix-command="<command>" [folder] [options]',
         description: 'Run a command repeatedly until it succeeds (useful for fixing tests/linting)',
         options: [
             { flag: '--limit=<n>', description: 'Maximum attempts per task (default: 20)' },
-            { flag: '--no-limit', description: 'Run without attempt limit' }
-        ]
+            { flag: '--no-limit', description: 'Run without attempt limit' },
+        ],
     },
     {
         name: 'claudiomiro --loop-fixes [folder] [options]',
@@ -25,8 +25,8 @@ const COMMANDS = [
         options: [
             { flag: '--prompt="<text>"', description: 'Analysis/fix prompt (or enter interactively)' },
             { flag: '--limit=<n>', description: 'Maximum iterations (default: 10)' },
-            { flag: '--no-limit', description: 'Run without iteration limit' }
-        ]
+            { flag: '--no-limit', description: 'Run without iteration limit' },
+        ],
     },
     {
         name: 'claudiomiro --fix-branch [folder] [options]',
@@ -36,14 +36,36 @@ const COMMANDS = [
             { flag: '--blockers-only', description: 'Alias for --level=1 (fix only blockers)' },
             { flag: '--no-suggestions', description: 'Alias for --level=2 (fix blockers and warnings)' },
             { flag: '--limit=<n>', description: 'Maximum iterations (default: 20)' },
-            { flag: '--no-limit', description: 'Run without iteration limit' }
-        ]
-    }
+            { flag: '--no-limit', description: 'Run without iteration limit' },
+        ],
+    },
+    {
+        name: 'claudiomiro --test-local-llm [options]',
+        description: 'Test the Local LLM (Ollama) integration - verify connection and send test prompts',
+        options: [
+            { flag: '--prompt="<text>"', description: 'Test prompt to send (or enter interactively)' },
+        ],
+    },
+    {
+        name: 'claudiomiro --token-optimizer --command="<cmd>" --filter="<text>"',
+        description: 'Run a command and filter output with Ollama to reduce token usage',
+        options: [
+            { flag: '--command="<cmd>"', description: 'Shell command to execute (e.g., "npx jest")' },
+            { flag: '--filter="<text>"', description: 'Filter instruction (e.g., "return only errors")' },
+        ],
+    },
+    {
+        name: 'claudiomiro --config',
+        description: 'Interactive configuration manager - set and persist environment variables',
+        options: [
+            { flag: 'KEY=VALUE', description: 'Quick set a config value (e.g., CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b)' },
+        ],
+    },
 ];
 
 const GLOBAL_OPTIONS = [
     { flag: '-h, --help', description: 'Show this help message' },
-    { flag: '-v, --version', description: 'Show version number' }
+    { flag: '-v, --version', description: 'Show version number' },
 ];
 
 const formatFlag = (flag) => chalk.cyan(flag);
@@ -115,6 +137,15 @@ const printExamples = () => {
     console.log(chalk.gray('    # Staff+ code review - fix all issues'));
     console.log(chalk.white('    $ claudiomiro --fix-branch --level=3'));
     console.log();
+    console.log(chalk.gray('    # Configure Claudiomiro interactively'));
+    console.log(chalk.white('    $ claudiomiro --config'));
+    console.log();
+    console.log(chalk.gray('    # Quick set a config value'));
+    console.log(chalk.white('    $ claudiomiro --config CLAUDIOMIRO_LOCAL_LLM=qwen2.5-coder:7b'));
+    console.log();
+    console.log(chalk.gray('    # Filter command output with Ollama'));
+    console.log(chalk.white('    $ claudiomiro --token-optimizer --command="npm test" --filter="return only errors"'));
+    console.log();
 };
 
 const printFooter = () => {
@@ -151,5 +182,5 @@ module.exports = {
     showHelp,
     showVersion,
     COMMANDS,
-    GLOBAL_OPTIONS
+    GLOBAL_OPTIONS,
 };

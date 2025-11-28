@@ -6,19 +6,18 @@ jest.mock('../../shared/utils/logger', () => ({
     error: jest.fn(),
     success: jest.fn(),
     startSpinner: jest.fn(),
-    stopSpinner: jest.fn()
+    stopSpinner: jest.fn(),
 }));
 jest.mock('../../shared/config/state', () => ({
     setFolder: jest.fn(),
     folder: '/test/folder',
-    claudiomiroFolder: '/test/folder/.claudiomiro'
+    claudiomiroFolder: '/test/folder/.claudiomiro',
 }));
 jest.mock('../../shared/executors/claude-executor', () => ({
-    executeClaude: jest.fn()
+    executeClaude: jest.fn(),
 }));
 
 const fs = require('fs');
-const path = require('path');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
 const { executeClaude } = require('../../shared/executors/claude-executor');
@@ -39,7 +38,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
         test('should return 0 when file does not exist', () => {
             fs.existsSync.mockReturnValue(false);
 
-            const count = countPendingItems('/path/to/TODO.md');
+            const count = countPendingItems('/path/to/BUGS.md');
 
             expect(count).toBe(0);
         });
@@ -48,7 +47,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue('');
 
-            const count = countPendingItems('/path/to/TODO.md');
+            const count = countPendingItems('/path/to/BUGS.md');
 
             expect(count).toBe(0);
         });
@@ -56,7 +55,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
         test('should count pending items correctly', () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(`
-# TODO
+# BUGS
 
 - [ ] Issue 1
 - [ ] Issue 2
@@ -64,7 +63,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
 - [ ] Issue 3
             `);
 
-            const count = countPendingItems('/path/to/TODO.md');
+            const count = countPendingItems('/path/to/BUGS.md');
 
             expect(count).toBe(3);
         });
@@ -72,13 +71,13 @@ describe('src/commands/loop-fixes/executor.js', () => {
         test('should return 0 when all items are completed', () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(`
-# TODO
+# BUGS
 
 - [x] Fixed issue 1
 - [x] Fixed issue 2
             `);
 
-            const count = countPendingItems('/path/to/TODO.md');
+            const count = countPendingItems('/path/to/BUGS.md');
 
             expect(count).toBe(0);
         });
@@ -89,10 +88,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 throw new Error('Read error');
             });
 
-            const count = countPendingItems('/path/to/TODO.md');
+            const count = countPendingItems('/path/to/BUGS.md');
 
             expect(count).toBe(0);
-            expect(logger.warning).toHaveBeenCalledWith(expect.stringContaining('Could not read TODO.md'));
+            expect(logger.warning).toHaveBeenCalledWith(expect.stringContaining('Could not read BUGS.md'));
         });
     });
 
@@ -100,7 +99,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
         test('should return 0 when file does not exist', () => {
             fs.existsSync.mockReturnValue(false);
 
-            const count = countCompletedItems('/path/to/TODO.md');
+            const count = countCompletedItems('/path/to/BUGS.md');
 
             expect(count).toBe(0);
         });
@@ -108,7 +107,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
         test('should count completed items correctly', () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(`
-# TODO
+# BUGS
 
 - [ ] Issue 1
 - [x] Fixed issue 1
@@ -116,7 +115,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
 - [ ] Issue 2
             `);
 
-            const count = countCompletedItems('/path/to/TODO.md');
+            const count = countCompletedItems('/path/to/BUGS.md');
 
             expect(count).toBe(2);
         });
@@ -128,7 +127,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
 - [X] uppercase
             `);
 
-            const count = countCompletedItems('/path/to/TODO.md');
+            const count = countCompletedItems('/path/to/BUGS.md');
 
             expect(count).toBe(2);
         });
@@ -155,7 +154,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             const originalFolder = state.claudiomiroFolder;
             Object.defineProperty(state, 'claudiomiroFolder', {
                 get: jest.fn().mockReturnValueOnce(null).mockReturnValue('/test/folder/.claudiomiro'),
-                configurable: true
+                configurable: true,
             });
             fs.existsSync.mockReturnValue(false);
 
@@ -166,7 +165,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             // Restore
             Object.defineProperty(state, 'claudiomiroFolder', {
                 value: originalFolder,
-                configurable: true
+                configurable: true,
             });
         });
     });
@@ -182,10 +181,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
             });
             fs.readFileSync.mockImplementation((filePath) => {
                 if (filePath.endsWith('prompt.md')) {
-                    return '# Test prompt {{iteration}} {{maxIterations}} {{userPrompt}} {{todoPath}} {{overviewPath}} {{claudiomiroFolder}}';
+                    return '# Test prompt {{iteration}} {{maxIterations}} {{userPrompt}} {{bugsPath}} {{overviewPath}} {{claudiomiroFolder}}';
                 }
                 if (filePath.endsWith('verification-prompt.md')) {
-                    return '# Verification {{userPrompt}} {{todoPath}} {{noNewTasksPath}} {{claudiomiroFolder}}';
+                    return '# Verification {{userPrompt}} {{bugsPath}} {{passedPath}} {{claudiomiroFolder}}';
                 }
                 return '';
             });
@@ -224,7 +223,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             await expect(loopFixes('Test prompt', 10)).rejects.toThrow('verification-prompt.md not found');
         });
 
-        test('should complete successfully after verification passes (OVERVIEW.md + NO_NEW_TASKS.md)', async () => {
+        test('should complete successfully after verification passes (CRITICAL_REVIEW_OVERVIEW.md + CRITICAL_REVIEW_PASSED.md)', async () => {
             let iterationCount = 0;
             let overviewDeleted = false;
 
@@ -232,20 +231,20 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
-                    // OVERVIEW.md exists after iteration 1, then deleted, not recreated
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
+                    // CRITICAL_REVIEW_OVERVIEW.md exists after iteration 1, then deleted, not recreated
                     if (overviewDeleted) return false;
                     return iterationCount >= 1;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
-                    // NO_NEW_TASKS.md created in verification (iteration 2)
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
+                    // CRITICAL_REVIEW_PASSED.md created in verification (iteration 2)
                     return iterationCount >= 2;
                 }
                 return false;
             });
 
             fs.unlinkSync.mockImplementation((filePath) => {
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     overviewDeleted = true;
                 }
             });
@@ -264,21 +263,20 @@ describe('src/commands/loop-fixes/executor.js', () => {
 
         test('should continue loop when verification finds new tasks', async () => {
             let iterationCount = 0;
-            let verificationRound = 0;
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
-                    // OVERVIEW.md created on iterations 1 and 3
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
+                    // CRITICAL_REVIEW_OVERVIEW.md created on iterations 1 and 3
                     return iterationCount === 1 || iterationCount === 3;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
-                    // NO_NEW_TASKS.md only created on 2nd verification (iteration 4)
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
+                    // CRITICAL_REVIEW_PASSED.md only created on 2nd verification (iteration 4)
                     return iterationCount >= 4;
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return iterationCount > 0;
                 }
                 return false;
@@ -291,7 +289,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('verification-prompt.md')) {
                     return '# Verification {{userPrompt}}';
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return '- [x] Fixed issue';
                 }
                 return '';
@@ -308,21 +306,21 @@ describe('src/commands/loop-fixes/executor.js', () => {
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Verification found new tasks'));
         });
 
-        test('should iterate multiple times until OVERVIEW.md is created then verify', async () => {
+        test('should iterate multiple times until CRITICAL_REVIEW_OVERVIEW.md is created then verify', async () => {
             let iterationCount = 0;
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
-                    // OVERVIEW.md exists after 3rd iteration
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
+                    // CRITICAL_REVIEW_OVERVIEW.md exists after 3rd iteration
                     return iterationCount === 3;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     // Verification passes on iteration 4
                     return iterationCount >= 4;
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return iterationCount > 0;
                 }
                 return false;
@@ -335,7 +333,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('verification-prompt.md')) {
                     return '# Verification';
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     if (iterationCount < 3) {
                         return '- [ ] Issue 1\n- [ ] Issue 2';
                     }
@@ -360,10 +358,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return false; // Never created
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return true;
                 }
                 return false;
@@ -376,7 +374,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('verification-prompt.md')) {
                     return '# Verification';
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return '- [ ] Unresolved issue';
                 }
                 return '';
@@ -395,14 +393,14 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
-                    // OVERVIEW.md created on iteration 2 (enters verification on 3)
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
+                    // CRITICAL_REVIEW_OVERVIEW.md created on iteration 2 (enters verification on 3)
                     return iterationCount === 2;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return false; // Never created - verification keeps finding tasks
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return true;
                 }
                 return false;
@@ -415,7 +413,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('verification-prompt.md')) {
                     return '# Verification';
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return '- [ ] Issue';
                 }
                 return '';
@@ -452,10 +450,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return iterationCount === 1; // Created on iteration 1
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return iterationCount >= 2; // Verification passes on iteration 2
                 }
                 return false;
@@ -495,10 +493,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return iterationCount === 1;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return iterationCount >= 2;
                 }
                 return false;
@@ -506,7 +504,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
 
             fs.readFileSync.mockImplementation((filePath) => {
                 if (filePath.endsWith('verification-prompt.md')) {
-                    return 'Verify: {{userPrompt}}, Todo: {{todoPath}}, NoNew: {{noNewTasksPath}}';
+                    return 'Verify: {{userPrompt}}, Bugs: {{bugsPath}}, Passed: {{passedPath}}';
                 }
                 if (filePath.endsWith('prompt.md')) {
                     return '# Main prompt';
@@ -524,8 +522,8 @@ describe('src/commands/loop-fixes/executor.js', () => {
             await loopFixes('Check all types', 10);
 
             expect(capturedVerificationPrompt).toContain('Verify: Check all types');
-            expect(capturedVerificationPrompt).toContain('Todo:');
-            expect(capturedVerificationPrompt).toContain('NoNew:');
+            expect(capturedVerificationPrompt).toContain('Bugs:');
+            expect(capturedVerificationPrompt).toContain('Passed:');
         });
 
         test('should handle unlimited iterations (Infinity)', async () => {
@@ -534,10 +532,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return iterationCount === 2;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return iterationCount >= 3;
                 }
                 return false;
@@ -573,10 +571,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return iterationCount === 1;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return iterationCount >= 2;
                 }
                 return false;
@@ -609,13 +607,13 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return iterationCount === 1;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return iterationCount >= 2;
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return true;
                 }
                 return false;
@@ -628,7 +626,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('verification-prompt.md')) {
                     return '# Verification';
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return '- [x] Fixed 1\n- [x] Fixed 2\n- [x] Fixed 3';
                 }
                 return '';
@@ -649,10 +647,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return iterationCount === 1;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return iterationCount >= 2;
                 }
                 return false;
@@ -686,13 +684,13 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return iterationCount === 2;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return iterationCount >= 3;
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return iterationCount > 0;
                 }
                 return false;
@@ -705,7 +703,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('verification-prompt.md')) {
                     return '# Verification';
                 }
-                if (filePath.endsWith('TODO.md')) {
+                if (filePath.endsWith('BUGS.md')) {
                     return '- [x] Fixed\n- [ ] Pending';
                 }
                 return '';
@@ -720,16 +718,16 @@ describe('src/commands/loop-fixes/executor.js', () => {
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('1 fixed, 1 pending'));
         });
 
-        test('should delete OVERVIEW.md when entering verification mode', async () => {
+        test('should delete CRITICAL_REVIEW_OVERVIEW.md when entering verification mode', async () => {
             let iterationCount = 0;
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
                     return true;
                 }
-                if (filePath.endsWith('OVERVIEW.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
                     return iterationCount === 1;
                 }
-                if (filePath.endsWith('NO_NEW_TASKS.md')) {
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     return iterationCount >= 2;
                 }
                 return false;
@@ -751,7 +749,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
 
             await loopFixes('Test prompt', 10);
 
-            expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('OVERVIEW.md'));
+            expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('CRITICAL_REVIEW_OVERVIEW.md'));
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting verification'));
         });
     });

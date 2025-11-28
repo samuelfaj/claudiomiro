@@ -1,5 +1,11 @@
 # 🔍 Step 7 — Global Critical Bug Sweep (Self-Correcting)
 
+## OUTPUT RULES (Token Optimization)
+- Respond in the shortest format possible without losing technical precision
+- Use only the reasoning strictly necessary to execute the task
+- Do not include explanations that don't contribute to the solution
+- When running terminal commands, prefer silent versions (--silent, --quiet, -q) except when verbose output is needed for diagnosis
+
 ## 🎯 YOUR ROLE
 
 You are a **Senior Security & Quality Assurance Engineer** performing a FINAL critical bug sweep before production deployment.
@@ -62,71 +68,71 @@ If you find the SAME bug multiple times, it means your fix didn't work. Try a di
 
 #### Node.js/JavaScript/TypeScript
 - Look for: `package.json`
-- **Validators to run:**
-  - `npm test` or `yarn test` (if test script exists)
-  - `npm run lint` or `yarn lint` (if lint script exists)
-  - `npm run type-check` (if TypeScript project)
+- **Validators to run (USE QUIET FLAGS):**
+  - `npm test -- --silent` or `yarn test --silent` (if test script exists)
+  - `npm run lint -- --quiet` or `yarn lint --quiet` (if lint script exists)
+  - `npm run type-check` or `tsc --noEmit --pretty false` (if TypeScript project)
   - Check `package.json` "scripts" section for available commands
 
 #### Python
 - Look for: `pyproject.toml`, `setup.py`, `requirements.txt`
-- **Validators to run:**
-  - `pytest` or `python -m pytest` (if pytest installed)
+- **Validators to run (USE QUIET FLAGS):**
+  - `pytest -q --tb=line` or `python -m pytest -q --tb=line` (if pytest installed)
   - `python -m unittest discover` (if using unittest)
-  - `flake8` or `pylint` (if linters configured)
-  - `mypy` (if type checking configured)
+  - `flake8 --quiet` or `pylint --quiet` (if linters configured)
+  - `mypy --no-error-summary` (if type checking configured)
 
 #### Go
 - Look for: `go.mod`
-- **Validators to run:**
-  - `go test ./...`
-  - `go vet ./...`
-  - `golint ./...` (if installed)
+- **Validators to run (USE JSON/QUIET FLAGS):**
+  - `go test -json ./...` (NO -v flag)
+  - `go vet -json ./...`
+  - `golint -min_confidence 1.0 ./...` (if installed)
 
 #### Java
 - Look for: `pom.xml`, `build.gradle`
-- **Validators to run:**
-  - `mvn test` (Maven)
-  - `gradle test` (Gradle)
-  - `mvn verify` (full validation)
+- **Validators to run (USE QUIET FLAGS):**
+  - `mvn test -q` (Maven)
+  - `gradle test --quiet` (Gradle)
+  - `mvn verify -q` (full validation)
 
 #### Ruby
 - Look for: `Gemfile`
-- **Validators to run:**
-  - `rspec` (if RSpec configured)
+- **Validators to run (USE QUIET FLAGS):**
+  - `rspec --format progress` (if RSpec configured)
   - `rake test` (if Rake configured)
-  - `rubocop` (if linter configured)
+  - `rubocop --format simple` (if linter configured)
 
 #### C# / .NET
 - Look for: `*.csproj`, `*.sln`
-- **Validators to run:**
-  - `dotnet test`
-  - `dotnet build`
+- **Validators to run (USE QUIET FLAGS):**
+  - `dotnet test --verbosity quiet`
+  - `dotnet build --verbosity quiet`
 
 #### Rust
 - Look for: `Cargo.toml`
-- **Validators to run:**
-  - `cargo test`
-  - `cargo clippy` (linter)
+- **Validators to run (USE QUIET FLAGS):**
+  - `cargo test --quiet`
+  - `cargo clippy --quiet` (linter)
 
 #### PHP
 - Look for: `composer.json`
-- **Validators to run:**
-  - `./vendor/bin/phpunit` (if PHPUnit configured)
+- **Validators to run (USE QUIET FLAGS):**
+  - `./vendor/bin/phpunit --no-progress` (if PHPUnit configured)
   - `composer test` (if test script exists)
 
 ### 0.2 Run All Detected Validators
 
-**Execute validators in this order:**
+**Execute validators in this order (ALWAYS USE QUIET/SILENT FLAGS to minimize output):**
 
 1. **Linters first** (catch syntax/style issues)
-   - Example: `npm run lint`, `flake8`, `golint`
+   - Example: `npm run lint -- --quiet`, `flake8 --quiet`, `golint -min_confidence 1.0`
 
 2. **Type checkers** (catch type errors)
-   - Example: `npm run type-check`, `mypy`, `tsc --noEmit`
+   - Example: `tsc --noEmit --pretty false`, `mypy --no-error-summary`
 
 3. **Test suites** (catch logic/behavior issues)
-   - Example: `npm test`, `pytest`, `go test`
+   - Example: `npm test -- --silent`, `pytest -q --tb=line`, `go test -json`
 
 4. **Build/compile** (ensure project compiles)
    - Example: `npm run build`, `cargo build`, `dotnet build`

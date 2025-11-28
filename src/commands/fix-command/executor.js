@@ -3,8 +3,51 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
-const { executeClaude } = require("../../shared/executors/claude-executor");
-const { log } = require('console');
+const { executeClaude } = require('../../shared/executors/claude-executor');
+const { getLocalLLMService } = require('../../shared/services/local-llm');
+
+/**
+ * Analyzes a failed fix attempt using Local LLM
+ * @param {string} command - The command that was being fixed
+ * @param {string} previousError - Error from before the fix attempt
+ * @param {string} currentError - Error after the fix attempt
+ * @returns {Promise<string>} Analysis context for next attempt
+ */
+const analyzeFailedFix = async (command, previousError, currentError) => {
+    const llm = getLocalLLMService();
+    if (!llm) return '';
+
+    try {
+        await llm.initialize();
+        if (!llm.isAvailable()) return '';
+
+        // Use validateFix to analyze the situation
+        const validation = await llm.validateFix(
+            command,
+            previousError,
+            `Previous fix attempt resulted in: ${currentError}`,
+        );
+
+        if (validation && !validation.valid) {
+            const issues = validation.issues || [];
+            const recommendation = validation.recommendation || 'review';
+
+            let analysis = '\n\n## Fix Analysis (Local LLM)\n';
+            analysis += `**Recommendation:** ${recommendation}\n`;
+            if (issues.length > 0) {
+                analysis += `**Issues detected:**\n${issues.map(i => `- ${i}`).join('\n')}\n`;
+            }
+            analysis += `**Confidence:** ${((validation.confidence || 0.5) * 100).toFixed(0)}%\n`;
+
+            logger.debug('[FixCommand] Local LLM analysis provided');
+            return analysis;
+        }
+    } catch (error) {
+        logger.debug(`[FixCommand] Local LLM analysis failed: ${error.message}`);
+    }
+
+    return '';
+};
 
 const executeCommand = async (command) => {
     return new Promise((resolve) => {
@@ -20,7 +63,7 @@ const executeCommand = async (command) => {
         const child = spawn(shell, [...shellArgs, command], {
             cwd: state.folder,
             stdio: ['ignore', 'pipe', 'pipe'],
-            shell: false
+            shell: false,
         });
 
         // Ensure state is properly initialized and claudiomiro folder exists
@@ -55,7 +98,7 @@ const executeCommand = async (command) => {
             let lineCount = 0;
 
             // Process and print text line by line
-            const lines = text.split("\n");
+            const lines = text.split('\n');
             for (const line of lines) {
                 if (line.length > max) {
                     // Break long line into multiple lines
@@ -111,7 +154,7 @@ const executeCommand = async (command) => {
             resolve({
                 success,
                 exitCode: code,
-                output: outputBuffer
+                output: outputBuffer,
             });
         });
 
@@ -125,18 +168,21 @@ const executeCommand = async (command) => {
                 success: false,
                 exitCode: -1,
                 output: error.message,
-                error: error.message
+                error: error.message,
             });
         });
     });
 };
 
 const fixCommand = async (command, maxAttempts) => {
-    if(!fs.existsSync(state.claudiomiroFolder)){
+    if (!fs.existsSync(state.claudiomiroFolder)) {
         fs.mkdirSync(state.claudiomiroFolder, { recursive: true });
     }
 
     let i = 0;
+    let previousError = '';
+    let analysisContext = '';
+
     while (i < maxAttempts) {
         i++;
 
@@ -146,16 +192,32 @@ const fixCommand = async (command, maxAttempts) => {
             process.exit(0);
         }
 
+        const currentError = execution.output || 'Unknown error';
+
+        // If this is not the first attempt, analyze why the previous fix didn't work
+        if (i > 1 && previousError) {
+            analysisContext = await analyzeFailedFix(command, previousError, currentError);
+        }
+
         try {
             logger.info(`fix command "${command}"`);
-            await executeClaude(`fix command "${command}"`);
+
+            // Build prompt with analysis context if available
+            let prompt = `fix command "${command}"`;
+            if (analysisContext) {
+                prompt += analysisContext;
+            }
+
+            await executeClaude(prompt);
         } catch (error) {
             console.log(`Attempt ${i} failed: ${error.message}`);
         }
+
+        // Store current error for next iteration analysis
+        previousError = currentError;
     }
 
     throw new Error(`All ${maxAttempts} attempts to fix the command "${command}" have failed. Please check the command and try again.`);
-}
-
+};
 
 module.exports = { fixCommand, executeCommand };

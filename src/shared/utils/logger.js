@@ -43,7 +43,7 @@ class Logger {
             `║          CLAUDIOMIRO v${version}           ║`,
             '║     AI-Powered Development Agent      ║',
             '║                                       ║',
-            '╚═══════════════════════════════════════╝'
+            '╚═══════════════════════════════════════╝',
         ].join('\n'));
         this.withOutput(() => {
             console.log('\n' + title + '\n');
@@ -75,6 +75,15 @@ class Logger {
         });
     }
 
+    // Debug logs - only shown when DEBUG or CLAUDIOMIRO_DEBUG env var is set
+    debug(message) {
+        if (process.env.DEBUG || process.env.CLAUDIOMIRO_DEBUG) {
+            this.withOutput(() => {
+                console.log(`${this.getIndent()}${chalk.gray('[DEBUG]')} ${chalk.gray(message)}`);
+            });
+        }
+    }
+
     // Log de step/fase
     step(task, tasks, number, message) {
         const tasksText = chalk.bold.white(`[TASK ${task}/${tasks}]`);
@@ -93,7 +102,7 @@ class Logger {
             margin: 1,
             borderStyle: 'round',
             borderColor: 'cyan',
-            ...options
+            ...options,
         };
         this.withOutput(() => {
             console.log(boxen(message, boxConfig));
@@ -112,7 +121,7 @@ class Logger {
         this.spinner = ora({
             text: chalk.cyan(text),
             color: 'cyan',
-            spinner: 'dots'
+            spinner: 'dots',
         }).start();
     }
 
@@ -241,7 +250,7 @@ class Logger {
         return new Promise((resolve) => {
             const rl = readline.createInterface({
                 input: process.stdin,
-                output: process.stdout
+                output: process.stdout,
             });
 
             this.withOutput(() => {

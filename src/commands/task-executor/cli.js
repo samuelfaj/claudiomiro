@@ -3,10 +3,12 @@ const path = require('path');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
 const { startFresh } = require('./services/file-manager');
-const { step0, step1, step2, step3, step4, step5, step6, step7, step8 } = require('./steps');
+const { step0, step1, step2, step3, step7, step8 } = require('./steps');
 const { DAGExecutor } = require('./services/dag-executor');
 const { isFullyImplemented, hasApprovedCodeReview } = require('./utils/validation');
 
+// Note: This uses the sync version (heuristic-based) for building the initial task graph.
+// The async version with Local LLM support is used in dag-executor.js for critical execution checks.
 const isTaskApproved = (taskName) => {
     if (!state.claudiomiroFolder) {
         return false;
@@ -54,7 +56,6 @@ const chooseAction = async (i, args) => {
     const promptArg = args.find(arg => arg.startsWith('--prompt='));
     const promptText = promptArg ? promptArg.split('=').slice(1).join('=').replace(/^["']|["']$/g, '') : null;
 
-
     // Check if --fresh was passed (or if --prompt was used, which automatically activates --fresh)
     // IMPORTANT: --continue should not activate --fresh
     const shouldStartFresh = !continueFlag && (args.includes('--fresh') || promptText !== null);
@@ -74,7 +75,6 @@ const chooseAction = async (i, args) => {
 
     // Check if --codex or --claude was passed
     const codexFlag = args.includes('--codex');
-    const claudeFlag = args.includes('--claude');
     const deepSeekFlag = args.includes('--deep-seek');
     const glmFlag = args.includes('--glm');
     const gemini = args.includes('--gemini');
@@ -82,26 +82,26 @@ const chooseAction = async (i, args) => {
     let executorType = 'claude';
 
     if(codexFlag){
-        executorType = 'codex'
+        executorType = 'codex';
     }
 
     if(deepSeekFlag){
-        executorType = 'deep-seek'
+        executorType = 'deep-seek';
     }
 
     if(glmFlag){
-        executorType = 'glm'
+        executorType = 'glm';
     }
 
     if(gemini){
-        executorType = 'gemini'
+        executorType = 'gemini';
     }
 
     state.setExecutorType(executorType);
 
     // Check if --steps= or --step= was passed (which steps to execute)
     const stepsArg = args.find(arg => arg.startsWith('--steps=') || arg.startsWith('--step='));
-    const allowedSteps = stepsArg
+    const _allowedSteps = stepsArg
         ? stepsArg.split('=')[1].split(',').map(s => parseInt(s.trim(), 10))
         : null; // null = execute all steps
 
@@ -111,8 +111,8 @@ const chooseAction = async (i, args) => {
 
     // Helper to check if a step should be executed
     const shouldRunStep = (stepNumber) => {
-        if (!allowedSteps) return true; // If --steps was not passed, execute all
-        return allowedSteps.includes(stepNumber);
+        if (!_allowedSteps) return true; // If --steps was not passed, execute all
+        return _allowedSteps.includes(stepNumber);
     };
 
     // Filter args to get only the directory
@@ -131,12 +131,15 @@ const chooseAction = async (i, args) => {
         arg !== '--claude' &&
         arg !== '--deep-seek' &&
         arg !== '--glm' &&
-        arg !== '--gemini'
+        arg !== '--gemini',
     );
     const folderArg = filteredArgs[0] || process.cwd();
 
     // Resolve the absolute path and set the global variable
     state.setFolder(folderArg);
+
+    // Initialize cache folder for token optimization
+    state.initializeCache();
 
     if (!fs.existsSync(state.folder)) {
         logger.error(`Folder does not exist: ${state.folder}`);
@@ -150,8 +153,8 @@ const chooseAction = async (i, args) => {
     logger.newline();
 
     // Show which steps will be executed if --steps was specified
-    if (allowedSteps && i === 0) {
-        logger.info(`Running only steps: ${allowedSteps.join(', ')}`);
+    if (_allowedSteps && i === 0) {
+        logger.info(`Running only steps: ${_allowedSteps.join(', ')}`);
         logger.newline();
     }
 
@@ -187,7 +190,7 @@ const chooseAction = async (i, args) => {
                     logger.info('Operation cancelled by user.');
                     process.exit(0);
                 }
-             }
+            }
         }
 
         startFresh();
@@ -203,12 +206,13 @@ const chooseAction = async (i, args) => {
     }
 
     const tasks = fs
-    .readdirSync(state.claudiomiroFolder)
-    .filter(name => {
-        const fullPath = path.join(state.claudiomiroFolder, name);
-        return fs.statSync(fullPath).isDirectory();
-    })
-    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        .readdirSync(state.claudiomiroFolder)
+        .filter(name => {
+            const fullPath = path.join(state.claudiomiroFolder, name);
+            // Only include task folders (TASK0, TASK1, etc.), exclude cache and other directories
+            return fs.statSync(fullPath).isDirectory() && /^TASK\d+/.test(name);
+        })
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
     if (tasks.length === 0) {
         // Check if we need to run step1 (generate AI_PROMPT.md)
@@ -262,13 +266,35 @@ const chooseAction = async (i, args) => {
                     logger.newline();
                     logger.error('STEP 7 FAILED: Critical bugs remain after maximum iterations');
                     logger.error('');
-                    logger.error('Check the following file for details:');
-                    logger.error(`   ${path.join(state.claudiomiroFolder, 'BUGS.md')}`);
-                    logger.error('');
-                    logger.error('Next steps:');
-                    logger.error('   1. Review BUGS.md to see which critical bugs were found');
-                    logger.error('   2. Fix the bugs manually');
-                    logger.error('   3. Run Claudiomiro again to verify fixes');
+
+                    const bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
+                    if (fs.existsSync(bugsPath)) {
+                        logger.error('Check the following file for details:');
+                        logger.error(`   ${bugsPath}`);
+                        logger.error('');
+                        logger.error('Next steps:');
+                        logger.error('   1. Review BUGS.md to see which critical bugs were found');
+                        logger.error('   2. Fix the bugs manually');
+                        logger.error('   3. Run Claudiomiro again to verify fixes');
+                    } else {
+                        logger.error('BUGS.md was not created by the analysis.');
+                        logger.error('');
+                        logger.error('This could mean:');
+                        logger.error('   1. Claude failed to execute properly during the bug sweep');
+                        logger.error('   2. There was an issue with the analysis prompt or git diff');
+                        logger.error('   3. The AI could not complete the analysis within the iteration limit');
+                        logger.error('');
+                        const logPath = path.join(state.claudiomiroFolder, 'log.txt');
+                        if (fs.existsSync(logPath)) {
+                            logger.error('Check Claude execution log for details:');
+                            logger.error(`   ${logPath}`);
+                            logger.error('');
+                        }
+                        logger.error('Next steps:');
+                        logger.error('   1. Check the log.txt file above to see Claude output');
+                        logger.error('   2. Check git diff manually: git diff main...HEAD');
+                        logger.error('   3. Run Claudiomiro again with --debug flag for more details');
+                    }
                     logger.newline();
                     process.exit(1);
                 }
@@ -297,11 +323,27 @@ const chooseAction = async (i, args) => {
         }
 
         if (!taskGraph) {
-            logger.error('Cannot proceed: no dependency graph. Run step 3 first.');
-            process.exit(1);
+            // Step 3 hasn't run yet - run it to create dependencies
+            if (!shouldRunStep(3)) {
+                logger.error('Cannot proceed: no dependency graph. Run step 3 first.');
+                process.exit(1);
+            }
+
+            logger.newline();
+            logger.startSpinner('Analyzing task dependencies...');
+            await step3();
+            logger.stopSpinner();
+
+            // Rebuild task graph after step 3
+            taskGraph = buildTaskGraph();
+
+            if (!taskGraph) {
+                logger.error('Failed to create dependency graph after step 3.');
+                process.exit(1);
+            }
         }
 
-        const executor = new DAGExecutor(taskGraph, allowedSteps, maxConcurrent, noLimit, maxAttemptsPerTask);
+        const executor = new DAGExecutor(taskGraph, _allowedSteps, maxConcurrent, noLimit, maxAttemptsPerTask);
         await executor.runStep2();
     }
 
@@ -329,13 +371,35 @@ const chooseAction = async (i, args) => {
                     logger.newline();
                     logger.error('STEP 7 FAILED: Critical bugs remain after maximum iterations');
                     logger.error('');
-                    logger.error('Check the following file for details:');
-                    logger.error(`   ${path.join(state.claudiomiroFolder, 'BUGS.md')}`);
-                    logger.error('');
-                    logger.error('Next steps:');
-                    logger.error('   1. Review BUGS.md to see which critical bugs were found');
-                    logger.error('   2. Fix the bugs manually');
-                    logger.error('   3. Run Claudiomiro again to verify fixes');
+
+                    const bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
+                    if (fs.existsSync(bugsPath)) {
+                        logger.error('Check the following file for details:');
+                        logger.error(`   ${bugsPath}`);
+                        logger.error('');
+                        logger.error('Next steps:');
+                        logger.error('   1. Review BUGS.md to see which critical bugs were found');
+                        logger.error('   2. Fix the bugs manually');
+                        logger.error('   3. Run Claudiomiro again to verify fixes');
+                    } else {
+                        logger.error('BUGS.md was not created by the analysis.');
+                        logger.error('');
+                        logger.error('This could mean:');
+                        logger.error('   1. Claude failed to execute properly during the bug sweep');
+                        logger.error('   2. There was an issue with the analysis prompt or git diff');
+                        logger.error('   3. The AI could not complete the analysis within the iteration limit');
+                        logger.error('');
+                        const logPath = path.join(state.claudiomiroFolder, 'log.txt');
+                        if (fs.existsSync(logPath)) {
+                            logger.error('Check Claude execution log for details:');
+                            logger.error(`   ${logPath}`);
+                            logger.error('');
+                        }
+                        logger.error('Next steps:');
+                        logger.error('   1. Check the log.txt file above to see Claude output');
+                        logger.error('   2. Check git diff manually: git diff main...HEAD');
+                        logger.error('   3. Run Claudiomiro again with --debug flag for more details');
+                    }
                     logger.newline();
                     process.exit(1);
                 }
@@ -368,7 +432,7 @@ const chooseAction = async (i, args) => {
         logger.info('Switching to parallel execution mode with DAG executor');
         logger.newline();
 
-        const executor = new DAGExecutor(taskGraph, allowedSteps, maxConcurrent, noLimit, maxAttemptsPerTask);
+        const executor = new DAGExecutor(taskGraph, _allowedSteps, maxConcurrent, noLimit, maxAttemptsPerTask);
 
         try {
             await executor.run(buildTaskGraph);
@@ -416,7 +480,7 @@ const chooseAction = async (i, args) => {
         logger.startSpinner('Analyzing task dependencies...');
         return { step: step3() };
     }
-}
+};
 
 const allHasTodo = () => {
     if (!fs.existsSync(state.claudiomiroFolder)) {
@@ -427,7 +491,8 @@ const allHasTodo = () => {
         .readdirSync(state.claudiomiroFolder)
         .filter(name => {
             const fullPath = path.join(state.claudiomiroFolder, name);
-            return fs.statSync(fullPath).isDirectory();
+            // Only include task folders (TASK0, TASK1, etc.), exclude cache and other directories
+            return fs.statSync(fullPath).isDirectory() && /^TASK\d+/.test(name);
         })
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
@@ -446,7 +511,7 @@ const allHasTodo = () => {
     }
 
     return true;
-}
+};
 
 /**
  * Builds the task graph by reading dependencies from each TASK.md
@@ -461,7 +526,8 @@ const buildTaskGraph = () => {
         .readdirSync(state.claudiomiroFolder)
         .filter(name => {
             const fullPath = path.join(state.claudiomiroFolder, name);
-            return fs.statSync(fullPath).isDirectory();
+            // Only include task folders (TASK0, TASK1, etc.), exclude cache and other directories
+            return fs.statSync(fullPath).isDirectory() && /^TASK\d+/.test(name);
         })
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 
@@ -487,12 +553,12 @@ const buildTaskGraph = () => {
         // or
         //   @dependencies TASK1, TASK2, TASK3
         const depsMatch = taskMd.match(
-          /^\s*@dependencies\s*(?:\[(.*?)\]|(.+))\s*$/mi
+            /^\s*@dependencies\s*(?:\[(.*?)\]|(.+))\s*$/mi,
         );
 
         if (!depsMatch) {
-          // No @dependencies line -> incomplete graph
-          return null;
+            // No @dependencies line -> incomplete graph
+            return null;
         }
 
         hasAnyDependencyTag = true;
@@ -502,8 +568,8 @@ const buildTaskGraph = () => {
 
         // Allow empty: "@dependencies []" or "@dependencies" (if you want to permit it)
         const deps = raw
-          ? raw.split(',').filter( s => (s || '').toLowerCase() != 'none').map(s => s.trim()).filter(Boolean)
-          : [];
+            ? raw.split(',').filter( s => (s || '').toLowerCase() != 'none').map(s => s.trim()).filter(Boolean)
+            : [];
 
         // Optional: dedupe and prevent self-dependency
         const uniqueDeps = Array.from(new Set(deps)).filter(d => d !== task);
@@ -523,14 +589,14 @@ const buildTaskGraph = () => {
         const finalDeps = Array.from(new Set(allDepsWithSubtasks)).filter(d => d !== task);
 
         graph[task] = {
-          deps: finalDeps,
-          status: isTaskApproved(task) ? 'completed' : 'pending',
+            deps: finalDeps,
+            status: isTaskApproved(task) ? 'completed' : 'pending',
         };
     }
 
     // Return the graph if all tasks have @dependencies
     return hasAnyDependencyTag ? graph : null;
-}
+};
 
 const init = async (args) => {
     // Initialize state.folder before using it
@@ -541,10 +607,13 @@ const init = async (args) => {
         !arg.startsWith('--prompt') &&
         !arg.startsWith('--maxConcurrent') &&
         arg !== '--no-limit' &&
-        !arg.startsWith('--limit=')
+        !arg.startsWith('--limit='),
     );
     const folderArg = filteredArgs[0] || process.cwd();
     state.setFolder(folderArg);
+
+    // Initialize cache folder for token optimization
+    state.initializeCache();
 
     // Execute chooseAction until complete
     // Step 0 -> Step 1 -> Step 2 -> Step 3 -> DAGExecutor (with maxAttempts=20 PER TASK) -> Step 7
@@ -565,6 +634,6 @@ const init = async (args) => {
 
         i++;
     }
-}
+};
 
 module.exports = { init };

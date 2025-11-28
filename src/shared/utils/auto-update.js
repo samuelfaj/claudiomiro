@@ -19,7 +19,7 @@ async function getLatestVersion(packageName) {
     try {
         const result = execSync(`npm view ${packageName} version`, {
             encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe']
+            stdio: ['pipe', 'pipe', 'pipe'],
         });
         return result.trim();
     } catch (error) {
@@ -59,7 +59,7 @@ async function checkForUpdates(packageName = 'claudiomiro', options = {}) {
                 logger.info('Auto-updating...');
                 try {
                     execSync(`npm install -g ${packageName}@latest`, {
-                        stdio: 'inherit'
+                        stdio: 'inherit',
                     });
                     logger.success(`Successfully updated to version ${latestVersion}`);
                     logger.info('Please restart the command.');
@@ -95,5 +95,5 @@ module.exports = {
     checkForUpdates,
     checkForUpdatesAsync,
     getCurrentVersion,
-    getLatestVersion
+    getLatestVersion,
 };

@@ -174,6 +174,31 @@ describe('help command', () => {
             expect(noSuggestionsOption).toBeDefined();
             expect(noSuggestionsOption.description).toContain('level=2');
         });
+
+        test('should have test-local-llm command', () => {
+            const testLocalLlm = COMMANDS.find(cmd => cmd.name.includes('--test-local-llm'));
+            expect(testLocalLlm).toBeDefined();
+            expect(testLocalLlm.description).toContain('Local LLM');
+            expect(testLocalLlm.description).toContain('Ollama');
+        });
+
+        test('should have test-local-llm --prompt option', () => {
+            const testLocalLlm = COMMANDS.find(cmd => cmd.name.includes('--test-local-llm'));
+            const promptOption = testLocalLlm.options.find(opt => opt.flag.includes('--prompt'));
+            expect(promptOption).toBeDefined();
+        });
+
+        test('should have config command', () => {
+            const configCmd = COMMANDS.find(cmd => cmd.name.includes('--config'));
+            expect(configCmd).toBeDefined();
+            expect(configCmd.description).toContain('configuration');
+        });
+
+        test('should have config KEY=VALUE option', () => {
+            const configCmd = COMMANDS.find(cmd => cmd.name.includes('--config'));
+            const keyValueOption = configCmd.options.find(opt => opt.flag.includes('KEY=VALUE'));
+            expect(keyValueOption).toBeDefined();
+        });
     });
 
     describe('GLOBAL_OPTIONS constant', () => {

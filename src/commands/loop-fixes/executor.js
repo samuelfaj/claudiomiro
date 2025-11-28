@@ -3,47 +3,91 @@ const path = require('path');
 const state = require('../../shared/config/state');
 const { executeClaude } = require('../../shared/executors/claude-executor');
 const logger = require('../../shared/utils/logger');
+const { getLocalLLMService } = require('../../shared/services/local-llm');
 
 /**
- * Count pending items in TODO.md
+ * Pre-analyzes the fix context using Local LLM to provide hints
+ * @param {string} userPrompt - The user's prompt
+ * @param {number} pendingBefore - Pending items before this iteration
+ * @param {number} pendingAfter - Pending items after last iteration (if available)
+ * @param {string} lastError - Last error encountered (if any)
+ * @returns {Promise<string>} Analysis context for this iteration
+ */
+const preAnalyzeFixContext = async (userPrompt, pendingBefore, pendingAfter, lastError) => {
+    const llm = getLocalLLMService();
+    if (!llm) return '';
+
+    try {
+        await llm.initialize();
+        if (!llm.isAvailable()) return '';
+
+        // Only analyze if we're not making progress (stuck)
+        if (pendingAfter !== null && pendingBefore <= pendingAfter && lastError) {
+            const validation = await llm.validateFix(
+                userPrompt,
+                `${pendingBefore} pending items before, ${pendingAfter} after`,
+                lastError,
+            );
+
+            if (validation && validation.issues && validation.issues.length > 0) {
+                let analysis = '\n\n## Progress Analysis (Local LLM)\n';
+                analysis += '*Detected potential issues with previous fix approach:*\n';
+                analysis += validation.issues.map(i => `- ${i}`).join('\n') + '\n';
+                if (validation.recommendation) {
+                    analysis += `**Recommendation:** ${validation.recommendation}\n`;
+                }
+
+                logger.debug('[LoopFixes] Local LLM analysis provided');
+                return analysis;
+            }
+        }
+    } catch (error) {
+        logger.debug(`[LoopFixes] Local LLM analysis failed: ${error.message}`);
+    }
+
+    return '';
+};
+
+/**
+ * Count pending items in BUGS.md
  * Counts lines that match `- [ ]` pattern (unchecked items)
  *
- * @param {string} todoPath - Path to TODO.md file
+ * @param {string} bugsPath - Path to BUGS.md file
  * @returns {number} Count of pending items
  */
-const countPendingItems = (todoPath) => {
-    if (!fs.existsSync(todoPath)) {
+const countPendingItems = (bugsPath) => {
+    if (!fs.existsSync(bugsPath)) {
         return 0;
     }
 
     try {
-        const content = fs.readFileSync(todoPath, 'utf-8');
+        const content = fs.readFileSync(bugsPath, 'utf-8');
         const matches = content.match(/- \[ \]/g);
         return matches ? matches.length : 0;
     } catch (error) {
-        logger.warning(`Could not read TODO.md: ${error.message}`);
+        logger.warning(`Could not read BUGS.md: ${error.message}`);
         return 0;
     }
 };
 
 /**
- * Count completed items in TODO.md
+ * Count completed items in BUGS.md
  * Counts lines that match `- [x]` pattern (checked items)
  *
- * @param {string} todoPath - Path to TODO.md file
+ * @param {string} bugsPath - Path to BUGS.md file
  * @returns {number} Count of completed items
  */
-const countCompletedItems = (todoPath) => {
-    if (!fs.existsSync(todoPath)) {
+const countCompletedItems = (bugsPath) => {
+    if (!fs.existsSync(bugsPath)) {
         return 0;
     }
 
     try {
-        const content = fs.readFileSync(todoPath, 'utf-8');
+        const content = fs.readFileSync(bugsPath, 'utf-8');
         const matches = content.match(/- \[x\]/gi);
         return matches ? matches.length : 0;
     } catch (error) {
-        logger.warning(`Could not read TODO.md: ${error.message}`);
+        logger.warning(`Could not read BUGS.md: ${error.message}`);
         return 0;
     }
 };
@@ -72,29 +116,33 @@ const initializeFolder = (clearFolder = false) => {
  *
  * Executes a self-correcting loop that:
  * 1. Takes a user prompt describing what to check/fix
- * 2. Creates/updates TODO.md with findings
+ * 2. Creates/updates BUGS.md with findings
  * 3. Fixes issues found
- * 4. When Claude creates OVERVIEW.md, enters verification mode
+ * 4. When Claude creates CRITICAL_REVIEW_OVERVIEW.md, enters verification mode
  * 5. Verification checks if there are new issues missed
- * 6. Only completes when verification confirms no new tasks
+ * 6. Only completes when verification confirms no new tasks (CRITICAL_REVIEW_PASSED.md)
  *
  * @param {string} userPrompt - The user's prompt describing what to check/fix
  * @param {number} maxIterations - Maximum number of iterations (default: 20)
+ * @param {Object} options - Optional settings
+ * @param {boolean} options.clearFolder - Whether to clear .claudiomiro folder before starting (default: true)
  * @returns {Promise<void>}
  */
-const loopFixes = async (userPrompt, maxIterations = 20) => {
+const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
+    const { clearFolder = true } = options;
+
     // Validate inputs
     if (!userPrompt || !userPrompt.trim()) {
         throw new Error('A prompt is required for loop-fixes command.');
     }
 
     // Initialize folder
-    initializeFolder(true);
+    initializeFolder(clearFolder);
 
     // Define paths
-    const todoPath = path.join(state.claudiomiroFolder, 'TODO.md');
-    const overviewPath = path.join(state.claudiomiroFolder, 'OVERVIEW.md');
-    const noNewTasksPath = path.join(state.claudiomiroFolder, 'NO_NEW_TASKS.md');
+    const bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
+    const overviewPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_OVERVIEW.md');
+    const passedPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
 
     logger.info('🔄 Starting loop-fixes...');
     logger.info(`📝 Prompt: "${userPrompt.substring(0, 100)}${userPrompt.length > 100 ? '...' : ''}"`);
@@ -123,16 +171,20 @@ const loopFixes = async (userPrompt, maxIterations = 20) => {
     // Verification state
     let isVerificationPhase = false;
 
+    // Track progress for Local LLM analysis
+    let previousPendingCount = null;
+    let lastIterationError = '';
+
     // Self-correction loop
     for (let iteration = 1; iteration <= maxIterations; iteration++) {
         const iterationDisplay = maxIterations === Infinity ? `${iteration}` : `${iteration}/${maxIterations}`;
 
-        // Delete NO_NEW_TASKS.md if exists from previous verification
-        if (fs.existsSync(noNewTasksPath)) {
+        // Delete CRITICAL_REVIEW_PASSED.md if exists from previous verification
+        if (fs.existsSync(passedPath)) {
             try {
-                fs.unlinkSync(noNewTasksPath);
+                fs.unlinkSync(passedPath);
             } catch (error) {
-                logger.warning(`Could not delete NO_NEW_TASKS.md: ${error.message}`);
+                logger.warning(`Could not delete CRITICAL_REVIEW_PASSED.md: ${error.message}`);
             }
         }
 
@@ -143,8 +195,8 @@ const loopFixes = async (userPrompt, maxIterations = 20) => {
 
             prompt = verificationPromptTemplate
                 .replace(/\{\{userPrompt\}\}/g, userPrompt)
-                .replace(/\{\{todoPath\}\}/g, todoPath)
-                .replace(/\{\{noNewTasksPath\}\}/g, noNewTasksPath)
+                .replace(/\{\{bugsPath\}\}/g, bugsPath)
+                .replace(/\{\{passedPath\}\}/g, passedPath)
                 .replace(/\{\{claudiomiroFolder\}\}/g, state.claudiomiroFolder);
 
             logger.startSpinner('Verifying if there are new tasks...');
@@ -152,23 +204,44 @@ const loopFixes = async (userPrompt, maxIterations = 20) => {
             logger.info(`\n🔄 Iteration ${iterationDisplay}`);
 
             // Count pending items before execution
-            const pendingBefore = countPendingItems(todoPath);
+            const pendingBefore = countPendingItems(bugsPath);
+
+            // Get Local LLM analysis if we're not making progress
+            let analysisContext = '';
+            if (iteration > 1 && previousPendingCount !== null) {
+                analysisContext = await preAnalyzeFixContext(
+                    userPrompt,
+                    previousPendingCount,
+                    pendingBefore,
+                    lastIterationError,
+                );
+            }
 
             prompt = promptTemplate
                 .replace(/\{\{iteration\}\}/g, iteration)
                 .replace(/\{\{maxIterations\}\}/g, maxIterations === Infinity ? 'unlimited' : maxIterations)
                 .replace(/\{\{userPrompt\}\}/g, userPrompt)
-                .replace(/\{\{todoPath\}\}/g, todoPath)
+                .replace(/\{\{bugsPath\}\}/g, bugsPath)
                 .replace(/\{\{overviewPath\}\}/g, overviewPath)
                 .replace(/\{\{claudiomiroFolder\}\}/g, state.claudiomiroFolder);
+
+            // Append analysis context if available
+            if (analysisContext) {
+                prompt += analysisContext;
+            }
+
+            // Update tracking for next iteration
+            previousPendingCount = pendingBefore;
 
             logger.startSpinner('Analyzing and fixing issues...');
         }
 
         try {
             await executeClaude(prompt);
+            lastIterationError = ''; // Clear error on success
         } catch (error) {
             logger.stopSpinner();
+            lastIterationError = error.message;
             logger.error(`Claude execution failed on iteration ${iteration}: ${error.message}`);
             throw new Error(`Loop-fixes failed during iteration ${iteration}: ${error.message}`);
         }
@@ -176,21 +249,21 @@ const loopFixes = async (userPrompt, maxIterations = 20) => {
 
         // Check results based on mode
         if (isVerificationPhase) {
-            // Verification mode - check for NO_NEW_TASKS.md
-            if (fs.existsSync(noNewTasksPath)) {
+            // Verification mode - check for CRITICAL_REVIEW_PASSED.md
+            if (fs.existsSync(passedPath)) {
                 // Verification passed - no new tasks found!
                 logger.success('✅ Verification passed! No new tasks found.');
                 logger.success('✅ Loop completed!');
 
                 // Log summary
-                if (fs.existsSync(todoPath)) {
+                if (fs.existsSync(bugsPath)) {
                     try {
-                        const completedCount = countCompletedItems(todoPath);
+                        const completedCount = countCompletedItems(bugsPath);
                         if (completedCount > 0) {
                             logger.info(`📊 Summary: ${completedCount} issue(s) fixed across ${iteration} iteration(s)`);
                         }
                     } catch (error) {
-                        logger.warning(`Could not read TODO.md for summary: ${error.message}`);
+                        logger.warning(`Could not read BUGS.md for summary: ${error.message}`);
                     }
                 }
 
@@ -202,23 +275,23 @@ const loopFixes = async (userPrompt, maxIterations = 20) => {
                 // Continue to next iteration (normal fix mode)
             }
         } else {
-            // Normal mode - check for OVERVIEW.md
+            // Normal mode - check for CRITICAL_REVIEW_OVERVIEW.md
             if (fs.existsSync(overviewPath)) {
-                logger.info('📋 OVERVIEW.md created. Starting verification...');
+                logger.info('📋 CRITICAL_REVIEW_OVERVIEW.md created. Starting verification...');
 
-                // Delete OVERVIEW.md and enter verification mode
+                // Delete CRITICAL_REVIEW_OVERVIEW.md and enter verification mode
                 try {
                     fs.unlinkSync(overviewPath);
                 } catch (error) {
-                    logger.warning(`Could not delete OVERVIEW.md: ${error.message}`);
+                    logger.warning(`Could not delete CRITICAL_REVIEW_OVERVIEW.md: ${error.message}`);
                 }
 
                 isVerificationPhase = true;
                 // Continue to verification iteration
             } else {
-                // Check TODO.md status
-                const pendingAfter = countPendingItems(todoPath);
-                const completedCount = countCompletedItems(todoPath);
+                // Check BUGS.md status
+                const pendingAfter = countPendingItems(bugsPath);
+                const completedCount = countCompletedItems(bugsPath);
 
                 logger.info(`📋 Issues tracked: ${completedCount} fixed, ${pendingAfter} pending`);
 
@@ -232,17 +305,17 @@ const loopFixes = async (userPrompt, maxIterations = 20) => {
     const maxIterDisplay = maxIterations === Infinity ? 'unlimited' : maxIterations;
     logger.error(`❌ Max iterations (${maxIterDisplay}) reached`);
 
-    if (fs.existsSync(todoPath)) {
-        logger.error('📋 See TODO.md for details on remaining issues');
+    if (fs.existsSync(bugsPath)) {
+        logger.error('📋 See BUGS.md for details on remaining issues');
         try {
-            const todoContent = fs.readFileSync(todoPath, 'utf-8');
-            logger.error(`\n${todoContent}`);
+            const bugsContent = fs.readFileSync(bugsPath, 'utf-8');
+            logger.error(`\n${bugsContent}`);
         } catch (error) {
-            logger.error(`Could not read TODO.md: ${error.message}`);
+            logger.error(`Could not read BUGS.md: ${error.message}`);
         }
     }
 
-    throw new Error(`Loop-fixes did not complete after ${maxIterDisplay} iterations. Check TODO.md for remaining issues.`);
+    throw new Error(`Loop-fixes did not complete after ${maxIterDisplay} iterations. Check BUGS.md for remaining issues.`);
 };
 
 module.exports = { loopFixes, countPendingItems, countCompletedItems, initializeFolder };

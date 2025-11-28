@@ -1,5 +1,57 @@
 # Code Review Task — Systematic Verification
 
+## OUTPUT RULES (Token Optimization)
+- Respond in the shortest format possible without losing technical precision
+- Use only the reasoning strictly necessary to execute the task
+- Do not include explanations that don't contribute to the solution
+- When running terminal commands, prefer silent versions (--silent, --quiet, -q) except when verbose output is needed for diagnosis
+
+## SHELL COMMAND RULE (MANDATORY)
+
+**CRITICAL: ALL shell commands SHOULD be executed via token-optimizer, with exceptions.**
+
+### Default: Use token-optimizer
+```bash
+# ✅ CORRECT - Use token-optimizer for informational output:
+claudiomiro --token-optimizer --command="npm test" --filter="return only failed tests with errors"
+claudiomiro --token-optimizer --command="git status" --filter="return only changed files"
+claudiomiro --token-optimizer --command="eslint src/" --filter="return only violations with file:line"
+```
+
+**Filter suggestions:**
+- Tests: `--filter="return only failed tests with error messages"`
+- Build: `--filter="return only errors and warnings"`
+- Lint: `--filter="return only violations with file:line"`
+- Git: `--filter="return only changed files summary"`
+- General: `--filter="return only relevant output"`
+
+### EXCEPTION: When NOT to use token-optimizer
+
+**Execute commands DIRECTLY (without token-optimizer) when:**
+
+1. **Deterministic output expected** - You need exact/structured output for programmatic decisions:
+   ```bash
+   npm pkg get version          # needs exact version string
+   git rev-parse HEAD           # needs exact commit hash
+   cat package.json | jq '.x'   # needs exact JSON value
+   ```
+
+2. **Precise diagnosis needed** - You need complete output for accurate debugging:
+   ```bash
+   npm test -- --verbose        # investigating specific failure
+   ```
+
+3. **Structured parsing** - Output will be parsed programmatically:
+   ```bash
+   git log --format="%H %s" -n 5
+   npm ls --json
+   ```
+
+**Rule of thumb:** Use token-optimizer for verbose/diagnostic output.
+Skip when you need exact values for decisions.
+
+**Note:** Falls back to original output if CLAUDIOMIRO_LOCAL_LLM not configured.
+
 ## 🎯 YOUR ROLE
 You are a **Senior Engineer performing a functional code review**. Your job is to verify the code works correctly and completely.
 
@@ -12,6 +64,19 @@ Think like a developer who will run this code in production tomorrow. Ask:
 > "If I deployed this right now, would it work? What would break? What's missing?"
 
 Your mission: **Catch functional issues that would cause problems in production.**
+
+---
+
+## 📚 CONSOLIDATED CONTEXT (Token-Optimized)
+
+The section below contains a **pre-built summary** of the project environment and completed tasks. Use this summary as your PRIMARY source of context.
+
+**IMPORTANT: Token Optimization Strategy**
+- ✅ **USE the summary below FIRST** - it has architectural decisions, patterns, and conventions already extracted
+- ✅ **Reference files are listed** - read them ONLY if you need more specific details for the review
+- ❌ **DO NOT re-read AI_PROMPT.md entirely** - the key information is already summarized
+- ❌ **DO NOT iterate all previous task folders** - completed task context is already included
+
 {{contextSection}}
 ---
 
@@ -157,51 +222,105 @@ For mismatches: endpoint → frontend expectation → backend reality
 
 ---
 
-### Run Tests First
+### Run Affected Tests Only (Token Optimization)
 
-Before deciding, actually run the tests:
+**RATIONALE:** Step 7 (Global Bug Sweep) runs ALL tests as a final safety net after ALL tasks complete.
+Running the full test suite in Step 6 wastes tokens since it runs PER TASK and may iterate multiple times.
+Instead, run ONLY tests affected by THIS task's changes.
+
+#### Step 1: Identify Changed Files
+
+Read `{{todoMdPath}}` and extract all files from "Touched (will modify/create)" sections.
+
+#### Step 2: Map Source Files to Test Files
+
+For each source file, find its corresponding test file:
+
+| Language | Source Pattern | Test Pattern |
+|----------|----------------|--------------|
+| JS/TS | `file.js` / `file.ts` | `file.test.js` / `file.test.ts` |
+| Python | `file.py` | `file_test.py` or `test_file.py` |
+| Go | `file.go` | `file_test.go` |
+| Java | `File.java` | `FileTest.java` |
+| Ruby | `file.rb` | `file_spec.rb` or `file_test.rb` |
+| C# | `File.cs` | `FileTests.cs` |
+| Rust | `file.rs` | Tests in same file or `file_test.rs` |
+| PHP | `File.php` | `FileTest.php` |
+
+**VERIFY:** Confirm test files exist before running.
+
+#### Step 3: Run Targeted Tests
+
+**TOKEN OPTIMIZATION:** Use silent/quiet/json flags to minimize output tokens.
 
 \`\`\`bash
-# Run relevant tests (use actual project commands):
-# Examples by language/stack:
-# - JavaScript/TypeScript: npm test, yarn test, bun test, jest, vitest
-# - Python: pytest, python -m unittest, tox
-# - Go: go test ./..., go test -v
-# - Java: mvn test, gradle test
-# - Ruby: rspec, rake test
-# - C#: dotnet test
-# - Rust: cargo test
-# - PHP: phpunit
+# JavaScript/TypeScript (SILENT output):
+npm test -- path/to/file.test.js --silent
+# or: npx jest path/to/file.test.js --silent --json
+# or: npx vitest run path/to/file.test.ts --reporter=dot
 
-[test_command_from_project]
+# Python (QUIET output):
+pytest path/to/file_test.py -q --tb=line
 
-# Linting/formatting (if applicable):
-# - JS/TS: eslint, prettier
-# - Python: black, flake8, pylint, ruff
-# - Go: gofmt, golint
-# - Java: checkstyle
-# - Ruby: rubocop
-# - Rust: cargo fmt, cargo clippy
+# Go (JSON output - NO -v flag):
+go test -json ./path/to/package/...
 
-[lint_command_from_project]
+# Java (QUIET output):
+mvn test -Dtest=FileTest,OtherTest -q
+# Gradle:
+gradle test --tests "*FileTest" --quiet
 
-# Type checking / compilation (if applicable):
-# - TypeScript: tsc --noEmit
-# - Python: mypy
-# - Go: go build
-# - Java: javac, mvn compile
-# - C#: dotnet build
-# - Rust: cargo check
+# Ruby (JSON output):
+rspec spec/path/to/file_spec.rb --format progress
 
-[type_or_compile_command_from_project]
+# C#:
+dotnet test --filter "FullyQualifiedName~FileTest" --verbosity quiet
+
+# Rust (QUIET output):
+cargo test file_name::tests --quiet
+
+# PHP:
+./vendor/bin/phpunit tests/Path/To/FileTest.php --no-progress
 \`\`\`
 
-**CRITICAL:** Use the ACTUAL commands from the project (check package.json, Makefile, pyproject.toml, go.mod, pom.xml, Gemfile, Cargo.toml, etc.)
+#### Step 4: Fallback Strategy
 
-Record results:
-- Which tests passed
-- Which tests failed (with errors)
-- Any linting/formatting/compilation errors
+**If no test files are found for changed source files:**
+- Document: "No tests found for [file]. Step 7 will validate with full test suite."
+- Flag as potential finding if tests SHOULD exist but don't
+- Do NOT run directory-level or full suite - rely on Step 7
+
+#### Step 5: Targeted Lint/Type Checks
+
+Run linting and type checking ONLY for changed files. **Use quiet/json flags.**
+
+\`\`\`bash
+# Lint ONLY changed files (QUIET output):
+# JS/TS: eslint path/to/changed/file.js --quiet --format compact
+# Python: flake8 path/to/changed/file.py --quiet && ruff check path/to/changed/file.py --quiet
+# Go: golint -min_confidence 1.0 ./path/to/changed/...
+# Ruby: rubocop path/to/changed/file.rb --format simple
+
+[lint_command_for_changed_files] --quiet
+
+# Type check ONLY changed paths (MINIMAL output):
+# TypeScript: tsc --noEmit path/to/changed/file.ts --pretty false
+# Python: mypy path/to/changed/file.py --no-error-summary
+# Go: go vet -json ./path/to/changed/...
+
+[type_check_for_changed_files]
+\`\`\`
+
+**CRITICAL:** Use ACTUAL commands from the project (check package.json, Makefile, pyproject.toml, etc.)
+
+#### Record Results
+
+- **Tests run:** [list specific test files executed]
+- **Tests passed/failed:** [results with errors]
+- **Missing coverage:** [changed files without tests - flag as finding]
+- **Lint/Type errors:** [any issues found]
+
+**NOTE:** Step 7's full test suite will catch any missed regressions before merge.
 
 ---
 

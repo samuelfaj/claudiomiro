@@ -18,12 +18,12 @@ const overwriteBlock = (lines) => {
     // Move cursor up N lines and clear each one
     process.stdout.write(`\x1b[${lines}A`);
     for (let i = 0; i < lines; i++) {
-      process.stdout.write('\x1b[2K'); // clear line
-      process.stdout.write('\x1b[1B'); // move down one line
+        process.stdout.write('\x1b[2K'); // clear line
+        process.stdout.write('\x1b[1B'); // move down one line
     }
     // Return to top of block
     process.stdout.write(`\x1b[${lines}A`);
-  }
+};
 
 const createLoader = () => {
     const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
@@ -70,7 +70,7 @@ const cleanupTempFile = (tmpFile) => {
         // Don't throw on cleanup failure, just log
         logger.error(`Failed to cleanup temp file: ${err.message}`);
     }
-}
+};
 
 const runGemini = (text, taskName = null) => {
     return new Promise((resolve, reject) => {
@@ -113,8 +113,8 @@ const runGemini = (text, taskName = null) => {
         const command = `gemini -p "$(cat '${tmpFile}')"`;
 
         logger.stopSpinner();
-        logger.info("Executing Gemini CLI");
-        logger.command(`gemini ...`);
+        logger.info('Executing Gemini CLI');
+        logger.command('gemini ...');
         logger.separator();
         logger.newline();
 
@@ -124,7 +124,7 @@ const runGemini = (text, taskName = null) => {
 
         const gemini = spawn('sh', ['-c', command], {
             cwd: state.folder,
-            stdio: ['ignore', 'pipe', 'pipe']
+            stdio: ['ignore', 'pipe', 'pipe'],
         });
 
         const logFilePath = path.join(state.claudiomiroFolder, 'gemini-log.txt');
@@ -183,11 +183,11 @@ const runGemini = (text, taskName = null) => {
                 }
 
                 // Print header
-                console.log(`💎 Gemini:`);
+                console.log('💎 Gemini:');
                 lineCount++;
 
                 // Process and print text line by line
-                const lines = text.split("\n");
+                const lines = text.split('\n');
                 for(const line of lines){
                     if(line.length > max){
                         // Break long line into multiple lines
@@ -203,7 +203,7 @@ const runGemini = (text, taskName = null) => {
 
                 // Update counter for next overwrite
                 overwriteBlockLines = lineCount;
-            }
+            };
 
             for (const line of lines) {
                 // Skip empty lines

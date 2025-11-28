@@ -1,10 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "mcp__serena__find_file",
-      "mcp__serena__activate_project",
-      "WebFetch(domain:docs.z.ai)",
-      "mcp__serena__list_dir"
+      "WebFetch(domain:docs.z.ai)"
     ],
     "deny": [],
     "ask": []

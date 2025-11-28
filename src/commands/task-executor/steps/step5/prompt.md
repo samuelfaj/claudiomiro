@@ -1,3 +1,55 @@
+## OUTPUT RULES (Token Optimization)
+- Respond in the shortest format possible without losing technical precision
+- Use only the reasoning strictly necessary to execute the task
+- Do not include explanations that don't contribute to the solution
+- When running terminal commands, prefer silent versions (--silent, --quiet, -q) except when verbose output is needed for diagnosis
+
+## SHELL COMMAND RULE (MANDATORY)
+
+**CRITICAL: ALL shell commands SHOULD be executed via token-optimizer, with exceptions.**
+
+### Default: Use token-optimizer
+```bash
+# ✅ CORRECT - Use token-optimizer for informational output:
+claudiomiro --token-optimizer --command="npm test" --filter="return only failed tests with errors"
+claudiomiro --token-optimizer --command="git status" --filter="return only changed files"
+claudiomiro --token-optimizer --command="eslint src/" --filter="return only violations with file:line"
+```
+
+**Filter suggestions:**
+- Tests: `--filter="return only failed tests with error messages"`
+- Build: `--filter="return only errors and warnings"`
+- Lint: `--filter="return only violations with file:line"`
+- Git: `--filter="return only changed files summary"`
+- General: `--filter="return only relevant output"`
+
+### EXCEPTION: When NOT to use token-optimizer
+
+**Execute commands DIRECTLY (without token-optimizer) when:**
+
+1. **Deterministic output expected** - You need exact/structured output for programmatic decisions:
+   ```bash
+   npm pkg get version          # needs exact version string
+   git rev-parse HEAD           # needs exact commit hash
+   cat package.json | jq '.x'   # needs exact JSON value
+   ```
+
+2. **Precise diagnosis needed** - You need complete output for accurate debugging:
+   ```bash
+   npm test -- --verbose        # investigating specific failure
+   ```
+
+3. **Structured parsing** - Output will be parsed programmatically:
+   ```bash
+   git log --format="%H %s" -n 5
+   npm ls --json
+   ```
+
+**Rule of thumb:** Use token-optimizer for verbose/diagnostic output.
+Skip when you need exact values for decisions.
+
+**Note:** Falls back to original output if CLAUDIOMIRO_LOCAL_LLM not configured.
+
 OBJECTIVE:
 Execute all actionable items in {{todoPath}} in parallel when possible.
 Stop only when all items are [X] or BLOCKED/FAILED and the first line is "Fully implemented: YES".
@@ -30,6 +82,12 @@ TESTS:
 - Run only affected tests/linters/typechecks.
 - If no tests exist → run static analysis only.
 - Never run full-project checks.
+- **USE SILENT/QUIET FLAGS** to minimize output tokens:
+  - Jest: `--silent` or `--silent --json`
+  - pytest: `-q --tb=line`
+  - go test: `-json` (NO -v flag)
+  - eslint: `--quiet --format compact`
+  - tsc: `--pretty false`
 
 FAILURES:
 - On test failure → add "FAILED: test <module>" and retry loop.
@@ -39,6 +97,23 @@ FAILURES:
 STOP-DIFF:
 - Do not rename TODO items or unrelated files.
 - Keep diffs minimal and atomic.
+
+CODE EDITING (Token Optimization):
+- PREFER unified diff format for code modifications when possible.
+- For multi-line changes, use diff blocks:
+  ```diff
+  --- a/path/to/file.ext
+  +++ b/path/to/file.ext
+  @@ -start,count +start,count @@
+   context line
+  -removed line
+  +added line
+   context line
+  ```
+- Benefits: Minimal tokens, clear changes, atomic operations.
+- For single-line or simple changes, direct edits are acceptable.
+- NEVER output entire file contents when only a few lines change.
+- CRITICAL: When changing multiple locations in same file, use multiple hunks in single diff.
 
 STATE:
 - Persist updates to {{todoPath}} and logs after each loop.
