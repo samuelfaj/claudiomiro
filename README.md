@@ -1,10 +1,10 @@
-# Claudiomiro
+## Claudiomiro: Autonomous AI-Powered Development Agent
+
+Turn days of complex development into a fully automated process — without sacrificing production-grade code quality.
 
 Send your prompt:
 
 **It decomposes, codes, reviews, builds, tests, and commits autonomously**, in parallel and while economizing tokens.
-
-Turn days of complex development into a fully automated process — without sacrificing production-grade code quality.
 
 🔥 [Use Ollama](./docs/HOW-TO-USE-OLLAMA.md) and **reduce token costs by 90%.**
 
