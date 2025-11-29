@@ -9,6 +9,7 @@ const {
     markTaskCompleted,
     getContextFilePaths,
 } = require('../../../../shared/services/context-cache');
+const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 
 /**
  * Step 5: Task Execution
@@ -30,6 +31,21 @@ const _listFolders = (dir) => {
 const step5 = async (task) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
     const logger = require('../../../../shared/utils/logger');
+
+    // Read and parse scope from TASK.md for multi-repo support
+    const taskMdPath = folder('TASK.md');
+    const taskMdContent = fs.existsSync(taskMdPath)
+        ? fs.readFileSync(taskMdPath, 'utf-8')
+        : '';
+    const scope = parseTaskScope(taskMdContent);
+
+    // Validate scope in multi-repo mode (throws if missing)
+    validateScope(scope, state.isMultiRepo());
+
+    // Determine working directory based on scope
+    const cwd = state.isMultiRepo()
+        ? state.getRepository(scope)
+        : state.folder;
 
     // Check if we need to re-research due to multiple failures
     let needsReResearch = false;
@@ -53,10 +69,9 @@ const step5 = async (task) => {
         fs.rmSync(folder('CODE_REVIEW.md'));
     }
 
-    // Read task description for code-index symbol search
-    const taskMdPath = folder('TASK.md');
-    const taskDescription = fs.existsSync(taskMdPath)
-        ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
+    // Read task description for code-index symbol search (reuse taskMdContent from scope parsing)
+    const taskDescription = taskMdContent.length > 0
+        ? taskMdContent.substring(0, 500)
         : task;
 
     // Use incremental context collection instead of reading all files
@@ -151,7 +166,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
             .replace(/\{\{todoPath\}\}/g, folder('TODO.md'))
             .replace(/\{\{researchSection\}\}/g, researchSection);
 
-        const result = await executeClaude(promptTemplate, task);
+        const result = await executeClaude(promptTemplate, task, { cwd });
 
         // Generate CONTEXT.md after successful execution
         await generateContextFile(task);

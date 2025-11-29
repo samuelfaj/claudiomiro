@@ -5,9 +5,15 @@ jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('./generate-research');
 jest.mock('./generate-context');
+jest.mock('../../utils/scope-parser', () => ({
+    parseTaskScope: jest.fn().mockReturnValue(null),
+    validateScope: jest.fn().mockReturnValue(true),
+}));
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro',
     folder: '/test/project',
+    isMultiRepo: jest.fn().mockReturnValue(false),
+    getRepository: jest.fn().mockReturnValue('/test/backend'),
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     warning: jest.fn(),
@@ -25,6 +31,8 @@ const { step5 } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { generateResearchFile } = require('./generate-research');
 const { generateContextFile } = require('./generate-context');
+const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 
 describe('step5', () => {
@@ -326,6 +334,7 @@ describe('step5', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.not.stringContaining('RESEARCH CONTEXT:'),
                 mockTask,
+                { cwd: '/test/project' },
             );
         });
 
@@ -429,6 +438,240 @@ describe('step5', () => {
                     reResearched: false,
                 }],
             });
+        });
+    });
+
+    describe('scope-aware execution', () => {
+        beforeEach(() => {
+            // Reset scope-parser mocks
+            parseTaskScope.mockReturnValue(null);
+            validateScope.mockReturnValue(true);
+            state.isMultiRepo.mockReturnValue(false);
+            state.getRepository.mockReturnValue('/test/backend');
+        });
+
+        test('should use state.folder as cwd in single-repo mode (backward compatible)', async () => {
+            // Arrange
+            generateResearchFile.mockResolvedValue();
+            generateContextFile.mockResolvedValue();
+            executeClaude.mockResolvedValue({ success: true });
+            state.isMultiRepo.mockReturnValue(false);
+            parseTaskScope.mockReturnValue(null);
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('info.json')) return false;
+                if (filePath.includes('CODE_REVIEW.md')) return false;
+                if (filePath.includes('RESEARCH.md')) return false;
+                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('TASK.md')) return false;
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TODO.md')) return 'Fully implemented: YES\n\nContent';
+                if (filePath.includes('prompt.md')) return 'Execute task for {{todoPath}} with {{researchSection}}';
+                return '';
+            });
+
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step5(mockTask);
+
+            // Assert
+            expect(state.isMultiRepo).toHaveBeenCalled();
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.any(String),
+                mockTask,
+                { cwd: '/test/project' },
+            );
+        });
+
+        test('should use state.getRepository(backend) as cwd for @scope backend', async () => {
+            // Arrange
+            generateResearchFile.mockResolvedValue();
+            generateContextFile.mockResolvedValue();
+            executeClaude.mockResolvedValue({ success: true });
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockReturnValue('/test/backend');
+            parseTaskScope.mockReturnValue('backend');
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('info.json')) return false;
+                if (filePath.includes('CODE_REVIEW.md')) return false;
+                if (filePath.includes('RESEARCH.md')) return false;
+                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return '@scope backend\n\nTask content';
+                if (filePath.includes('TODO.md')) return 'Fully implemented: YES\n\nContent';
+                if (filePath.includes('prompt.md')) return 'Execute task for {{todoPath}} with {{researchSection}}';
+                return '';
+            });
+
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step5(mockTask);
+
+            // Assert
+            expect(parseTaskScope).toHaveBeenCalledWith('@scope backend\n\nTask content');
+            expect(state.getRepository).toHaveBeenCalledWith('backend');
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.any(String),
+                mockTask,
+                { cwd: '/test/backend' },
+            );
+        });
+
+        test('should use state.getRepository(frontend) as cwd for @scope frontend', async () => {
+            // Arrange
+            generateResearchFile.mockResolvedValue();
+            generateContextFile.mockResolvedValue();
+            executeClaude.mockResolvedValue({ success: true });
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockReturnValue('/test/frontend');
+            parseTaskScope.mockReturnValue('frontend');
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('info.json')) return false;
+                if (filePath.includes('CODE_REVIEW.md')) return false;
+                if (filePath.includes('RESEARCH.md')) return false;
+                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return '@scope frontend\n\nTask content';
+                if (filePath.includes('TODO.md')) return 'Fully implemented: YES\n\nContent';
+                if (filePath.includes('prompt.md')) return 'Execute task for {{todoPath}} with {{researchSection}}';
+                return '';
+            });
+
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step5(mockTask);
+
+            // Assert
+            expect(parseTaskScope).toHaveBeenCalledWith('@scope frontend\n\nTask content');
+            expect(state.getRepository).toHaveBeenCalledWith('frontend');
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.any(String),
+                mockTask,
+                { cwd: '/test/frontend' },
+            );
+        });
+
+        test('should use state.getRepository(integration) as cwd for @scope integration', async () => {
+            // Arrange
+            generateResearchFile.mockResolvedValue();
+            generateContextFile.mockResolvedValue();
+            executeClaude.mockResolvedValue({ success: true });
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockReturnValue('/test/backend'); // integration uses backend path
+            parseTaskScope.mockReturnValue('integration');
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('info.json')) return false;
+                if (filePath.includes('CODE_REVIEW.md')) return false;
+                if (filePath.includes('RESEARCH.md')) return false;
+                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return '@scope integration\n\nTask content';
+                if (filePath.includes('TODO.md')) return 'Fully implemented: YES\n\nContent';
+                if (filePath.includes('prompt.md')) return 'Execute task for {{todoPath}} with {{researchSection}}';
+                return '';
+            });
+
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step5(mockTask);
+
+            // Assert
+            expect(parseTaskScope).toHaveBeenCalledWith('@scope integration\n\nTask content');
+            expect(state.getRepository).toHaveBeenCalledWith('integration');
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.any(String),
+                mockTask,
+                { cwd: '/test/backend' },
+            );
+        });
+
+        test('should throw validation error when scope missing in multi-repo mode', async () => {
+            // Arrange
+            generateResearchFile.mockResolvedValue();
+            state.isMultiRepo.mockReturnValue(true);
+            parseTaskScope.mockReturnValue(null);
+            validateScope.mockImplementation(() => {
+                throw new Error('@scope tag is required in multi-repo mode');
+            });
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return 'Task content without scope';
+                return '';
+            });
+
+            // Act & Assert
+            await expect(step5(mockTask)).rejects.toThrow('@scope tag is required in multi-repo mode');
+            expect(validateScope).toHaveBeenCalledWith(null, true);
+        });
+
+        test('should work when TASK.md does not exist in single-repo mode', async () => {
+            // Arrange
+            generateResearchFile.mockResolvedValue();
+            generateContextFile.mockResolvedValue();
+            executeClaude.mockResolvedValue({ success: true });
+            state.isMultiRepo.mockReturnValue(false);
+            parseTaskScope.mockReturnValue(null);
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return false;
+                if (filePath.includes('info.json')) return false;
+                if (filePath.includes('CODE_REVIEW.md')) return false;
+                if (filePath.includes('RESEARCH.md')) return false;
+                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TODO.md')) return 'Fully implemented: YES\n\nContent';
+                if (filePath.includes('prompt.md')) return 'Execute task for {{todoPath}} with {{researchSection}}';
+                return '';
+            });
+
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step5(mockTask);
+
+            // Assert
+            expect(parseTaskScope).toHaveBeenCalledWith(''); // Empty content when file doesn't exist
+            expect(validateScope).toHaveBeenCalledWith(null, false);
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.any(String),
+                mockTask,
+                { cwd: '/test/project' },
+            );
         });
     });
 });

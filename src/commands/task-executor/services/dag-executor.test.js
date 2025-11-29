@@ -9,6 +9,7 @@ jest.mock('./parallel-ui-renderer');
 jest.mock('../utils/terminal-renderer');
 jest.mock('../utils/progress-calculator');
 jest.mock('../utils/validation');
+jest.mock('../utils/scope-parser');
 
 // Set up os.cpus mock before module import
 const os = require('os');
@@ -23,6 +24,7 @@ const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
 const { isFullyImplemented, hasApprovedCodeReview } = require('../utils/validation');
+const { parseTaskScope } = require('../utils/scope-parser');
 const { DAGExecutor } = require('./dag-executor');
 
 // Mock steps module
@@ -48,7 +50,14 @@ describe('DAGExecutor', () => {
         // Setup default mocks
         // os.cpus is already mocked before module import
         state.claudiomiroFolder = '/test/.claudiomiro';
+        state.isMultiRepo = jest.fn().mockReturnValue(false);
+        state.getGitMode = jest.fn().mockReturnValue(null);
         path.join.mockImplementation((...args) => args.join('/'));
+
+        // Default scope-parser mock
+        parseTaskScope.mockReturnValue(null); // Defaults to 'integration'
+        fs.existsSync.mockReturnValue(false);
+        fs.readFileSync.mockReturnValue('');
 
         // Create mock state manager
         mockStateManager = {
