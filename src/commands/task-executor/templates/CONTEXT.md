@@ -12,10 +12,10 @@
 - **`RESEARCH.md`** - Research findings and execution strategy
 - **`info.json`** - Execution metadata and history
 
-## Modified Files Summary
+## Files Modified
 {{modifiedFilesList}}
 
-## Quick Notes
+## Decisions
 {{quickNotes}}
 
 ## For Future Tasks
