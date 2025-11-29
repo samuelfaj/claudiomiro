@@ -9,8 +9,14 @@ jest.mock('../../utils/scope-parser', () => ({
     parseTaskScope: jest.fn().mockReturnValue(null),
     validateScope: jest.fn().mockReturnValue(true),
 }));
+jest.mock('./reflection-hook', () => ({
+    shouldReflect: jest.fn().mockReturnValue({ should: false }),
+    createReflection: jest.fn(),
+    storeReflection: jest.fn(),
+    buildReflectionTrajectory: jest.fn().mockReturnValue(''),
+}));
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test/project',
     isMultiRepo: jest.fn().mockReturnValue(false),
     getRepository: jest.fn().mockReturnValue('/test/backend'),
@@ -34,10 +40,11 @@ const { generateContextFile } = require('./generate-context');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
+const reflectionHook = require('./reflection-hook');
 
 describe('step5', () => {
     const mockTask = 'TASK1';
-    const taskFolder = path.join('/test/.claudiomiro', mockTask);
+    const taskFolder = path.join('/test/.claudiomiro/task-executor', mockTask);
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -49,6 +56,7 @@ describe('step5', () => {
             generateResearchFile.mockResolvedValue();
             generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
+            reflectionHook.shouldReflect.mockReturnValue({ should: false });
 
             // Mock file system state - no info.json, basic files exist
             fs.existsSync.mockImplementation((filePath) => {
@@ -58,7 +66,7 @@ describe('step5', () => {
                 if (filePath.includes('TODO.md')) return true;
                 if (filePath.includes('AI_PROMPT.md')) return true;
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath === '/test/.claudiomiro') return true;
+                if (filePath === '/test/.claudiomiro/task-executor') return true;
                 return false;
             });
 
@@ -90,6 +98,58 @@ describe('step5', () => {
             expect(result).toEqual({ success: true });
         });
 
+        test('should trigger reflection when hook requests it', async () => {
+            generateResearchFile.mockResolvedValue();
+            generateContextFile.mockResolvedValue();
+            executeClaude.mockResolvedValue({});
+            reflectionHook.shouldReflect.mockReturnValueOnce({ should: true, trigger: 'quality-threshold' });
+            reflectionHook.createReflection.mockResolvedValue({
+                insights: [{ insight: 'Add integration tests', confidence: 0.85, actionable: true }],
+                converged: true,
+                iterations: 1,
+                history: [],
+            });
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('info.json')) return true;
+                if (filePath.includes('CODE_REVIEW.md')) return false;
+                if (filePath.includes('CONTEXT.md')) return false;
+                if (filePath.includes('RESEARCH.md')) return true;
+                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                if (filePath.includes('prompt.md')) return true;
+                if (filePath === '/test/.claudiomiro/task-executor') return true;
+                return false;
+            });
+
+            fs.readdirSync.mockReturnValue([]);
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('info.json')) {
+                    return JSON.stringify({
+                        attempts: 2,
+                        errorHistory: [{ message: 'previous failure' }],
+                    });
+                }
+                if (filePath.includes('TODO.md')) return 'Fully implemented: YES\n- [ ] Step\n- [ ] Step 2';
+                if (filePath.includes('prompt.md')) return 'Prompt {{todoPath}}';
+                return '';
+            });
+
+            fs.writeFileSync.mockImplementation(() => {});
+
+            await step5(mockTask);
+
+            expect(reflectionHook.createReflection).toHaveBeenCalledWith(
+                mockTask,
+                expect.objectContaining({ cwd: '/test/project' }),
+            );
+            expect(reflectionHook.storeReflection).toHaveBeenCalledWith(
+                mockTask,
+                expect.objectContaining({ insights: expect.any(Array) }),
+                { should: true, trigger: 'quality-threshold' },
+            );
+        });
+
         test('should handle re-research after 3+ failed attempts', async () => {
             // Arrange
             generateResearchFile.mockResolvedValue();
@@ -104,7 +164,7 @@ describe('step5', () => {
                 if (filePath.includes('TODO.md')) return true;
                 if (filePath.includes('AI_PROMPT.md')) return true;
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath === '/test/.claudiomiro') return true;
+                if (filePath === '/test/.claudiomiro/task-executor') return true;
                 return false;
             });
 
@@ -151,8 +211,8 @@ describe('step5', () => {
             // Arrange
             const { getContextFilePaths, buildConsolidatedContextAsync } = require('../../../../shared/services/context-cache');
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK2/CONTEXT.md',
-                '/test/.claudiomiro/TASK3/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK2/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK3/CONTEXT.md',
             ]);
 
             generateResearchFile.mockResolvedValue();
@@ -183,13 +243,13 @@ describe('step5', () => {
 
             // Assert - context-cache service should be called
             expect(buildConsolidatedContextAsync).toHaveBeenCalledWith(
-                '/test/.claudiomiro',
+                '/test/.claudiomiro/task-executor',
                 mockTask,
                 expect.anything(), // projectFolder (state.folder)
                 expect.any(String), // taskDescription
             );
             expect(getContextFilePaths).toHaveBeenCalledWith(
-                '/test/.claudiomiro',
+                '/test/.claudiomiro/task-executor',
                 mockTask,
                 expect.objectContaining({ onlyCompleted: true }),
             );
@@ -215,7 +275,7 @@ describe('step5', () => {
                 if (filePath.includes('RESEARCH.md')) return false;
                 if (filePath.includes('TODO.md')) return true;
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath === '/test/.claudiomiro') return true;
+                if (filePath === '/test/.claudiomiro/task-executor') return true;
                 return false;
             });
 
@@ -280,7 +340,7 @@ describe('step5', () => {
                 if (filePath.includes('TODO.md')) return true;
                 if (filePath.includes('AI_PROMPT.md')) return true;
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath === '/test/.claudiomiro') return true;
+                if (filePath === '/test/.claudiomiro/task-executor') return true;
                 return false;
             });
 
@@ -314,7 +374,7 @@ describe('step5', () => {
                 if (filePath.includes('TODO.md')) return true;
                 if (filePath.includes('AI_PROMPT.md')) return true;
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath === '/test/.claudiomiro') return true;
+                if (filePath === '/test/.claudiomiro/task-executor') return true;
                 return false;
             });
 
@@ -351,7 +411,7 @@ describe('step5', () => {
                 if (filePath.includes('TODO.md')) return true;
                 if (filePath.includes('AI_PROMPT.md')) return true;
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath === '/test/.claudiomiro') return true;
+                if (filePath === '/test/.claudiomiro/task-executor') return true;
                 return false;
             });
 
@@ -405,7 +465,7 @@ describe('step5', () => {
                 if (filePath.includes('TODO.md')) return true;
                 if (filePath.includes('AI_PROMPT.md')) return true;
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath === '/test/.claudiomiro') return true;
+                if (filePath === '/test/.claudiomiro/task-executor') return true;
                 return false;
             });
 

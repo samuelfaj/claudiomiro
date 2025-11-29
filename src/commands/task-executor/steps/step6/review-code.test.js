@@ -6,7 +6,7 @@ jest.mock('fs');
 jest.mock('path');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test/project',
     isMultiRepo: jest.fn().mockReturnValue(false),
     getRepository: jest.fn().mockReturnValue('/test/project'),
@@ -122,8 +122,8 @@ describe('review-code', () => {
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('AI_PROMPT.md');
             expect(actualCall).toContain('INITIAL_PROMPT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/AI_PROMPT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/INITIAL_PROMPT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/AI_PROMPT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/INITIAL_PROMPT.md');
         });
 
         test('should include RESEARCH.md when it exists', async () => {
@@ -141,7 +141,7 @@ describe('review-code', () => {
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('RESEARCH.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
         });
 
         test('should include CONTEXT.md when it exists', async () => {
@@ -159,7 +159,7 @@ describe('review-code', () => {
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('CONTEXT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/CONTEXT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/CONTEXT.md');
         });
 
         test('should skip RESEARCH.md and CONTEXT.md from context section when they do not exist', async () => {
@@ -179,8 +179,8 @@ describe('review-code', () => {
             // Check that files are not listed in the context section (after "## 📚 CONTEXT FILES" and before "These provide:")
             const contextSectionMatch = actualCall.match(/## 📚 CONTEXT FILES[\s\S]*?These provide:/);
             if (contextSectionMatch) {
-                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
-                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/TASK1/CONTEXT.md');
+                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
+                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/task-executor/TASK1/CONTEXT.md');
             }
         });
 
@@ -188,8 +188,8 @@ describe('review-code', () => {
             // Arrange - Mock context-cache to return files from other tasks
             const { getContextFilePaths } = require('../../../../shared/services/context-cache');
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK2/CONTEXT.md',
-                '/test/.claudiomiro/TASK3/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK2/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK3/CONTEXT.md',
             ]);
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -203,8 +203,8 @@ describe('review-code', () => {
 
             // Assert - files returned by context-cache should be in reference section
             const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('/test/.claudiomiro/TASK2/CONTEXT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK3/CONTEXT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK2/CONTEXT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK3/CONTEXT.md');
         });
 
         test('should call context-cache service with current task excluded', async () => {
@@ -218,14 +218,14 @@ describe('review-code', () => {
 
             // Assert - context-cache service should be called with current task to be excluded
             expect(buildOptimizedContextAsync).toHaveBeenCalledWith(
-                '/test/.claudiomiro',
+                '/test/.claudiomiro/task-executor',
                 mockTask,
                 expect.anything(), // projectFolder (state.folder)
                 expect.any(String), // taskDescription
                 expect.anything(), // options
             );
             expect(getContextFilePaths).toHaveBeenCalledWith(
-                '/test/.claudiomiro',
+                '/test/.claudiomiro/task-executor',
                 mockTask,
                 expect.objectContaining({ onlyCompleted: true }),
             );
@@ -235,7 +235,7 @@ describe('review-code', () => {
             // Arrange - context-cache returns unique files (deduplication is handled by service)
             const { getContextFilePaths } = require('../../../../shared/services/context-cache');
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK2/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK2/CONTEXT.md',
             ]);
 
             fs.existsSync.mockImplementation((filePath) => {

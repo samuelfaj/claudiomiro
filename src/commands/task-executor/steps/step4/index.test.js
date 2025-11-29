@@ -10,7 +10,7 @@ jest.mock('../../../../shared/utils/logger', () => ({
     newline: jest.fn(),
 }));
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
 }));
 
 // Import after mocks
@@ -43,7 +43,7 @@ describe('step4', () => {
 
             // Assert
             expect(generateTodo).toHaveBeenCalledWith(mockTask);
-            expect(validateTodoQuality).toHaveBeenCalledWith(path.join('/test/.claudiomiro', mockTask, 'TODO.md'));
+            expect(validateTodoQuality).toHaveBeenCalledWith(path.join('/test/.claudiomiro/task-executor', mockTask, 'TODO.md'));
             expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
             expect(logger.success).toHaveBeenCalledWith('TODO.md validated successfully (context reference score: 3/3)');
             expect(result).toEqual({ shouldSplit: false, reason: 'Simple task' });
@@ -215,7 +215,7 @@ describe('step4', () => {
 
             // Assert
             expect(generateTodo).toHaveBeenCalledWith(differentTask);
-            expect(validateTodoQuality).toHaveBeenCalledWith(path.join('/test/.claudiomiro', differentTask, 'TODO.md'));
+            expect(validateTodoQuality).toHaveBeenCalledWith(path.join('/test/.claudiomiro/task-executor', differentTask, 'TODO.md'));
             expect(analyzeSplit).toHaveBeenCalledWith(differentTask);
         });
 

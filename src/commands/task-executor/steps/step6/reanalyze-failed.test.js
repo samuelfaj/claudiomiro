@@ -6,7 +6,7 @@ jest.mock('fs');
 jest.mock('path');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
 }));
 
 // Mock Date for deterministic timestamps
@@ -92,15 +92,15 @@ describe('reanalyze-failed', () => {
 
             // Assert
             expect(fs.cpSync).toHaveBeenCalledWith(
-                '/test/.claudiomiro/TASK1/TODO.md',
-                '/test/.claudiomiro/TASK1/TODO.old.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.old.md',
             );
             expect(fs.cpSync).toHaveBeenCalledWith(
-                '/test/.claudiomiro/TASK1/TODO.md',
-                '/test/.claudiomiro/TASK1/TODO.old.1704067200000.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.old.1704067200000.md',
             );
             expect(fs.rmSync).toHaveBeenCalledWith(
-                '/test/.claudiomiro/TASK1/TODO.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.md',
                 { force: true },
             );
         });
@@ -117,8 +117,8 @@ describe('reanalyze-failed', () => {
             // Act & Assert
             await expect(reanalyzeFailed(mockTask)).rejects.toThrow('Error creating TODO.md file in deep re-analysis');
             expect(fs.cpSync).toHaveBeenCalledWith(
-                '/test/.claudiomiro/TASK1/TODO.old.md',
-                '/test/.claudiomiro/TASK1/TODO.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.old.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.md',
             );
         });
 
@@ -141,7 +141,7 @@ describe('reanalyze-failed', () => {
 
             // Assert
             expect(fs.rmSync).toHaveBeenCalledWith(
-                '/test/.claudiomiro/TASK1/TODO.old.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.old.md',
                 { force: true },
             );
         });
@@ -163,7 +163,7 @@ describe('reanalyze-failed', () => {
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('AI_PROMPT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/AI_PROMPT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/AI_PROMPT.md');
         });
 
         test('should include RESEARCH.md when it exists', async () => {
@@ -181,7 +181,7 @@ describe('reanalyze-failed', () => {
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('RESEARCH.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
         });
 
         test('should handle missing RESEARCH.md gracefully', async () => {
@@ -198,7 +198,7 @@ describe('reanalyze-failed', () => {
 
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).not.toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
+            expect(actualCall).not.toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
             expect(actualCall).toContain('AI_PROMPT.md');
         });
     });
@@ -347,10 +347,10 @@ describe('reanalyze-failed', () => {
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).not.toMatch(/\{\{.*\}\}/);
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/PROMPT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/TASK.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/TODO.old.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/TODO.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/PROMPT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/TASK.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/TODO.old.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/TODO.md');
         });
 
         test('should include TODO template from templates directory', async () => {
@@ -448,8 +448,8 @@ describe('reanalyze-failed', () => {
 
             // Assert
             expect(fs.cpSync).toHaveBeenCalledWith(
-                '/test/.claudiomiro/TASK1/TODO.md',
-                '/test/.claudiomiro/TASK1/TODO.old.1704067200000.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.md',
+                '/test/.claudiomiro/task-executor/TASK1/TODO.old.1704067200000.md',
             );
         });
     });

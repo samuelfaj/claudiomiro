@@ -4,7 +4,7 @@ const path = require('path');
 jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     newline: jest.fn(),
@@ -35,7 +35,7 @@ describe('step3', () => {
             await step3();
 
             // Assert
-            expect(fs.readdirSync).toHaveBeenCalledWith('/test/.claudiomiro');
+            expect(fs.readdirSync).toHaveBeenCalledWith('/test/.claudiomiro/task-executor');
             expect(fs.statSync).not.toHaveBeenCalled();
             expect(logger.newline).toHaveBeenCalled();
             expect(logger.startSpinner).toHaveBeenCalledWith('Analyzing task dependencies...');
@@ -66,7 +66,7 @@ describe('step3', () => {
 
             // Assert
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', mockTask, 'TASK.md'),
+                path.join('/test/.claudiomiro/task-executor', mockTask, 'TASK.md'),
                 `@dependencies []\n${mockTaskContent}`,
                 'utf-8',
             );
@@ -301,7 +301,7 @@ describe('step3', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringMatching(/TASK1.*TASK2.*TASK10/s),
             );
-            expect(fs.readdirSync).toHaveBeenCalledWith('/test/.claudiomiro');
+            expect(fs.readdirSync).toHaveBeenCalledWith('/test/.claudiomiro/task-executor');
         });
     });
 

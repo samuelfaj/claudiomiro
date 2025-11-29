@@ -6,11 +6,14 @@ jest.mock('fs');
 jest.mock('path');
 jest.mock('./review-code');
 jest.mock('./reanalyze-failed');
+jest.mock('./curate-insights', () => ({
+    curateInsights: jest.fn().mockResolvedValue({}),
+}));
 jest.mock('../../../../shared/services/git-commit');
 jest.mock('../../utils/validation');
 jest.mock('../../utils/scope-parser');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     isMultiRepo: jest.fn(),
     getGitMode: jest.fn(),
     getRepository: jest.fn(),
@@ -25,6 +28,7 @@ jest.mock('../../../../shared/utils/logger', () => ({
 const { step6 } = require('./index');
 const { reviewCode } = require('./review-code');
 const { reanalyzeFailed } = require('./reanalyze-failed');
+const { curateInsights } = require('./curate-insights');
 const { smartCommit } = require('../../../../shared/services/git-commit');
 const { isFullyImplementedAsync } = require('../../utils/validation');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
@@ -82,6 +86,12 @@ describe('step6', () => {
                 shouldPush: true,
                 createPR: false,
             });
+            expect(curateInsights).toHaveBeenCalledWith(mockTask, expect.objectContaining({
+                todoPath: expect.stringContaining('TODO.md'),
+                contextPath: expect.stringContaining('CONTEXT.md'),
+                codeReviewPath: expect.stringContaining('CODE_REVIEW.md'),
+                reflectionPath: expect.stringContaining('REFLECTION.md'),
+            }));
         });
 
         test('should call smartCommit without push when shouldPush is false', async () => {
@@ -100,6 +110,7 @@ describe('step6', () => {
                 shouldPush: false,
                 createPR: false,
             });
+            expect(curateInsights).toHaveBeenCalled();
         });
 
         test('should not call smartCommit when TODO is not fully implemented', async () => {
@@ -114,6 +125,7 @@ describe('step6', () => {
 
             // Assert
             expect(smartCommit).not.toHaveBeenCalled();
+            expect(curateInsights).not.toHaveBeenCalled();
         });
     });
 
@@ -135,6 +147,7 @@ describe('step6', () => {
                 '⚠️  Commit failed in step6, continuing anyway:',
                 mockError.message,
             );
+            expect(curateInsights).not.toHaveBeenCalled();
         });
 
         test('should not warn when commit succeeds', async () => {
@@ -149,6 +162,7 @@ describe('step6', () => {
 
             // Assert
             expect(logger.warning).not.toHaveBeenCalled();
+            expect(curateInsights).toHaveBeenCalled();
         });
     });
 

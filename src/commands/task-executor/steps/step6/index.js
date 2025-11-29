@@ -7,6 +7,7 @@ const { isFullyImplementedAsync } = require('../../utils/validation');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const { curateInsights } = require('./curate-insights');
 
 /**
  * Commits changes based on task scope for multi-repo support
@@ -110,6 +111,16 @@ const step6 = async (task, shouldPush = true) => {
             await commitForScope(task, scope, task, shouldPush);
 
             logger.debug('[Step6] Commit completed');
+            try {
+                await curateInsights(task, {
+                    todoPath: folder('TODO.md'),
+                    contextPath: folder('CONTEXT.md'),
+                    codeReviewPath: folder('CODE_REVIEW.md'),
+                    reflectionPath: folder('REFLECTION.md'),
+                });
+            } catch (curationError) {
+                logger.warning(`[Step6] Insight curation skipped: ${curationError.message}`);
+            }
         } catch (error) {
             // Log but don't block execution
             logger.warning('⚠️  Commit failed in step6, continuing anyway:', error.message);

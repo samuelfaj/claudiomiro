@@ -5,7 +5,8 @@ const { findGitRoot } = require('../services/git-detector');
 class State {
     constructor() {
         this._folder = null;
-        this._claudiomiroFolder = null;
+        this._claudiomiroRoot = null;
+        this._taskExecutorFolder = null;
         this._executorType = 'claude';
         this._multiRepoEnabled = false;
         this._repositories = new Map();
@@ -15,7 +16,8 @@ class State {
 
     setFolder(folderPath) {
         this._folder = path.resolve(folderPath);
-        this._claudiomiroFolder = path.join(this._folder, '.claudiomiro');
+        this._claudiomiroRoot = path.join(this._folder, '.claudiomiro');
+        this._taskExecutorFolder = path.join(this._claudiomiroRoot, 'task-executor');
     }
 
     get folder() {
@@ -23,7 +25,11 @@ class State {
     }
 
     get claudiomiroFolder() {
-        return this._claudiomiroFolder;
+        return this._taskExecutorFolder;
+    }
+
+    get claudiomiroRoot() {
+        return this._claudiomiroRoot;
     }
 
     /**
@@ -31,7 +37,7 @@ class State {
      * @returns {string} Path to cache folder
      */
     get cacheFolder() {
-        return path.join(this._claudiomiroFolder, 'cache');
+        return path.join(this._taskExecutorFolder, 'cache');
     }
 
     /**
@@ -39,8 +45,16 @@ class State {
      * Call this after setFolder() when starting a new session
      */
     initializeCache() {
-        if (!this._claudiomiroFolder) {
+        if (!this._taskExecutorFolder) {
             return;
+        }
+
+        if (!fs.existsSync(this._claudiomiroRoot)) {
+            fs.mkdirSync(this._claudiomiroRoot, { recursive: true });
+        }
+
+        if (!fs.existsSync(this._taskExecutorFolder)) {
+            fs.mkdirSync(this._taskExecutorFolder, { recursive: true });
         }
 
         const cacheDir = this.cacheFolder;

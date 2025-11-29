@@ -10,6 +10,7 @@ const {
     getContextFilePaths,
 } = require('../../../../shared/services/context-cache');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const reflectionHook = require('./reflection-hook');
 
 /**
  * Step 5: Task Execution
@@ -26,6 +27,34 @@ const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 
 const _listFolders = (dir) => {
     return fs.readdirSync(dir).filter(f => fs.statSync(path.join(dir, f)).isDirectory());
+};
+
+const estimateCodeChangeSize = (contextPath, todoPath) => {
+    const readContent = (filePath) => (fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '');
+    const context = readContent(contextPath);
+    const todo = readContent(todoPath);
+    return context.split('\n').length + Math.floor(todo.split('\n').length / 2);
+};
+
+const estimateTaskComplexity = (todoPath) => {
+    if (!fs.existsSync(todoPath)) {
+        return 'medium';
+    }
+    const content = fs.readFileSync(todoPath, 'utf8');
+    if (/complexity:\s*high/i.test(content)) {
+        return 'high';
+    }
+    if (/complexity:\s*low/i.test(content)) {
+        return 'low';
+    }
+    const checklist = (content.match(/- \[ \]/g) || []).length;
+    if (checklist >= 8) {
+        return 'high';
+    }
+    if (checklist <= 3) {
+        return 'low';
+    }
+    return 'medium';
 };
 
 const step5 = async (task) => {
@@ -174,6 +203,31 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
 
         // Mark task as completed in cache for incremental context tracking
         markTaskCompleted(state.claudiomiroFolder, task);
+
+        try {
+            const info = fs.existsSync(folder('info.json'))
+                ? JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'))
+                : null;
+
+            const metrics = {
+                attempts: info?.attempts || 1,
+                hasErrors: Boolean(info?.errorHistory && info.errorHistory.length > 0),
+                codeChangeSize: estimateCodeChangeSize(folder('CONTEXT.md'), folder('TODO.md')),
+                taskComplexity: estimateTaskComplexity(folder('TODO.md')),
+            };
+
+            const decision = reflectionHook.shouldReflect(task, metrics);
+            if (decision.should) {
+                const reflection = await reflectionHook.createReflection(task, {
+                    cwd,
+                });
+                if (reflection) {
+                    await reflectionHook.storeReflection(task, reflection, decision);
+                }
+            }
+        } catch (error) {
+            logger.warning(`[Step5] Reflection skipped: ${error.message}`);
+        }
 
         return result;
     } catch (error) {

@@ -4,7 +4,7 @@ const _path = require('path');
 jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     isMultiRepo: jest.fn(() => false),
     getRepository: jest.fn((scope) => `/test/${scope}`),
     getGitMode: jest.fn(() => 'separate'),
@@ -84,7 +84,7 @@ describe('step1', () => {
                 expect.stringContaining('## FIRST STEP: \n\nCreate a git branch for this task\n\n'),
             );
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Generate AI_PROMPT.md for task: This is the initial task content from user at /test/.claudiomiro'),
+                expect.stringContaining('Generate AI_PROMPT.md for task: This is the initial task content from user at /test/.claudiomiro/task-executor'),
             );
             expect(logger.stopSpinner).toHaveBeenCalled();
             expect(logger.success).toHaveBeenCalledWith('AI_PROMPT.md created successfully');
@@ -151,7 +151,7 @@ describe('step1', () => {
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Generate AI_PROMPT.md for task: Task content for same branch test at /test/.claudiomiro'),
+                expect.stringContaining('Generate AI_PROMPT.md for task: Task content for same branch test at /test/.claudiomiro/task-executor'),
             );
             // Verify that the prompt does NOT contain the branch step text
             expect(executeClaude).toHaveBeenCalledWith(
@@ -188,7 +188,7 @@ describe('step1', () => {
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Generate AI_PROMPT.md for task:  at /test/.claudiomiro'),
+                expect.stringContaining('Generate AI_PROMPT.md for task:  at /test/.claudiomiro/task-executor'),
             );
             expect(logger.success).toHaveBeenCalledWith('AI_PROMPT.md created successfully');
         });

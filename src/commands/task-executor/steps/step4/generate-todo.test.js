@@ -4,7 +4,7 @@ const _path = require('path');
 jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test/project',
     isMultiRepo: jest.fn().mockReturnValue(false),
     getRepository: jest.fn().mockReturnValue('/test/project'),
@@ -29,18 +29,24 @@ jest.mock('../../../../shared/services/context-cache', () => ({
     }),
     getContextFilePaths: jest.fn().mockReturnValue([]),
 }));
+jest.mock('../../../../shared/services/insights', () => ({
+    getCuratedInsightsForTask: jest.fn().mockReturnValue([]),
+    incrementInsightUsage: jest.fn(),
+}));
 
 // Import after mocks
 const { generateTodo } = require('./generate-todo');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { buildOptimizedContextAsync, getContextFilePaths } = require('../../../../shared/services/context-cache');
 const state = require('../../../../shared/config/state');
+const insightsService = require('../../../../shared/services/insights');
 
 describe('generate-todo', () => {
     const mockTask = 'TASK1';
 
     beforeEach(() => {
         jest.clearAllMocks();
+        insightsService.getCuratedInsightsForTask.mockReturnValue([]);
     });
 
     describe('generateTodo', () => {
@@ -98,7 +104,7 @@ describe('generate-todo', () => {
 
             const executeCall = executeClaude.mock.calls[0][0];
             // Now uses consolidated context structure
-            expect(executeCall).toContain('/test/.claudiomiro/AI_PROMPT.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/AI_PROMPT.md');
             expect(executeCall).toContain('CONTEXT SUMMARY');
             expect(executeCall).toContain('REFERENCE FILES');
         });
@@ -106,7 +112,7 @@ describe('generate-todo', () => {
         test('should use context-cache service to get completed task files', async () => {
             // Mock context-cache to return files from completed tasks only
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK1/TODO.md',  // Only completed task files
+                '/test/.claudiomiro/task-executor/TASK1/TODO.md',  // Only completed task files
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
@@ -123,7 +129,7 @@ describe('generate-todo', () => {
             await generateTodo(mockTask);
 
             // Verify context-cache service was called with correct options
-            expect(getContextFilePaths).toHaveBeenCalledWith('/test/.claudiomiro', mockTask, {
+            expect(getContextFilePaths).toHaveBeenCalledWith('/test/.claudiomiro/task-executor', mockTask, {
                 includeContext: true,
                 includeResearch: true,
                 includeTodo: true,
@@ -132,14 +138,14 @@ describe('generate-todo', () => {
 
             const executeCall = executeClaude.mock.calls[0][0];
             // Files returned by service should be in reference section
-            expect(executeCall).toContain('/test/.claudiomiro/TASK1/TODO.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/TASK1/TODO.md');
         });
 
         test('should include files returned by context-cache service', async () => {
             // Mock context-cache to return CONTEXT.md, RESEARCH.md files (filtering is done internally)
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK1/CONTEXT.md',
-                '/test/.claudiomiro/TASK1/RESEARCH.md',
+                '/test/.claudiomiro/task-executor/TASK1/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK1/RESEARCH.md',
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
@@ -157,14 +163,14 @@ describe('generate-todo', () => {
 
             const executeCall = executeClaude.mock.calls[0][0];
             // Files returned by context-cache should be in reference section
-            expect(executeCall).toContain('/test/.claudiomiro/TASK1/CONTEXT.md');
-            expect(executeCall).toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/TASK1/CONTEXT.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
         });
 
         test('should use context-cache service (which excludes standard files internally)', async () => {
             // Mock context-cache to return filtered files (this is now handled by context-cache)
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK1/custom.md',  // Only valid custom files returned
+                '/test/.claudiomiro/task-executor/TASK1/custom.md',  // Only valid custom files returned
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
@@ -182,7 +188,7 @@ describe('generate-todo', () => {
 
             // Verify context-cache service was called (file filtering now happens there)
             expect(buildOptimizedContextAsync).toHaveBeenCalled();
-            expect(getContextFilePaths).toHaveBeenCalledWith('/test/.claudiomiro', mockTask, {
+            expect(getContextFilePaths).toHaveBeenCalledWith('/test/.claudiomiro/task-executor', mockTask, {
                 includeContext: true,
                 includeResearch: true,
                 includeTodo: true,
@@ -191,7 +197,31 @@ describe('generate-todo', () => {
 
             const executeCall = executeClaude.mock.calls[0][0];
             // Custom files returned by context-cache should be in reference section
-            expect(executeCall).toContain('/test/.claudiomiro/TASK1/custom.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/TASK1/custom.md');
+        });
+
+        test('should inject curated insights when available', async () => {
+            insightsService.getCuratedInsightsForTask.mockReturnValue([
+                { id: 'insight-1', insight: 'Prefer using service layer for business rules.', confidence: 0.9, category: 'patterns', scope: 'project' },
+            ]);
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
+                if (filePath.includes('TASK.md')) return 'Task description content';
+                return '';
+            });
+
+            fs.readdirSync.mockReturnValue([]);
+            fs.existsSync.mockReturnValue(false);
+            executeClaude.mockResolvedValue({ success: true });
+
+            await generateTodo(mockTask);
+
+            const executeCall = executeClaude.mock.calls[0][0];
+            expect(executeCall).toContain('## CURATED INSIGHTS TO CONSIDER');
+            expect(executeCall).toContain('Prefer using service layer for business rules.');
+            expect(insightsService.incrementInsightUsage).toHaveBeenCalledWith('insight-1', 'project');
         });
 
         test('should replace all placeholders in prompt template', async () => {
@@ -213,10 +243,10 @@ describe('generate-todo', () => {
 
             const executeCall = executeClaude.mock.calls[0][0];
 
-            expect(executeCall).toContain('Task: /test/.claudiomiro/TASK1/TASK.md');
-            expect(executeCall).toContain('Prompt: /test/.claudiomiro/TASK1/PROMPT.md');
-            expect(executeCall).toContain('TODO: /test/.claudiomiro/TASK1/TODO.md');
-            expect(executeCall).toContain('AI: /test/.claudiomiro/AI_PROMPT.md');
+            expect(executeCall).toContain('Task: /test/.claudiomiro/task-executor/TASK1/TASK.md');
+            expect(executeCall).toContain('Prompt: /test/.claudiomiro/task-executor/TASK1/PROMPT.md');
+            expect(executeCall).toContain('TODO: /test/.claudiomiro/task-executor/TASK1/TODO.md');
+            expect(executeCall).toContain('AI: /test/.claudiomiro/task-executor/AI_PROMPT.md');
             expect(executeCall).toContain('Template: TODO TEMPLATE CONTENT');
         });
 
@@ -239,7 +269,7 @@ describe('generate-todo', () => {
 
             const executeCall = executeClaude.mock.calls[0][0];
             // Should still include AI_PROMPT.md in reference section
-            expect(executeCall).toContain('/test/.claudiomiro/AI_PROMPT.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/AI_PROMPT.md');
             // Context files from other tasks should not be present when none are returned
             expect(getContextFilePaths).toHaveBeenCalled();
         });
@@ -248,8 +278,8 @@ describe('generate-todo', () => {
             // Mock context-cache to return only completed task files
             // The filtering of completed vs incomplete is now done by context-cache
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK2/TODO.md',  // Only completed task
-                '/test/.claudiomiro/TASK4/TODO.md',   // Only completed task
+                '/test/.claudiomiro/task-executor/TASK2/TODO.md',  // Only completed task
+                '/test/.claudiomiro/task-executor/TASK4/TODO.md',   // Only completed task
                 // TASK3 (incomplete) would not be returned by context-cache
             ]);
 
@@ -268,15 +298,15 @@ describe('generate-todo', () => {
 
             // Verify getContextFilePaths was called with onlyCompleted: true
             expect(getContextFilePaths).toHaveBeenCalledWith(
-                '/test/.claudiomiro',
+                '/test/.claudiomiro/task-executor',
                 mockTask,
                 expect.objectContaining({ onlyCompleted: true }),
             );
 
             const executeCall = executeClaude.mock.calls[0][0];
             // Should only include files returned by context-cache (completed tasks)
-            expect(executeCall).toContain('/test/.claudiomiro/TASK2/TODO.md');
-            expect(executeCall).toContain('/test/.claudiomiro/TASK4/TODO.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/TASK2/TODO.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/TASK4/TODO.md');
         });
 
         test('should handle error when TODO.md template is missing', async () => {
@@ -332,8 +362,8 @@ describe('generate-todo', () => {
             // Context-cache service now handles file exclusion internally
             // It filters out standard files (PROMPT.md, TASK.md, etc.) and returns only valid context files
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK2/ARCHITECTURE.md',  // Custom file (included)
-                '/test/.claudiomiro/TASK2/API_DESIGN.md',     // Custom file (included)
+                '/test/.claudiomiro/task-executor/TASK2/ARCHITECTURE.md',  // Custom file (included)
+                '/test/.claudiomiro/task-executor/TASK2/API_DESIGN.md',     // Custom file (included)
                 // PROMPT.md is excluded by context-cache internally
             ]);
 
@@ -352,8 +382,8 @@ describe('generate-todo', () => {
 
             const executeCall = executeClaude.mock.calls[0][0];
             // Custom files returned by context-cache should be included
-            expect(executeCall).toContain('/test/.claudiomiro/TASK2/ARCHITECTURE.md');
-            expect(executeCall).toContain('/test/.claudiomiro/TASK2/API_DESIGN.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/TASK2/ARCHITECTURE.md');
+            expect(executeCall).toContain('/test/.claudiomiro/task-executor/TASK2/API_DESIGN.md');
             // Standard files like PROMPT.md are excluded by context-cache, not by generate-todo
         });
 

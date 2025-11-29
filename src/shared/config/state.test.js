@@ -47,7 +47,7 @@ describe('State', () => {
             state.setFolder('/test/project');
 
             expect(state.folder).toBe(path.resolve('/test/project'));
-            expect(state.claudiomiroFolder).toBe(path.join(path.resolve('/test/project'), '.claudiomiro'));
+            expect(state.claudiomiroFolder).toBe(path.join(path.resolve('/test/project'), '.claudiomiro', 'task-executor'));
         });
 
         test('should resolve relative paths', () => {
@@ -61,7 +61,7 @@ describe('State', () => {
         test('should return cache folder path', () => {
             state.setFolder('/test/project');
 
-            expect(state.cacheFolder).toBe(path.join('/test/project', '.claudiomiro', 'cache'));
+            expect(state.cacheFolder).toBe(path.join('/test/project', '.claudiomiro', 'task-executor', 'cache'));
         });
     });
 
@@ -314,7 +314,7 @@ describe('State', () => {
                 state.setMultiRepo(backendPath, frontendPath, gitConfig);
 
                 expect(state.folder).toBe(path.resolve(backendPath));
-                expect(state.claudiomiroFolder).toBe(path.join(path.resolve(backendPath), '.claudiomiro'));
+                expect(state.claudiomiroFolder).toBe(path.join(path.resolve(backendPath), '.claudiomiro', 'task-executor'));
             });
 
             test('setFolder still works independently', () => {

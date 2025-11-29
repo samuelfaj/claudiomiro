@@ -9,7 +9,7 @@ jest.mock('../../services/file-manager');
 
 // Create mock state with multi-repo support
 const mockState = {
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test/project',
     isMultiRepo: jest.fn(() => false),
     getGitMode: jest.fn(() => null),
@@ -187,11 +187,11 @@ describe('step0', () => {
             // Assert
             expect(startFresh).toHaveBeenCalledWith(true);
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'INITIAL_PROMPT.md'),
+                path.join('/test/.claudiomiro/task-executor', 'INITIAL_PROMPT.md'),
                 mockTask,
             );
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'newbranch.txt'),
+                path.join('/test/.claudiomiro/task-executor', 'newbranch.txt'),
                 'true',
             );
             expect(logger.success).toHaveBeenCalledWith('Clarification answers already exist, skipping question generation');
@@ -216,11 +216,11 @@ describe('step0', () => {
 
             // Assert
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'INITIAL_PROMPT.md'),
+                path.join('/test/.claudiomiro/task-executor', 'INITIAL_PROMPT.md'),
                 mockTask,
             );
             expect(fs.writeFileSync).not.toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'newbranch.txt'),
+                path.join('/test/.claudiomiro/task-executor', 'newbranch.txt'),
                 'true',
             );
         });
@@ -262,7 +262,7 @@ describe('step0', () => {
             expect(logger.stopSpinner).toHaveBeenCalled();
             expect(askClarificationQuestions).toHaveBeenCalled();
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'CLARIFICATION_ANSWERS.json'),
+                path.join('/test/.claudiomiro/task-executor', 'CLARIFICATION_ANSWERS.json'),
                 '{"question1": "answer1", "question2": "answer2"}',
             );
         });
@@ -295,7 +295,7 @@ describe('step0', () => {
             // Assert
             expect(executeClaude).toHaveBeenCalled();
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'CLARIFICATION_ANSWERS.json'),
+                path.join('/test/.claudiomiro/task-executor', 'CLARIFICATION_ANSWERS.json'),
                 '[]',
             );
             expect(askClarificationQuestions).not.toHaveBeenCalled();
@@ -333,12 +333,12 @@ describe('step0', () => {
             // Assert
             expect(logger.error).toHaveBeenCalledWith('Error collecting answers: User cancelled input');
             expect(logger.info).toHaveBeenCalledWith('Questions have been saved to:');
-            expect(logger.info).toHaveBeenCalledWith('  ' + path.join('/test/.claudiomiro', 'CLARIFICATION_QUESTIONS.json'));
+            expect(logger.info).toHaveBeenCalledWith('  ' + path.join('/test/.claudiomiro/task-executor', 'CLARIFICATION_QUESTIONS.json'));
             expect(logger.info).toHaveBeenCalledWith('You can answer them manually in:');
-            expect(logger.info).toHaveBeenCalledWith('  ' + path.join('/test/.claudiomiro', 'CLARIFICATION_ANSWERS.json'));
+            expect(logger.info).toHaveBeenCalledWith('  ' + path.join('/test/.claudiomiro/task-executor', 'CLARIFICATION_ANSWERS.json'));
             expect(logger.info).toHaveBeenCalledWith('Then run: claudiomiro --continue');
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'PENDING_CLARIFICATION.flag'),
+                path.join('/test/.claudiomiro/task-executor', 'PENDING_CLARIFICATION.flag'),
                 'pending',
             );
             expect(process.exit).toHaveBeenCalledWith(1);
@@ -362,7 +362,7 @@ describe('step0', () => {
             await step0(false, mockTask);
 
             // Assert
-            expect(fs.unlinkSync).toHaveBeenCalledWith(path.join('/test/.claudiomiro', 'PENDING_CLARIFICATION.flag'));
+            expect(fs.unlinkSync).toHaveBeenCalledWith(path.join('/test/.claudiomiro/task-executor', 'PENDING_CLARIFICATION.flag'));
             expect(logger.info).toHaveBeenCalledWith('Resuming from clarification phase...');
             expect(logger.newline).toHaveBeenCalled();
         });

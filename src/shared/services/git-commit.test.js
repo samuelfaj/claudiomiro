@@ -30,7 +30,7 @@ describe('git-commit', () => {
 
         // Setup default mocks
         executeClaude.mockResolvedValue();
-        state.claudiomiroFolder = '/test/.claudiomiro';
+        state.claudiomiroFolder = '/test/.claudiomiro/task-executor';
         state.folder = '/test';
         fs.existsSync.mockReturnValue(false);
         fs.readFileSync.mockReturnValue('Task description content');
@@ -308,7 +308,7 @@ describe('git-commit', () => {
         beforeEach(() => {
             jest.clearAllMocks();
             state.folder = '/test';
-            state.claudiomiroFolder = '/test/.claudiomiro';
+            state.claudiomiroFolder = '/test/.claudiomiro/task-executor';
         });
 
         describe('when no changes to commit', () => {
@@ -484,8 +484,8 @@ describe('git-commit', () => {
 
                 await smartCommit({ taskName: 'TASK1' });
 
-                expect(fs.existsSync).toHaveBeenCalledWith('/test/.claudiomiro/TASK1/TASK.md');
-                expect(fs.readFileSync).toHaveBeenCalledWith('/test/.claudiomiro/TASK1/TASK.md', 'utf-8');
+                expect(fs.existsSync).toHaveBeenCalledWith('/test/.claudiomiro/task-executor/TASK1/TASK.md');
+                expect(fs.readFileSync).toHaveBeenCalledWith('/test/.claudiomiro/task-executor/TASK1/TASK.md', 'utf-8');
             });
         });
 

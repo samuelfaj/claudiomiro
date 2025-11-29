@@ -10,7 +10,7 @@ jest.mock('fs');
 jest.mock('child_process');
 jest.mock('../../../../shared/services/git-commit');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test/project',
     isMultiRepo: jest.fn(),
     getGitMode: jest.fn(),
@@ -56,7 +56,7 @@ describe('step8', () => {
                 createPR: true,
             });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'done.txt'),
+                path.join('/test/.claudiomiro/task-executor', 'done.txt'),
                 '1',
             );
             expect(logger.info).toHaveBeenCalledWith(
@@ -81,7 +81,7 @@ describe('step8', () => {
                 createPR: false,
             });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'done.txt'),
+                path.join('/test/.claudiomiro/task-executor', 'done.txt'),
                 '1',
             );
             expect(logger.info).toHaveBeenCalledWith(
@@ -105,7 +105,7 @@ describe('step8', () => {
                 createPR: true,
             });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'done.txt'),
+                path.join('/test/.claudiomiro/task-executor', 'done.txt'),
                 '1',
             );
             expect(mockExit).toHaveBeenCalledWith(0);
@@ -121,7 +121,7 @@ describe('step8', () => {
 
             // Assert
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'done.txt'),
+                path.join('/test/.claudiomiro/task-executor', 'done.txt'),
                 '1',
             );
             expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
@@ -229,7 +229,7 @@ describe('step8', () => {
                 createPR: false,
             });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro', 'done.txt'),
+                path.join('/test/.claudiomiro/task-executor', 'done.txt'),
                 '1',
             );
             expect(mockExit).toHaveBeenCalledWith(0);

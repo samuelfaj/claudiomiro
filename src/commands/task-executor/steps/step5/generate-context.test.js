@@ -2,7 +2,7 @@ const fs = require('fs');
 
 jest.mock('fs');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
 }));
 
 // Import after mocks

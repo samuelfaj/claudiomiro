@@ -49,7 +49,7 @@ describe('DAGExecutor', () => {
 
         // Setup default mocks
         // os.cpus is already mocked before module import
-        state.claudiomiroFolder = '/test/.claudiomiro';
+        state.claudiomiroFolder = '/test/.claudiomiro/task-executor';
         state.isMultiRepo = jest.fn().mockReturnValue(false);
         state.getGitMode = jest.fn().mockReturnValue(null);
         path.join.mockImplementation((...args) => args.join('/'));

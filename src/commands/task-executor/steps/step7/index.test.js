@@ -6,7 +6,7 @@ jest.mock('fs');
 jest.mock('path');
 jest.mock('child_process');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test',
     branch: 'test-branch',
     isMultiRepo: jest.fn(() => false),
@@ -33,7 +33,7 @@ const { run: runFixBranch } = require('../../../fix-branch');
 const { verifyIntegration } = require('../../../../shared/services/integration-verifier');
 
 describe('step7', () => {
-    const passedPath = '/test/.claudiomiro/CRITICAL_REVIEW_PASSED.md';
+    const passedPath = '/test/.claudiomiro/task-executor/CRITICAL_REVIEW_PASSED.md';
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -42,7 +42,7 @@ describe('step7', () => {
         path.join.mockImplementation((...args) => args.join('/'));
 
         // Default state
-        state.claudiomiroFolder = '/test/.claudiomiro';
+        state.claudiomiroFolder = '/test/.claudiomiro/task-executor';
         state.folder = '/test';
         state.branch = 'test-branch';
         state.isMultiRepo.mockReturnValue(false);

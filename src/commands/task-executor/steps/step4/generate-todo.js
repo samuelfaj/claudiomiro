@@ -8,7 +8,31 @@ const {
     buildOptimizedContextAsync,
     getContextFilePaths,
 } = require('../../../../shared/services/context-cache');
+const {
+    getCuratedInsightsForTask,
+    incrementInsightUsage,
+} = require('../../../../shared/services/insights');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+
+const formatInsightsSection = (insights) => {
+    if (!insights || insights.length === 0) {
+        return '';
+    }
+
+    const lines = insights.map((item) => {
+        const confidence = typeof item.confidence === 'number'
+            ? `confidence ${(item.confidence * 100).toFixed(0)}%`
+            : null;
+        const scope = item.scope ? `${item.scope} scope` : null;
+        const category = item.category || null;
+        const metadata = [category, confidence, scope].filter(Boolean).join(' | ');
+        const insightText = item.insight || item.description || '';
+        const evidence = item.evidence ? `\n  Evidence: ${item.evidence}` : '';
+        return `- ${insightText}${metadata ? ` (${metadata})` : ''}${evidence}`;
+    });
+
+    return `## CURATED INSIGHTS TO CONSIDER:\n${lines.join('\n')}\n\n`;
+};
 
 /**
  * Generates a comprehensive TODO.md file for a task
@@ -32,6 +56,18 @@ const generateTodo = async (task) => {
         ? fs.readFileSync(taskMdPath, 'utf-8')
         : '';
     const taskDescription = taskMdContent.substring(0, 500) || task;
+
+    // Retrieve curated insights relevant to this task
+    const curatedInsights = getCuratedInsightsForTask(
+        taskDescription,
+        { maxInsights: 5, minConfidence: 0.6 },
+    );
+
+    curatedInsights.forEach((insight) => {
+        if (insight && insight.id) {
+            incrementInsightUsage(insight.id, insight.scope);
+        }
+    });
 
     // Determine working directory based on scope (multi-repo support)
     const scope = parseTaskScope(taskMdContent);
@@ -79,7 +115,9 @@ const generateTodo = async (task) => {
     });
 
     // Build optimized context section with summary + reference paths
-    const contextSection = `\n\n## CONTEXT SUMMARY:
+    const insightsSection = formatInsightsSection(curatedInsights);
+
+    const contextSection = `\n\n${insightsSection !== '' ? insightsSection : ''}## CONTEXT SUMMARY:
 ${consolidatedContext}
 
 ## REFERENCE FILES (read only if you need more detail):
