@@ -262,7 +262,7 @@ Return JSON: {"explicit": ["TASK1"], "implicit": ["TASK2"], "reasoning": "brief 
    * @returns {Promise<{completed: boolean, confidence: number, reason: string}>}
    */
     async checkCompletion(todoContent) {
-        const prompt = `Analyze this TODO.md and determine if the task is FULLY completed.
+        const prompt = `Analyze this TODO.md and determine if the task is FULLY implemented.
 
 Check for:
 1. "Fully implemented: YES" or similar declaration
@@ -277,7 +277,7 @@ Return JSON: {"completed": true/false, "confidence": 0.0-1.0, "reason": "brief e
         try {
             return await this.generateJSON(prompt, { maxTokens: 150 });
         } catch {
-            return { completed: false, confidence: 0, reason: 'Failed to analyze' };
+            return { completed: todoContent.toLowerCase().includes('fully implemented: yes'), confidence: 0, reason: 'Failed to analyze' };
         }
     }
 
