@@ -58,7 +58,6 @@ const step7 = async (maxIterations = 20) => {
         throw new Error('state.claudiomiroFolder is not defined. Cannot run step7.');
     }
 
-    const _bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
     const passedPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
 
     // CRITICAL: Verify this is a Claudiomiro-managed session on a NEW branch

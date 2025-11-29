@@ -59,9 +59,9 @@ const runClaude = (text, taskName = null, options = {}) => {
 
         let overwriteBlockLines = 0;
 
-        // Timeout to detect stuck process (10 minutes)
+        // Timeout to detect stuck process (15 minutes)
         let inactivityTimer = null;
-        const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 10 minutes in milliseconds
+        const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes in milliseconds
 
         // Function to reset the inactivity timer
         const resetInactivityTimer = () => {
@@ -70,14 +70,14 @@ const runClaude = (text, taskName = null, options = {}) => {
             }
 
             inactivityTimer = setTimeout(() => {
-                console.log('\n⚠️ Claude has been inactive for 10 minutes, terminating process...');
-                logStream.write(`\n\n[${new Date().toISOString()}] Claude timeout after 10 minutes of inactivity - killing process\n`);
+                console.log('\n⚠️ Claude has been inactive for 15 minutes, terminating process...');
+                logStream.write(`\n\n[${new Date().toISOString()}] Claude timeout after 15 minutes of inactivity - killing process\n`);
 
                 // Kill the Claude process
                 claude.kill('SIGKILL');
 
                 // Force the Promise to reject with timeout error
-                reject(new Error('Claude stuck - timeout after 10 minutes of inactivity'));
+                reject(new Error('Claude stuck - timeout after 15 minutes of inactivity'));
             }, INACTIVITY_TIMEOUT);
         };
 
