@@ -10,9 +10,11 @@ const { getLocalLLMService } = require('./local-llm');
  * Generates a commit message using Local LLM (if available)
  * Falls back to a generic message if LLM is not available
  * @param {string} taskDescription - Description of the task/changes
+ * @param {string|null} cwd - Working directory for git operations (defaults to state.folder)
  * @returns {Promise<{title: string, body: string}|null>}
  */
-const generateCommitMessageLocally = async (taskDescription) => {
+const generateCommitMessageLocally = async (taskDescription, cwd = null) => {
+    const workDir = cwd || state.folder;
     const llm = getLocalLLMService();
     if (!llm) return null;
 
@@ -24,7 +26,7 @@ const generateCommitMessageLocally = async (taskDescription) => {
         let diff = '';
         try {
             diff = execSync('git diff --staged --stat', {
-                cwd: state.folder,
+                cwd: workDir,
                 encoding: 'utf-8',
                 maxBuffer: 50 * 1024, // 50KB max
             }).trim();
@@ -32,7 +34,7 @@ const generateCommitMessageLocally = async (taskDescription) => {
             // If no staged changes, get unstaged
             if (!diff) {
                 diff = execSync('git diff --stat', {
-                    cwd: state.folder,
+                    cwd: workDir,
                     encoding: 'utf-8',
                     maxBuffer: 50 * 1024,
                 }).trim();
@@ -67,7 +69,8 @@ const generateCommitMessageLocally = async (taskDescription) => {
  * @returns {Promise<{success: boolean, method: 'shell'|'claude', error?: string}>}
  */
 const smartCommit = async (options = {}) => {
-    const { taskName = null, shouldPush = false, createPR = false } = options;
+    const { taskName = null, shouldPush = false, createPR = false, cwd = null } = options;
+    const workDir = cwd || state.folder;
 
     logger.stopSpinner();
 
@@ -75,14 +78,14 @@ const smartCommit = async (options = {}) => {
     let hasChanges = false;
     try {
         const status = execSync('git status --porcelain', {
-            cwd: state.folder,
+            cwd: workDir,
             encoding: 'utf-8',
         }).trim();
         hasChanges = status.length > 0;
     } catch (error) {
         logger.debug(`[Git] Could not check git status: ${error.message}`);
         // Fall through to Claude
-        return await _fallbackToClaude(taskName, shouldPush, createPR, 'Git status check failed');
+        return await _fallbackToClaude(taskName, shouldPush, createPR, 'Git status check failed', workDir);
     }
 
     if (!hasChanges) {
@@ -99,11 +102,11 @@ const smartCommit = async (options = {}) => {
         }
     }
 
-    const localMessage = await generateCommitMessageLocally(taskDescription);
+    const localMessage = await generateCommitMessageLocally(taskDescription, workDir);
 
     if (!localMessage) {
         logger.debug('[Git] Local LLM not available, falling back to Claude');
-        return await _fallbackToClaude(taskName, shouldPush, createPR, 'Local LLM not available');
+        return await _fallbackToClaude(taskName, shouldPush, createPR, 'Local LLM not available', workDir);
     }
 
     // Step 3: Try to commit via shell
@@ -111,7 +114,7 @@ const smartCommit = async (options = {}) => {
         // Stage all changes
         logger.info('📦 Staging changes...');
         execSync('git add .', {
-            cwd: state.folder,
+            cwd: workDir,
             encoding: 'utf-8',
             stdio: 'pipe',
         });
@@ -128,7 +131,7 @@ const smartCommit = async (options = {}) => {
         // Commit
         logger.info(`📝 Committing: ${localMessage.title}`);
         execSync(`git commit -m "${escapedMessage}"`, {
-            cwd: state.folder,
+            cwd: workDir,
             encoding: 'utf-8',
             stdio: 'pipe',
         });
@@ -140,7 +143,7 @@ const smartCommit = async (options = {}) => {
             try {
                 logger.info('🚀 Pushing to remote...');
                 execSync('git push', {
-                    cwd: state.folder,
+                    cwd: workDir,
                     encoding: 'utf-8',
                     stdio: 'pipe',
                     timeout: 60000, // 60s timeout for push
@@ -150,7 +153,7 @@ const smartCommit = async (options = {}) => {
                 // Push failed, but commit succeeded - try with Claude for push/PR
                 logger.warning(`⚠️ Push failed: ${pushError.message}`);
                 if (createPR) {
-                    return await _fallbackToClaude(taskName, true, true, 'Push failed, need Claude for PR');
+                    return await _fallbackToClaude(taskName, true, true, 'Push failed, need Claude for PR', workDir);
                 }
                 // Just return success for commit, push can be retried
                 return { success: true, method: 'shell', message: 'Commit succeeded, push failed' };
@@ -159,13 +162,13 @@ const smartCommit = async (options = {}) => {
 
         // Step 5: Create PR if requested
         if (createPR) {
-            const prResult = await _tryCreatePRViaShell();
+            const prResult = await _tryCreatePRViaShell(workDir);
             if (prResult.success) {
                 return { success: true, method: 'shell' };
             }
             // Fall back to Claude for PR creation
             logger.info('🔗 Creating PR via Claude...');
-            return await _fallbackToClaude(taskName, false, true, prResult.error || 'Shell PR creation failed');
+            return await _fallbackToClaude(taskName, false, true, prResult.error || 'Shell PR creation failed', workDir);
         }
 
         return { success: true, method: 'shell' };
@@ -173,16 +176,18 @@ const smartCommit = async (options = {}) => {
     } catch (commitError) {
         // Shell commit failed - fall back to Claude
         logger.debug(`[Git] Shell commit failed: ${commitError.message}`);
-        return await _fallbackToClaude(taskName, shouldPush, createPR, commitError.message);
+        return await _fallbackToClaude(taskName, shouldPush, createPR, commitError.message, workDir);
     }
 };
 
 /**
  * Generates a PR description using Local LLM (if available)
  * Falls back to a basic description if LLM is not available
+ * @param {string|null} cwd - Working directory for git operations (defaults to state.folder)
  * @returns {Promise<{title: string, body: string}|null>}
  */
-const generatePRDescriptionLocally = async () => {
+const generatePRDescriptionLocally = async (cwd = null) => {
+    const workDir = cwd || state.folder;
     const llm = getLocalLLMService();
     if (!llm) return null;
 
@@ -198,14 +203,14 @@ const generatePRDescriptionLocally = async () => {
         try {
             // Get changed files
             changedFiles = execSync('git diff --name-only HEAD~5..HEAD 2>/dev/null || git diff --name-only', {
-                cwd: state.folder,
+                cwd: workDir,
                 encoding: 'utf-8',
                 maxBuffer: 50 * 1024,
             }).trim();
 
             // Get recent commit messages
             commitMessages = execSync('git log --oneline -10 2>/dev/null || echo "Various changes"', {
-                cwd: state.folder,
+                cwd: workDir,
                 encoding: 'utf-8',
                 maxBuffer: 50 * 1024,
             }).trim();
@@ -246,18 +251,20 @@ const generatePRDescriptionLocally = async () => {
 
 /**
  * Try to create PR via shell (gh pr create) with Ollama-generated description
+ * @param {string|null} cwd - Working directory for git operations (defaults to state.folder)
  * @returns {Promise<{success: boolean, error?: string}>}
  */
-const _tryCreatePRViaShell = async () => {
+const _tryCreatePRViaShell = async (cwd = null) => {
+    const workDir = cwd || state.folder;
     // Check if gh CLI is available
     try {
-        execSync('gh --version', { cwd: state.folder, stdio: 'pipe' });
+        execSync('gh --version', { cwd: workDir, stdio: 'pipe' });
     } catch (error) {
         return { success: false, error: 'GitHub CLI (gh) not installed' };
     }
 
     // Generate PR description with Ollama
-    const prDescription = await generatePRDescriptionLocally();
+    const prDescription = await generatePRDescriptionLocally(workDir);
     if (!prDescription) {
         return { success: false, error: 'Could not generate PR description locally' };
     }
@@ -271,7 +278,7 @@ const _tryCreatePRViaShell = async () => {
 
         // Create PR using gh CLI
         const result = execSync(`gh pr create --title "${escapedTitle}" --body "${escapedBody}"`, {
-            cwd: state.folder,
+            cwd: workDir,
             encoding: 'utf-8',
             stdio: 'pipe',
             timeout: 60000,
@@ -288,9 +295,14 @@ const _tryCreatePRViaShell = async () => {
 
 /**
  * Internal helper: Falls back to Claude for git operations
+ * @param {string|null} taskName - Task identifier
+ * @param {boolean} shouldPush - Whether to push changes
+ * @param {boolean} createPR - Whether to create a pull request
+ * @param {string} reason - Reason for fallback
+ * @param {string|null} cwd - Working directory for git operations (defaults to state.folder)
  * @private
  */
-const _fallbackToClaude = async (taskName, shouldPush, createPR, reason) => {
+const _fallbackToClaude = async (taskName, shouldPush, createPR, reason, cwd = null) => {
     logger.info(`🤖 Using Claude for git operations (${reason})`);
 
     let prompt = 'git add . and git commit';
@@ -298,7 +310,7 @@ const _fallbackToClaude = async (taskName, shouldPush, createPR, reason) => {
     if (createPR) prompt += ' and create pull request';
 
     try {
-        await commitOrFix(prompt, taskName);
+        await commitOrFix(prompt, taskName, cwd);
         return { success: true, method: 'claude' };
     } catch (error) {
         return { success: false, method: 'claude', error: error.message };
@@ -308,8 +320,12 @@ const _fallbackToClaude = async (taskName, shouldPush, createPR, reason) => {
 /**
  * Commits changes using Claude (main method)
  * Optionally tries Local LLM first for commit message generation
+ * @param {string} prompt - The commit prompt
+ * @param {string|null} taskName - Task identifier (e.g., 'TASK1')
+ * @param {string|null} cwd - Working directory for git operations (defaults to state.folder)
  */
-const commitOrFix = async (prompt, taskName = null) => {
+const commitOrFix = async (prompt, taskName = null, cwd = null) => {
+    const workDir = cwd || state.folder;
     logger.stopSpinner();
     logger.info('Git committing via Claude...');
 
@@ -322,7 +338,7 @@ const commitOrFix = async (prompt, taskName = null) => {
             taskDescription = fs.readFileSync(taskMdPath, 'utf-8').slice(0, 300);
         }
 
-        const localMessage = await generateCommitMessageLocally(taskDescription);
+        const localMessage = await generateCommitMessageLocally(taskDescription, workDir);
         if (localMessage) {
             localCommitHint = `\n\nSUGGESTED COMMIT MESSAGE (from local analysis):\nTitle: ${localMessage.title}\nBody: ${localMessage.body}\nFeel free to use or improve this message.\n`;
         }
@@ -341,6 +357,7 @@ const commitOrFix = async (prompt, taskName = null) => {
             ' - If you need to push, use git push\n' +
             ' - If you need to create a PR, use the available git tools (GitHub, GitLab, etc.)\n',
             taskName,
+            { cwd: workDir },
         );
 
         logger.newline();

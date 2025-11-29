@@ -1,0 +1,151 @@
+const { executeClaude } = require('../executors/claude-executor');
+
+/**
+ * Builds a prompt for Claude to analyze backend and frontend codebases
+ * for integration issues
+ * @param {string} backendPath - Path to the backend codebase
+ * @param {string} frontendPath - Path to the frontend codebase
+ * @returns {string} The prompt for Claude
+ */
+const buildVerificationPrompt = (backendPath, frontendPath) => {
+    return `Analyze the integration between these two codebases and identify any mismatches:
+
+BACKEND CODEBASE: ${backendPath}
+FRONTEND CODEBASE: ${frontendPath}
+
+Your task:
+1. Analyze the backend codebase to identify all API endpoints, their request/response formats, and data contracts
+2. Analyze the frontend codebase to identify all API calls, expected payloads, and response handling
+3. Compare them to find any mismatches or integration issues
+
+Look for:
+- Endpoint URL mismatches (frontend calling endpoints that don't exist in backend)
+- Request payload mismatches (frontend sending different data structure than backend expects)
+- Response format mismatches (frontend expecting different response structure than backend provides)
+- Missing endpoints (endpoints defined in backend but not used, or frontend calling undefined endpoints)
+- HTTP method mismatches (frontend using GET where backend expects POST, etc.)
+- Authentication/authorization requirements not handled in frontend
+
+IMPORTANT: Respond with ONLY a JSON object in this exact format:
+{
+  "success": boolean,
+  "mismatches": [
+    {
+      "type": "endpoint_mismatch" | "payload_mismatch" | "response_mismatch" | "missing_endpoint",
+      "description": "Detailed description of the issue",
+      "backendFile": "path/to/backend/file.ext" | null,
+      "frontendFile": "path/to/frontend/file.ext" | null
+    }
+  ],
+  "summary": "Brief summary of the analysis"
+}
+
+If no issues are found, return:
+{
+  "success": true,
+  "mismatches": [],
+  "summary": "No integration issues found"
+}
+
+Do not include any explanation or text outside the JSON object.`;
+};
+
+/**
+ * Parses Claude's response to extract the verification result
+ * @param {string} claudeOutput - Raw output from Claude
+ * @returns {Object} Parsed verification result
+ */
+const parseVerificationResult = (claudeOutput) => {
+    // Handle empty or null input
+    if (!claudeOutput || typeof claudeOutput !== 'string' || claudeOutput.trim() === '') {
+        return {
+            success: false,
+            mismatches: [{
+                type: 'parse_error',
+                description: 'Empty or invalid response received from Claude',
+                backendFile: null,
+                frontendFile: null,
+            }],
+        };
+    }
+
+    try {
+        // Extract JSON from the response (Claude may wrap it in explanation text)
+        const jsonMatch = claudeOutput.match(/\{[\s\S]*\}/);
+        if (!jsonMatch) {
+            return {
+                success: false,
+                mismatches: [{
+                    type: 'parse_error',
+                    description: 'No JSON object found in Claude response',
+                    backendFile: null,
+                    frontendFile: null,
+                }],
+            };
+        }
+
+        const parsed = JSON.parse(jsonMatch[0]);
+
+        // Validate required fields
+        if (typeof parsed.success !== 'boolean' || !Array.isArray(parsed.mismatches)) {
+            return {
+                success: false,
+                mismatches: [{
+                    type: 'parse_error',
+                    description: 'Invalid JSON structure: missing required fields (success, mismatches)',
+                    backendFile: null,
+                    frontendFile: null,
+                }],
+            };
+        }
+
+        return {
+            success: parsed.success,
+            mismatches: parsed.mismatches,
+            summary: parsed.summary || undefined,
+        };
+    } catch (error) {
+        return {
+            success: false,
+            mismatches: [{
+                type: 'parse_error',
+                description: `Failed to parse JSON: ${error.message}`,
+                backendFile: null,
+                frontendFile: null,
+            }],
+        };
+    }
+};
+
+/**
+ * Verifies integration between backend and frontend codebases using Claude
+ * @param {Object} options - Verification options
+ * @param {string} options.backendPath - Path to the backend codebase
+ * @param {string} options.frontendPath - Path to the frontend codebase
+ * @returns {Promise<Object>} Verification result with success flag and any mismatches
+ */
+const verifyIntegration = async ({ backendPath, frontendPath }) => {
+    try {
+        const prompt = buildVerificationPrompt(backendPath, frontendPath);
+
+        const result = await executeClaude(prompt, 'integration-verify', { cwd: backendPath });
+
+        return parseVerificationResult(result);
+    } catch (error) {
+        return {
+            success: false,
+            mismatches: [{
+                type: 'execution_error',
+                description: `Claude execution failed: ${error.message}`,
+                backendFile: null,
+                frontendFile: null,
+            }],
+        };
+    }
+};
+
+module.exports = {
+    verifyIntegration,
+    buildVerificationPrompt,
+    parseVerificationResult,
+};

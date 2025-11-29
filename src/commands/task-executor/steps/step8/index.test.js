@@ -7,10 +7,14 @@ jest.spyOn(process, 'exit').mockImplementation(mockExit);
 
 // Mock all dependencies
 jest.mock('fs');
+jest.mock('child_process');
 jest.mock('../../../../shared/services/git-commit');
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro',
     folder: '/test/project',
+    isMultiRepo: jest.fn(),
+    getGitMode: jest.fn(),
+    getRepository: jest.fn(),
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     info: jest.fn(),
@@ -21,6 +25,8 @@ jest.mock('../../../../shared/utils/logger', () => ({
 // Import modules after mocks are defined
 const { step8 } = require('./index');
 const { smartCommit } = require('../../../../shared/services/git-commit');
+const { execSync } = require('child_process');
+const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 
 describe('step8', () => {
@@ -28,6 +34,10 @@ describe('step8', () => {
         jest.clearAllMocks();
         // Reset mockExit to track calls properly
         mockExit.mockClear();
+        // Default to single-repo mode
+        state.isMultiRepo.mockReturnValue(false);
+        state.getGitMode.mockReturnValue(null);
+        state.getRepository.mockReturnValue('/test/project');
     });
 
     describe('step8', () => {
@@ -221,6 +231,178 @@ describe('step8', () => {
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 path.join('/test/.claudiomiro', 'done.txt'),
                 '1',
+            );
+            expect(mockExit).toHaveBeenCalledWith(0);
+        });
+    });
+
+    describe('monorepo mode', () => {
+        beforeEach(() => {
+            state.isMultiRepo.mockReturnValue(true);
+            state.getGitMode.mockReturnValue('monorepo');
+        });
+
+        test('should use smartCommit with createPR for monorepo mode', async () => {
+            // Arrange
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], true);
+
+            // Assert - should use existing behavior (single PR via smartCommit)
+            expect(smartCommit).toHaveBeenCalledWith({
+                taskName: null,
+                shouldPush: true,
+                createPR: true,
+            });
+            expect(smartCommit).toHaveBeenCalledTimes(1);
+            expect(mockExit).toHaveBeenCalledWith(0);
+        });
+    });
+
+    describe('separate git mode (multi-repo)', () => {
+        beforeEach(() => {
+            state.isMultiRepo.mockReturnValue(true);
+            state.getGitMode.mockReturnValue('separate');
+            state.getRepository.mockImplementation((scope) => {
+                if (scope === 'backend') return '/test/backend';
+                if (scope === 'frontend') return '/test/frontend';
+                return '/test/project';
+            });
+        });
+
+        test('should create commits in both repos for separate git mode', async () => {
+            // Arrange
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            execSync.mockReturnValue('https://github.com/test/repo/pull/1\n');
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], true);
+
+            // Assert - should call smartCommit twice (once per repo)
+            expect(smartCommit).toHaveBeenCalledTimes(2);
+            expect(smartCommit).toHaveBeenCalledWith({
+                taskName: null,
+                shouldPush: true,
+                createPR: false,
+                cwd: '/test/backend',
+            });
+            expect(smartCommit).toHaveBeenCalledWith({
+                taskName: null,
+                shouldPush: true,
+                createPR: false,
+                cwd: '/test/frontend',
+            });
+            expect(mockExit).toHaveBeenCalledWith(0);
+        });
+
+        test('should create PRs with cross-references in separate git mode', async () => {
+            // Arrange
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            execSync.mockReturnValue('https://github.com/test/repo/pull/1\n');
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], true);
+
+            // Assert - should call gh pr create for each repo
+            expect(execSync).toHaveBeenCalledWith(
+                expect.stringContaining('gh pr create'),
+                expect.objectContaining({ cwd: '/test/backend' }),
+            );
+            expect(execSync).toHaveBeenCalledWith(
+                expect.stringContaining('gh pr create'),
+                expect.objectContaining({ cwd: '/test/frontend' }),
+            );
+        });
+
+        test('should update backend PR with frontend URL after both PRs created', async () => {
+            // Arrange
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            execSync.mockReturnValue('https://github.com/test/repo/pull/1\n');
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], true);
+
+            // Assert - should call gh pr edit to update backend PR
+            expect(execSync).toHaveBeenCalledWith(
+                expect.stringContaining('gh pr edit'),
+                expect.objectContaining({ cwd: '/test/backend' }),
+            );
+        });
+
+        test('should use correct cwd for each repository', async () => {
+            // Arrange
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            execSync.mockReturnValue('https://github.com/test/repo/pull/1\n');
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], true);
+
+            // Assert
+            expect(state.getRepository).toHaveBeenCalledWith('backend');
+            expect(state.getRepository).toHaveBeenCalledWith('frontend');
+        });
+
+        test('should fall back to single-repo when shouldPush is false', async () => {
+            // Arrange
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], false);
+
+            // Assert - should use existing behavior (single smartCommit call)
+            expect(smartCommit).toHaveBeenCalledTimes(1);
+            expect(smartCommit).toHaveBeenCalledWith({
+                taskName: null,
+                shouldPush: false,
+                createPR: false,
+            });
+        });
+
+        test('should handle gh pr create failure gracefully', async () => {
+            // Arrange
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            execSync.mockImplementation(() => {
+                throw new Error('gh: command failed');
+            });
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], true);
+
+            // Assert - should log warning but continue
+            expect(logger.warning).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to create PR'),
+            );
+            expect(mockExit).toHaveBeenCalledWith(0);
+        });
+
+        test('should handle gh pr edit failure gracefully', async () => {
+            // Arrange
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            let callCount = 0;
+            execSync.mockImplementation(() => {
+                callCount++;
+                // First two calls succeed (gh pr create), third fails (gh pr edit)
+                if (callCount <= 2) {
+                    return 'https://github.com/test/repo/pull/1\n';
+                }
+                throw new Error('gh pr edit failed');
+            });
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], true);
+
+            // Assert - should log warning but continue
+            expect(logger.warning).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to update backend PR'),
             );
             expect(mockExit).toHaveBeenCalledWith(0);
         });

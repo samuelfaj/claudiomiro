@@ -8,13 +8,12 @@ const {
     buildOptimizedContextAsync,
     getContextFilePaths,
 } = require('../../../../shared/services/context-cache');
-const { getLocalLLMService } = require('../../../../shared/services/local-llm');
 
 /**
  * Performs systematic code review of implemented task
  * Verifies completeness, correctness, testing, and adherence to requirements
  *
- * Token-optimized: Uses Local LLM for context summarization and pre-screening
+ * Token-optimized: Uses consolidated context for efficient token usage
  *
  * @param {string} task - Task identifier (e.g., 'TASK1')
  * @returns {Promise} Result of Claude execution
@@ -35,45 +34,6 @@ const reviewCode = async (task) => {
     const taskDescription = fs.existsSync(taskMdPath)
         ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
         : task;
-
-    // Try Local LLM pre-screening to catch obvious issues early
-    let prescreenSection = '';
-    const llm = getLocalLLMService();
-    if (llm) {
-        try {
-            await llm.initialize();
-            if (llm.isAvailable()) {
-                // Read recently modified files for pre-screening
-                const contextMdPath = folder('CONTEXT.md');
-                if (fs.existsSync(contextMdPath)) {
-                    const contextContent = fs.readFileSync(contextMdPath, 'utf-8');
-                    // Extract file paths from CONTEXT.md
-                    const fileMatches = contextContent.match(/`([^`]+\.(js|ts|py|go|java|rb))`/g);
-                    if (fileMatches && fileMatches.length > 0) {
-                        const filesToCheck = fileMatches.slice(0, 3).map(m => m.replace(/`/g, ''));
-                        for (const filePath of filesToCheck) {
-                            const fullPath = path.join(state.folder, filePath);
-                            if (fs.existsSync(fullPath)) {
-                                const code = fs.readFileSync(fullPath, 'utf-8');
-                                const prescreenResult = await llm.prescreenCode(code);
-                                if (!prescreenResult.passed || prescreenResult.issues.length > 0) {
-                                    prescreenSection += `\n### Pre-screen: ${filePath}\n`;
-                                    prescreenSection += prescreenResult.issues.map(i =>
-                                        `- [${i.severity}] ${i.type}: ${i.message}`,
-                                    ).join('\n');
-                                }
-                            }
-                        }
-                    }
-                }
-                if (prescreenSection) {
-                    logger.debug('[Step6] Pre-screening found issues to focus on');
-                }
-            }
-        } catch (error) {
-        // Pre-screening failed, continue with normal review
-        }
-    }
 
     // Try optimized context with Local LLM (40-60% token reduction)
     let consolidatedContext;
@@ -124,14 +84,9 @@ const reviewCode = async (task) => {
     contextFilePaths.push(...otherContextPaths);
 
     // Build optimized context section with summary + reference paths
-    // Include pre-screen results if available (helps focus the review)
-    const prescreenInfo = prescreenSection
-        ? `\n## 🔍 PRE-SCREENING RESULTS (Local LLM)\n*Issues detected before full review - focus on these:*${prescreenSection}\n`
-        : '';
-
     const contextSection = `\n\n## 📚 CONTEXT SUMMARY FOR REVIEW
 ${consolidatedContext}
-${prescreenInfo}
+
 ## REFERENCE FILES (read if more detail needed):
 ${contextFilePaths.map(f => `- ${f}`).join('\n')}
 
@@ -160,7 +115,8 @@ These provide:
         .replace(/\{\{researchMdPath\}\}/g, folder('RESEARCH.md'))
         .replace(/\{\{researchSection\}\}/g, researchSection);
 
-    const execution = await executeClaude(promptTemplate, task);
+    const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
+    const execution = await executeClaude(promptTemplate + '\n\n' + shellCommandRule, task);
 
     return execution;
 };

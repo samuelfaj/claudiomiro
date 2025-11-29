@@ -59,9 +59,8 @@ Claudiomiro uses cloud AI services (Claude, GPT, Gemini) which charge based on t
 1. **Token Optimizer Command** - Filters command output before sending to cloud AI
 2. **File Relevance Ranking** - Identifies relevant files for a task
 3. **Context Summarization** - Compresses large files into summaries
-4. **Code Pre-screening** - Initial code review before Claude analysis
-5. **Error Classification** - Categorizes errors for efficient processing
-6. **Completion Detection** - Checks if tasks are done without API calls
+4. **Error Classification** - Categorizes errors for efficient processing
+5. **Completion Detection** - Checks if tasks are done without API calls
 
 ---
 

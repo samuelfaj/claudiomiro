@@ -167,6 +167,7 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
 
     const promptTemplate = fs.readFileSync(promptPath, 'utf-8');
     const verificationPromptTemplate = fs.readFileSync(verificationPromptPath, 'utf-8');
+    const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
 
     // Verification state
     let isVerificationPhase = false;
@@ -237,7 +238,7 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
         }
 
         try {
-            await executeClaude(prompt);
+            await executeClaude(prompt + '\n\n' + shellCommandRule);
             lastIterationError = ''; // Clear error on success
         } catch (error) {
             logger.stopSpinner();

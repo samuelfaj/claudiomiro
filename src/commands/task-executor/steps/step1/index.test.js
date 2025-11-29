@@ -5,6 +5,9 @@ jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro',
+    isMultiRepo: jest.fn(() => false),
+    getRepository: jest.fn((scope) => `/test/${scope}`),
+    getGitMode: jest.fn(() => 'separate'),
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     newline: jest.fn(),
@@ -16,9 +19,10 @@ jest.mock('../../../../shared/utils/logger', () => ({
 }));
 
 // Import after mocks
-const { step1 } = require('./index');
+const { step1, generateMultiRepoContext } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
+const state = require('../../../../shared/config/state');
 
 describe('step1', () => {
     beforeEach(() => {
@@ -187,6 +191,148 @@ describe('step1', () => {
                 expect.stringContaining('Generate AI_PROMPT.md for task:  at /test/.claudiomiro'),
             );
             expect(logger.success).toHaveBeenCalledWith('AI_PROMPT.md created successfully');
+        });
+    });
+
+    describe('generateMultiRepoContext', () => {
+        test('should return empty string when single-repo mode', () => {
+            // Arrange
+            state.isMultiRepo.mockReturnValue(false);
+
+            // Act
+            const result = generateMultiRepoContext();
+
+            // Assert
+            expect(result).toBe('');
+            expect(state.isMultiRepo).toHaveBeenCalled();
+        });
+
+        test('should return markdown context when multi-repo mode enabled', () => {
+            // Arrange
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => `/path/to/${scope}`);
+            state.getGitMode.mockReturnValue('separate');
+
+            // Act
+            const result = generateMultiRepoContext();
+
+            // Assert
+            expect(result).toContain('## Multi-Repository Context');
+            expect(result).toContain('**Backend Repository:** `/path/to/backend`');
+            expect(result).toContain('**Frontend Repository:** `/path/to/frontend`');
+            expect(result).toContain('**Git Mode:** separate');
+        });
+
+        test('should include @scope documentation in multi-repo context', () => {
+            // Arrange
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => `/path/to/${scope}`);
+            state.getGitMode.mockReturnValue('monorepo');
+
+            // Act
+            const result = generateMultiRepoContext();
+
+            // Assert
+            expect(result).toContain('### Task Scope Requirements');
+            expect(result).toContain('@scope backend');
+            expect(result).toContain('@scope frontend');
+            expect(result).toContain('@scope integration');
+            expect(result).toContain('Tasks without @scope will fail validation in multi-repo mode.');
+        });
+
+        test('should include code example with @scope tag', () => {
+            // Arrange
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => `/path/to/${scope}`);
+            state.getGitMode.mockReturnValue('separate');
+
+            // Act
+            const result = generateMultiRepoContext();
+
+            // Assert
+            expect(result).toContain('@dependencies [TASK0]');
+            expect(result).toContain('@scope backend');
+            expect(result).toContain('# Task Title');
+        });
+    });
+
+    describe('step1 with multi-repo context', () => {
+        test('should include multi-repo context in prompt when multi-repo enabled', async () => {
+            // Arrange
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => `/project/${scope}`);
+            state.getGitMode.mockReturnValue('separate');
+
+            let existsCallCount = 0;
+            fs.existsSync.mockImplementation((filePath) => {
+                if(filePath.includes('AI_PROMPT.md')) {
+                    existsCallCount++;
+                    return existsCallCount > 1;
+                }
+                if(filePath.includes('INITIAL_PROMPT.md')) return true;
+                if(filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if(filePath.includes('INITIAL_PROMPT.md')) return 'Multi-repo task';
+                if(filePath.includes('prompt.md')) return 'Base prompt {{TASK}}';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step1(true);
+
+            // Assert
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('## Multi-Repository Context'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('/project/backend'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('/project/frontend'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('@scope'),
+            );
+        });
+
+        test('should NOT include multi-repo context when single-repo mode (backward compatibility)', async () => {
+            // Arrange
+            state.isMultiRepo.mockReturnValue(false);
+
+            let existsCallCount = 0;
+            fs.existsSync.mockImplementation((filePath) => {
+                if(filePath.includes('AI_PROMPT.md')) {
+                    existsCallCount++;
+                    return existsCallCount > 1;
+                }
+                if(filePath.includes('INITIAL_PROMPT.md')) return true;
+                if(filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if(filePath.includes('INITIAL_PROMPT.md')) return 'Single-repo task';
+                if(filePath.includes('prompt.md')) return 'Base prompt {{TASK}}';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step1(true);
+
+            // Assert
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.not.stringContaining('## Multi-Repository Context'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('Base prompt Single-repo task'),
+            );
         });
     });
 });

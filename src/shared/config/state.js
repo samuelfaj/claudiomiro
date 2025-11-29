@@ -6,6 +6,10 @@ class State {
         this._folder = null;
         this._claudiomiroFolder = null;
         this._executorType = 'claude';
+        this._multiRepoEnabled = false;
+        this._repositories = new Map();
+        this._gitMode = null;
+        this._gitRoots = [];
     }
 
     setFolder(folderPath) {
@@ -50,6 +54,62 @@ class State {
      */
     hasCacheFolder() {
         return fs.existsSync(this.cacheFolder);
+    }
+
+    /**
+     * Configures multi-repository mode
+     * @param {string} backendPath - Path to backend repository
+     * @param {string} frontendPath - Path to frontend repository
+     * @param {Object} gitConfig - Git configuration from git-detector
+     * @param {string} gitConfig.mode - 'monorepo' or 'separate'
+     * @param {string[]} gitConfig.gitRoots - Array of git root paths
+     */
+    setMultiRepo(backendPath, frontendPath, gitConfig) {
+        this._multiRepoEnabled = true;
+        this._repositories.set('backend', path.resolve(backendPath));
+        this._repositories.set('frontend', path.resolve(frontendPath));
+        this._gitMode = gitConfig.mode;
+        this._gitRoots = gitConfig.gitRoots;
+        this.setFolder(backendPath);
+    }
+
+    /**
+     * Gets repository path for a given scope
+     * @param {string} scope - 'backend', 'frontend', 'integration', or other
+     * @returns {string} Absolute path to repository
+     */
+    getRepository(scope) {
+        if (!this._multiRepoEnabled) {
+            return this._folder;
+        }
+        if (scope === 'integration') {
+            return this._folder;
+        }
+        return this._repositories.get(scope) || this._folder;
+    }
+
+    /**
+     * Checks if multi-repo mode is enabled
+     * @returns {boolean} True if multi-repo mode is enabled
+     */
+    isMultiRepo() {
+        return this._multiRepoEnabled;
+    }
+
+    /**
+     * Gets the git mode
+     * @returns {string|null} 'monorepo', 'separate', or null
+     */
+    getGitMode() {
+        return this._gitMode;
+    }
+
+    /**
+     * Gets the git root paths
+     * @returns {string[]} Array of git root paths
+     */
+    getGitRoots() {
+        return this._gitRoots;
     }
 
     setExecutorType(type) {

@@ -336,6 +336,81 @@ describe('Claude Executor', () => {
 
             global.Date.mockRestore();
         });
+
+        test('should use state.folder as default cwd when no options provided', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt');
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('claude')], {
+                cwd: '/test',
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+        });
+
+        test('should use provided cwd from options when specified', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt', null, { cwd: '/custom/path' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('claude')], {
+                cwd: '/custom/path',
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+        });
+
+        test('should use state.folder when empty options object provided', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt', null, {});
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('claude')], {
+                cwd: '/test',
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+        });
+
+        test('should use state.folder when options has undefined cwd', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt', null, { cwd: undefined });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('claude')], {
+                cwd: '/test',
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+        });
+
+        test('should use provided cwd with taskName', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt', 'TASK0', { cwd: '/another/repo' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('claude')], {
+                cwd: '/another/repo',
+                stdio: ['ignore', 'pipe', 'pipe'],
+            });
+        });
     });
 
     describe('Edge cases and error handling', () => {

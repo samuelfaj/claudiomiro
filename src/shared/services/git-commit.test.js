@@ -47,6 +47,7 @@ describe('git-commit', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining(prompt),
                 taskName,
+                expect.objectContaining({ cwd: '/test' }),
             );
 
             const calledPrompt = executeClaude.mock.calls[0][0];
@@ -69,6 +70,7 @@ describe('git-commit', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining(prompt),
                 null,
+                expect.objectContaining({ cwd: '/test' }),
             );
         });
 
@@ -107,6 +109,7 @@ describe('git-commit', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining(''),
                 null,
+                expect.objectContaining({ cwd: '/test' }),
             );
         });
 
@@ -118,6 +121,7 @@ describe('git-commit', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining(prompt),
                 null,
+                expect.objectContaining({ cwd: '/test' }),
             );
         });
 
@@ -129,6 +133,7 @@ describe('git-commit', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining(longPrompt),
                 null,
+                expect.objectContaining({ cwd: '/test' }),
             );
         });
 
@@ -173,6 +178,7 @@ describe('git-commit', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 taskName,
+                expect.objectContaining({ cwd: '/test' }),
             );
         });
 
@@ -185,6 +191,7 @@ describe('git-commit', () => {
                 expect(executeClaude).toHaveBeenCalledWith(
                     expect.any(String),
                     taskName,
+                    expect.objectContaining({ cwd: '/test' }),
                 );
 
                 // Reset mock for next iteration
@@ -277,6 +284,7 @@ describe('git-commit', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining(promptWithGit),
                 null,
+                expect.objectContaining({ cwd: '/test' }),
             );
         });
 
@@ -529,6 +537,180 @@ describe('git-commit', () => {
                 expect(executeClaude).toHaveBeenCalledWith(
                     expect.stringContaining('git add . and git commit'),
                     'TASK1',
+                    expect.objectContaining({ cwd: '/test' }),
+                );
+            });
+        });
+
+        describe('cwd parameter', () => {
+            test('should use state.folder when cwd not provided', async () => {
+                execSync.mockReturnValue('');
+                state.folder = '/default/folder';
+
+                await smartCommit();
+
+                expect(execSync).toHaveBeenCalledWith('git status --porcelain', expect.objectContaining({
+                    cwd: '/default/folder',
+                }));
+            });
+
+            test('should use custom cwd for git status when provided', async () => {
+                execSync.mockReturnValue('');
+
+                await smartCommit({ cwd: '/custom/repo' });
+
+                expect(execSync).toHaveBeenCalledWith('git status --porcelain', expect.objectContaining({
+                    cwd: '/custom/repo',
+                }));
+            });
+
+            test('should use custom cwd for git add when provided', async () => {
+                const mockLLM = {
+                    initialize: jest.fn().mockResolvedValue(),
+                    isAvailable: jest.fn().mockReturnValue(true),
+                    generateCommitMessage: jest.fn().mockResolvedValue({
+                        title: 'feat: new feature',
+                        body: '',
+                    }),
+                };
+                getLocalLLMService.mockReturnValue(mockLLM);
+                execSync.mockImplementation((cmd) => {
+                    if (cmd === 'git status --porcelain') return 'M file.js\n';
+                    if (cmd === 'git diff --staged --stat') return 'file.js | 5 +++++\n';
+                    return '';
+                });
+
+                await smartCommit({ cwd: '/custom/repo' });
+
+                expect(execSync).toHaveBeenCalledWith('git add .', expect.objectContaining({
+                    cwd: '/custom/repo',
+                }));
+            });
+
+            test('should use custom cwd for git commit when provided', async () => {
+                const mockLLM = {
+                    initialize: jest.fn().mockResolvedValue(),
+                    isAvailable: jest.fn().mockReturnValue(true),
+                    generateCommitMessage: jest.fn().mockResolvedValue({
+                        title: 'feat: new feature',
+                        body: '',
+                    }),
+                };
+                getLocalLLMService.mockReturnValue(mockLLM);
+                execSync.mockImplementation((cmd) => {
+                    if (cmd === 'git status --porcelain') return 'M file.js\n';
+                    if (cmd === 'git diff --staged --stat') return 'file.js | 5 +++++\n';
+                    return '';
+                });
+
+                await smartCommit({ cwd: '/custom/repo' });
+
+                expect(execSync).toHaveBeenCalledWith(
+                    expect.stringContaining('git commit -m'),
+                    expect.objectContaining({ cwd: '/custom/repo' }),
+                );
+            });
+
+            test('should use custom cwd for git push when provided', async () => {
+                const mockLLM = {
+                    initialize: jest.fn().mockResolvedValue(),
+                    isAvailable: jest.fn().mockReturnValue(true),
+                    generateCommitMessage: jest.fn().mockResolvedValue({
+                        title: 'feat: new feature',
+                        body: '',
+                    }),
+                };
+                getLocalLLMService.mockReturnValue(mockLLM);
+                execSync.mockImplementation((cmd) => {
+                    if (cmd === 'git status --porcelain') return 'M file.js\n';
+                    if (cmd === 'git diff --staged --stat') return 'file.js | 5 +++++\n';
+                    return '';
+                });
+
+                await smartCommit({ cwd: '/custom/repo', shouldPush: true });
+
+                expect(execSync).toHaveBeenCalledWith('git push', expect.objectContaining({
+                    cwd: '/custom/repo',
+                }));
+            });
+
+            test('should pass custom cwd to Claude on fallback', async () => {
+                execSync.mockReturnValue('M file.js\n');
+                getLocalLLMService.mockReturnValue(null);
+                executeClaude.mockResolvedValue();
+
+                await smartCommit({ cwd: '/custom/repo' });
+
+                expect(executeClaude).toHaveBeenCalledWith(
+                    expect.stringContaining('git add . and git commit'),
+                    null,
+                    expect.objectContaining({ cwd: '/custom/repo' }),
+                );
+            });
+
+            test('should pass custom cwd through all git operations', async () => {
+                const mockLLM = {
+                    initialize: jest.fn().mockResolvedValue(),
+                    isAvailable: jest.fn().mockReturnValue(true),
+                    generateCommitMessage: jest.fn().mockResolvedValue({
+                        title: 'feat: new feature',
+                        body: 'Description',
+                    }),
+                };
+                getLocalLLMService.mockReturnValue(mockLLM);
+                execSync.mockImplementation((cmd) => {
+                    if (cmd === 'git status --porcelain') return 'M file.js\n';
+                    if (cmd === 'git diff --staged --stat') return 'file.js | 5 +++++\n';
+                    return '';
+                });
+
+                await smartCommit({ cwd: '/custom/repo', shouldPush: true });
+
+                // Verify all git commands received the custom cwd
+                const calls = execSync.mock.calls;
+                const cwdValues = calls.map(call => call[1]?.cwd);
+                expect(cwdValues.every(cwd => cwd === '/custom/repo')).toBe(true);
+            });
+        });
+    });
+
+    describe('commitOrFix', () => {
+        describe('cwd parameter', () => {
+            test('should pass cwd to executeClaude', async () => {
+                executeClaude.mockResolvedValue();
+
+                await commitOrFix('test prompt', 'TASK1', '/custom/repo');
+
+                expect(executeClaude).toHaveBeenCalledWith(
+                    expect.any(String),
+                    'TASK1',
+                    expect.objectContaining({ cwd: '/custom/repo' }),
+                );
+            });
+
+            test('should use state.folder when cwd not provided', async () => {
+                state.folder = '/default/folder';
+                executeClaude.mockResolvedValue();
+
+                await commitOrFix('test prompt', 'TASK1');
+
+                expect(executeClaude).toHaveBeenCalledWith(
+                    expect.any(String),
+                    'TASK1',
+                    expect.objectContaining({ cwd: '/default/folder' }),
+                );
+            });
+
+            test('should use null cwd as state.folder', async () => {
+                state.folder = '/state/folder';
+                executeClaude.mockResolvedValue();
+
+                await commitOrFix('test prompt', 'TASK1', null);
+
+                expect(executeClaude).toHaveBeenCalledWith(
+                    expect.any(String),
+                    'TASK1',
+                    expect.objectContaining({ cwd: '/state/folder' }),
                 );
             });
         });

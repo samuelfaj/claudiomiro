@@ -25,7 +25,7 @@ const overwriteBlock = (lines) => {
     process.stdout.write(`\x1b[${lines}A`);
 };
 
-const runClaude = (text, taskName = null) => {
+const runClaude = (text, taskName = null, options = {}) => {
     return new Promise((resolve, reject) => {
         const stateManager = taskName ? ParallelStateManager.getInstance() : null;
         const suppressStreamingLogs = Boolean(taskName) && stateManager && typeof stateManager.isUIRendererActive === 'function' && stateManager.isUIRendererActive();
@@ -42,7 +42,7 @@ const runClaude = (text, taskName = null) => {
         logger.newline();
 
         const claude = spawn('sh', ['-c', command], {
-            cwd: state.folder,
+            cwd: options.cwd || state.folder,
             stdio: ['ignore', 'pipe', 'pipe'],
         });
 
@@ -59,9 +59,9 @@ const runClaude = (text, taskName = null) => {
 
         let overwriteBlockLines = 0;
 
-        // Timeout to detect stuck process (10 minutes)
+        // Timeout to detect stuck process (15 minutes)
         let inactivityTimer = null;
-        const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 10 minutes in milliseconds
+        const INACTIVITY_TIMEOUT = 15 * 60 * 1000; // 15 minutes in milliseconds
 
         // Function to reset the inactivity timer
         const resetInactivityTimer = () => {
@@ -70,14 +70,14 @@ const runClaude = (text, taskName = null) => {
             }
 
             inactivityTimer = setTimeout(() => {
-                console.log('\n⚠️ Claude has been inactive for 10 minutes, terminating process...');
-                logStream.write(`\n\n[${new Date().toISOString()}] Claude timeout after 10 minutes of inactivity - killing process\n`);
+                console.log('\n⚠️ Claude has been inactive for 15 minutes, terminating process...');
+                logStream.write(`\n\n[${new Date().toISOString()}] Claude timeout after 15 minutes of inactivity - killing process\n`);
 
                 // Kill the Claude process
                 claude.kill('SIGKILL');
 
                 // Force the Promise to reject with timeout error
-                reject(new Error('Claude stuck - timeout after 10 minutes of inactivity'));
+                reject(new Error('Claude stuck - timeout after 15 minutes of inactivity'));
             }, INACTIVITY_TIMEOUT);
         };
 
@@ -218,7 +218,7 @@ const runClaude = (text, taskName = null) => {
     });
 };
 
-const executeClaude = (text, taskName = null) => {
+const executeClaude = (text, taskName = null, options = {}) => {
     // Validate input before dispatching to any executor
     if(!text){
         return Promise.reject(new Error('no prompt'));
@@ -244,7 +244,7 @@ const executeClaude = (text, taskName = null) => {
         return executeGlm(text, taskName);
     }
 
-    return runClaude(text, taskName);
+    return runClaude(text, taskName, options);
 };
 
 module.exports = { executeClaude };

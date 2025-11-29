@@ -129,4 +129,129 @@ describe('State', () => {
             expect(state.executorType).toBe('claude');
         });
     });
+
+    describe('multi-repo support', () => {
+        const backendPath = '/test/backend';
+        const frontendPath = '/test/frontend';
+        const gitConfig = {
+            mode: 'monorepo',
+            gitRoots: ['/test/root'],
+        };
+
+        describe('isMultiRepo', () => {
+            test('should return false by default', () => {
+                expect(state.isMultiRepo()).toBe(false);
+            });
+
+            test('should return true after setMultiRepo is called', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+                expect(state.isMultiRepo()).toBe(true);
+            });
+        });
+
+        describe('setMultiRepo', () => {
+            test('should set all multi-repo properties', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+
+                expect(state.isMultiRepo()).toBe(true);
+                expect(state.getGitMode()).toBe('monorepo');
+                expect(state.getGitRoots()).toEqual(['/test/root']);
+            });
+
+            test('should resolve backend and frontend paths', () => {
+                state.setMultiRepo('./backend', './frontend', gitConfig);
+
+                expect(path.isAbsolute(state.getRepository('backend'))).toBe(true);
+                expect(path.isAbsolute(state.getRepository('frontend'))).toBe(true);
+            });
+
+            test('should call setFolder with backend path', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+
+                expect(state.folder).toBe(path.resolve(backendPath));
+            });
+
+            test('should work with separate mode', () => {
+                const separateConfig = {
+                    mode: 'separate',
+                    gitRoots: ['/test/backend', '/test/frontend'],
+                };
+                state.setMultiRepo(backendPath, frontendPath, separateConfig);
+
+                expect(state.getGitMode()).toBe('separate');
+                expect(state.getGitRoots()).toEqual(['/test/backend', '/test/frontend']);
+            });
+        });
+
+        describe('getRepository', () => {
+            test('should return backend path for backend scope', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+                expect(state.getRepository('backend')).toBe(path.resolve(backendPath));
+            });
+
+            test('should return frontend path for frontend scope', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+                expect(state.getRepository('frontend')).toBe(path.resolve(frontendPath));
+            });
+
+            test('should return primary folder for integration scope', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+                expect(state.getRepository('integration')).toBe(path.resolve(backendPath));
+            });
+
+            test('should return primary folder for unknown scope', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+                expect(state.getRepository('unknown')).toBe(path.resolve(backendPath));
+            });
+
+            test('should return _folder in single-repo mode', () => {
+                state.setFolder('/test/project');
+                expect(state.getRepository('backend')).toBe(path.resolve('/test/project'));
+            });
+        });
+
+        describe('getGitMode', () => {
+            test('should return null by default', () => {
+                expect(state.getGitMode()).toBe(null);
+            });
+
+            test('should return monorepo when configured', () => {
+                state.setMultiRepo(backendPath, frontendPath, { mode: 'monorepo', gitRoots: [] });
+                expect(state.getGitMode()).toBe('monorepo');
+            });
+
+            test('should return separate when configured', () => {
+                state.setMultiRepo(backendPath, frontendPath, { mode: 'separate', gitRoots: [] });
+                expect(state.getGitMode()).toBe('separate');
+            });
+        });
+
+        describe('getGitRoots', () => {
+            test('should return empty array by default', () => {
+                expect(state.getGitRoots()).toEqual([]);
+            });
+
+            test('should return git roots after setMultiRepo', () => {
+                const gitRoots = ['/root1', '/root2'];
+                state.setMultiRepo(backendPath, frontendPath, { mode: 'monorepo', gitRoots });
+                expect(state.getGitRoots()).toEqual(gitRoots);
+            });
+        });
+
+        describe('backward compatibility', () => {
+            test('existing single-repo methods still work after multi-repo setup', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+
+                expect(state.folder).toBe(path.resolve(backendPath));
+                expect(state.claudiomiroFolder).toBe(path.join(path.resolve(backendPath), '.claudiomiro'));
+            });
+
+            test('setFolder still works independently', () => {
+                state.setFolder('/test/project');
+
+                expect(state.folder).toBe(path.resolve('/test/project'));
+                expect(state.isMultiRepo()).toBe(false);
+            });
+        });
+    });
 });
