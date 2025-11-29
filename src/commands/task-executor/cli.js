@@ -61,9 +61,10 @@ const chooseAction = async (i, args) => {
     const backendArg = args.find(arg => arg.startsWith('--backend='));
     const frontendArg = args.find(arg => arg.startsWith('--frontend='));
 
-    // Check if --fresh was passed (or if --prompt was used, which automatically activates --fresh)
+    // Check if --fresh was passed
     // IMPORTANT: --continue should not activate --fresh
-    const shouldStartFresh = !continueFlag && (args.includes('--fresh') || promptText !== null);
+    // IMPORTANT: --prompt should NOT automatically activate --fresh (user must explicitly use --fresh if they want to start fresh)
+    const shouldStartFresh = !continueFlag && args.includes('--fresh');
 
     // Check if --push=false was passed
     const shouldPush = !args.some(arg => arg === '--push=false');
