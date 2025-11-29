@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const { executeClaude } = require('../executors/claude-executor');
 const {
     verifyIntegration,
@@ -10,6 +12,14 @@ const {
 jest.mock('../executors/claude-executor');
 
 describe('integration-verifier', () => {
+    const writeResultToPromptPath = (prompt, payload) => {
+        const match = prompt.match(/OUTPUT_FILE:\s*(.+)/);
+        expect(match).toBeTruthy();
+        const outputPath = match[1].trim();
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+        fs.writeFileSync(outputPath, payload, 'utf-8');
+    };
+
     beforeEach(() => {
         jest.clearAllMocks();
     });
@@ -90,6 +100,16 @@ describe('integration-verifier', () => {
             expect(prompt).toContain('payload_mismatch');
             expect(prompt).toContain('response_mismatch');
             expect(prompt).toContain('missing_endpoint');
+        });
+
+        test('should embed output instructions when outputPath provided', () => {
+            const prompt = buildVerificationPrompt('/backend', '/frontend', '/tmp/result.json');
+
+            expect(prompt).toContain('OUTPUT_FILE: /tmp/result.json');
+            expect(prompt).toContain('Write ONLY the JSON object');
+            expect(prompt).toContain('OUTPUT_FILE_QUOTED: "/tmp/result.json"');
+            expect(prompt).toContain('mkdir -p "$(dirname "/tmp/result.json")"');
+            expect(prompt).toContain('cat <<\'EOF\' > "/tmp/result.json"');
         });
     });
 
@@ -191,11 +211,13 @@ describe('integration-verifier', () => {
 
     describe('verifyIntegration', () => {
         test('should return success result when Claude finds no issues', async () => {
-            executeClaude.mockResolvedValue(JSON.stringify({
-                success: true,
-                mismatches: [],
-                summary: 'No integration issues found',
-            }));
+            executeClaude.mockImplementation(async (prompt) => {
+                writeResultToPromptPath(prompt, JSON.stringify({
+                    success: true,
+                    mismatches: [],
+                    summary: 'No integration issues found',
+                }));
+            });
 
             const result = await verifyIntegration({
                 backendPath: '/path/to/backend',
@@ -207,16 +229,18 @@ describe('integration-verifier', () => {
         });
 
         test('should return mismatches when Claude finds issues', async () => {
-            executeClaude.mockResolvedValue(JSON.stringify({
-                success: false,
-                mismatches: [{
-                    type: 'payload_mismatch',
-                    description: 'User creation payload differs',
-                    backendFile: 'controllers/user.py',
-                    frontendFile: 'services/userService.js',
-                }],
-                summary: 'Found integration issues',
-            }));
+            executeClaude.mockImplementation(async (prompt) => {
+                writeResultToPromptPath(prompt, JSON.stringify({
+                    success: false,
+                    mismatches: [{
+                        type: 'payload_mismatch',
+                        description: 'User creation payload differs',
+                        backendFile: 'controllers/user.py',
+                        frontendFile: 'services/userService.js',
+                    }],
+                    summary: 'Found integration issues',
+                }));
+            });
 
             const result = await verifyIntegration({
                 backendPath: '/backend',
@@ -229,7 +253,9 @@ describe('integration-verifier', () => {
         });
 
         test('should call executeClaude with correct arguments including cwd option', async () => {
-            executeClaude.mockResolvedValue('{"success": true, "mismatches": []}');
+            executeClaude.mockImplementation(async (prompt) => {
+                writeResultToPromptPath(prompt, '{"success": true, "mismatches": []}');
+            });
 
             await verifyIntegration({
                 backendPath: '/my/backend',
@@ -258,7 +284,9 @@ describe('integration-verifier', () => {
         });
 
         test('should handle parse errors from malformed Claude response', async () => {
-            executeClaude.mockResolvedValue('not valid json at all');
+            executeClaude.mockImplementation(async (prompt) => {
+                writeResultToPromptPath(prompt, 'not valid json at all');
+            });
 
             const result = await verifyIntegration({
                 backendPath: '/backend',

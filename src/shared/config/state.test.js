@@ -14,6 +14,13 @@ describe('State', () => {
         mockFs = {
             existsSync: jest.fn().mockReturnValue(true), // Default to paths existing
             mkdirSync: jest.fn(),
+            readdirSync: jest.fn().mockReturnValue([]),
+            statSync: jest.fn().mockReturnValue({ isDirectory: () => false }),
+            renameSync: jest.fn(),
+            cpSync: jest.fn(),
+            rmSync: jest.fn(),
+            copyFileSync: jest.fn(),
+            unlinkSync: jest.fn(),
         };
 
         // Create mock findGitRoot
@@ -48,6 +55,78 @@ describe('State', () => {
 
             expect(state.folder).toBe(path.resolve('/test/project'));
             expect(state.claudiomiroFolder).toBe(path.join(path.resolve('/test/project'), '.claudiomiro', 'task-executor'));
+            expect(state.workspaceClaudiomiroFolder).toBe(path.join(path.resolve('/test/project'), '.claudiomiro', 'task-executor'));
+        });
+
+        test('should migrate legacy claudiomiro layout into task-executor subfolder', () => {
+            const projectFolder = '/test/project';
+            const resolvedProject = path.resolve(projectFolder);
+            const claudiomiroRoot = path.join(resolvedProject, '.claudiomiro');
+            const taskExecutorFolder = path.join(claudiomiroRoot, 'task-executor');
+
+            mockFs.existsSync.mockImplementation((p) => {
+                if (!p) return false;
+                if (p === claudiomiroRoot) return true;
+                if (p === taskExecutorFolder) return false;
+                if (p === path.join(claudiomiroRoot, 'AI_PROMPT.md')) return true;
+                if (p === path.join(claudiomiroRoot, 'TASK1')) return true;
+                if (p === path.join(claudiomiroRoot, 'cache')) return true;
+                return false;
+            });
+
+            mockFs.readdirSync.mockReturnValue(['AI_PROMPT.md', 'TASK1', 'cache', 'token-optimizer']);
+            mockFs.statSync.mockImplementation((p) => ({
+                isDirectory: () => p.endsWith('TASK1') || p.endsWith('cache'),
+            }));
+
+            state.setFolder(projectFolder);
+
+            expect(mockFs.mkdirSync).toHaveBeenCalledWith(taskExecutorFolder, { recursive: true });
+            expect(mockFs.renameSync).toHaveBeenCalledWith(
+                path.join(claudiomiroRoot, 'AI_PROMPT.md'),
+                path.join(taskExecutorFolder, 'AI_PROMPT.md'),
+            );
+            expect(mockFs.renameSync).toHaveBeenCalledWith(
+                path.join(claudiomiroRoot, 'TASK1'),
+                path.join(taskExecutorFolder, 'TASK1'),
+            );
+            expect(mockFs.renameSync).toHaveBeenCalledWith(
+                path.join(claudiomiroRoot, 'cache'),
+                path.join(taskExecutorFolder, 'cache'),
+            );
+            expect(mockFs.renameSync).not.toHaveBeenCalledWith(
+                path.join(claudiomiroRoot, 'token-optimizer'),
+                expect.any(String),
+            );
+            expect(state.claudiomiroFolder).toBe(taskExecutorFolder);
+            expect(mockLogger.info).toHaveBeenCalledWith('Migrated legacy .claudiomiro session into .claudiomiro/task-executor');
+        });
+
+        test('should fall back to legacy root when migration fails', () => {
+            const projectFolder = '/legacy/failure';
+            const resolvedProject = path.resolve(projectFolder);
+            const claudiomiroRoot = path.join(resolvedProject, '.claudiomiro');
+            const taskExecutorFolder = path.join(claudiomiroRoot, 'task-executor');
+
+            mockFs.existsSync.mockImplementation((p) => {
+                if (!p) return false;
+                if (p === claudiomiroRoot) return true;
+                if (p === taskExecutorFolder) return false;
+                if (p === path.join(claudiomiroRoot, 'AI_PROMPT.md')) return true;
+                return false;
+            });
+
+            mockFs.readdirSync.mockReturnValue(['AI_PROMPT.md']);
+            mockFs.mkdirSync.mockImplementation((p) => {
+                if (p === taskExecutorFolder) {
+                    throw new Error('migration-failed');
+                }
+            });
+
+            state.setFolder(projectFolder);
+
+            expect(state.claudiomiroFolder).toBe(claudiomiroRoot);
+            expect(mockLogger.warning).toHaveBeenCalledWith(expect.stringContaining('Failed to migrate legacy .claudiomiro layout'));
         });
 
         test('should resolve relative paths', () => {
@@ -196,6 +275,14 @@ describe('State', () => {
 
                 expect(state.getGitMode()).toBe('separate');
                 expect(state.getGitRoots()).toEqual(['/test/backend', '/test/frontend']);
+            });
+
+            test('should preserve initial workspace folder when switching repositories', () => {
+                state.setFolder('/workspace/root');
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+
+                expect(state.workspaceRoot).toBe(path.resolve('/workspace/root'));
+                expect(state.folder).toBe(path.resolve(backendPath));
             });
 
             test('should throw error if backend path does not exist', () => {

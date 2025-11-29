@@ -176,22 +176,23 @@ claudiomiro --prompt="Add unit tests for the user service module"
 
 ### The .claudiomiro Folder
 
-After running Claudiomiro, a `.claudiomiro` folder is created in your project root:
+After running Claudiomiro, a `.claudiomiro` folder is created in your project root with all session files stored under `task-executor/`:
 
 ```
 .claudiomiro/
-├── AI_PROMPT.md                    # Generated AI instructions
-├── CLARIFICATION_QUESTIONS.json    # Questions asked (if any)
-├── CLARIFICATION_ANSWERS.json      # Your answers (if any)
-├── CRITICAL_REVIEW_PASSED.md       # Marks successful review
-├── BUGS.md                         # Any bugs found during review
-├── done.txt                        # Completion marker
-└── TASK1/
-    ├── TASK.md                     # Task description
-    ├── TODO.md                     # Implementation checklist
-    ├── RESEARCH.md                 # Codebase analysis
-    ├── CONTEXT.md                  # Implementation guidelines
-    └── CODE_REVIEW.md              # Review results
+└── task-executor/
+    ├── AI_PROMPT.md                    # Generated AI instructions
+    ├── CLARIFICATION_QUESTIONS.json    # Questions asked (if any)
+    ├── CLARIFICATION_ANSWERS.json      # Your answers (if any)
+    ├── CRITICAL_REVIEW_PASSED.md       # Marks successful review
+    ├── BUGS.md                         # Any bugs found during review
+    ├── done.txt                        # Completion marker
+    └── TASK1/
+        ├── TASK.md                     # Task description
+        ├── TODO.md                     # Implementation checklist
+        ├── RESEARCH.md                 # Codebase analysis
+        ├── CONTEXT.md                  # Implementation guidelines
+        └── CODE_REVIEW.md              # Review results
 ```
 
 ### Log Files

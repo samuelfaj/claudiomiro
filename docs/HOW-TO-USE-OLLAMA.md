@@ -224,7 +224,7 @@ claudiomiro --token-optimizer \
 
 Filtered outputs are saved to:
 ```
-.claudiomiro/token-optimizer/output-<timestamp>.txt
+.claudiomiro/task-executor/token-optimizer/output-<timestamp>.txt
 ```
 
 This allows you to reference the filtered output later or send it to Claude.
@@ -270,7 +270,7 @@ Claudiomiro uses Ollama (running locally, for free) to preprocess and filter the
 2. **Capture Output**: stdout and stderr are captured
 3. **Build Prompt**: Creates a filtering instruction for Ollama
 4. **Local LLM Processing**: Ollama filters the output using your instruction
-5. **Save Result**: Filtered output saved to `.claudiomiro/token-optimizer/`
+5. **Save Result**: Filtered output saved to `.claudiomiro/task-executor/token-optimizer/`
 6. **Display**: Shows the concise, filtered result
 
 ### Fallback Behavior

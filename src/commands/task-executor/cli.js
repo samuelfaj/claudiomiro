@@ -168,10 +168,8 @@ const chooseAction = async (i, args) => {
             const gitConfig = detectGitConfiguration(backendPath, frontendPath);
             state.setMultiRepo(backendPath, frontendPath, gitConfig);
 
-            // Persist configuration
-            const configPath = path.join(state.claudiomiroFolder, 'multi-repo.json');
-            fs.mkdirSync(path.dirname(configPath), { recursive: true });
-            fs.writeFileSync(configPath, JSON.stringify({
+            // Persist configuration across all relevant workspaces
+            const configPayload = {
                 enabled: true,
                 mode: gitConfig.mode,
                 repositories: {
@@ -179,7 +177,32 @@ const chooseAction = async (i, args) => {
                     frontend: path.resolve(frontendPath),
                 },
                 gitRoots: gitConfig.gitRoots,
-            }, null, 2));
+            };
+
+            const candidateDirs = new Set();
+            const addDir = (dirPath) => {
+                if (!dirPath) {
+                    return;
+                }
+                const resolvedDir = path.resolve(dirPath);
+                candidateDirs.add(resolvedDir);
+            };
+
+            addDir(state.workspaceClaudiomiroFolder);
+            addDir(state.claudiomiroFolder);
+            addDir(path.join(path.resolve(backendPath), '.claudiomiro', 'task-executor'));
+            addDir(path.join(path.resolve(frontendPath), '.claudiomiro', 'task-executor'));
+
+            const configString = JSON.stringify(configPayload, null, 2);
+
+            for (const dir of candidateDirs) {
+                try {
+                    fs.mkdirSync(dir, { recursive: true });
+                    fs.writeFileSync(path.join(dir, 'multi-repo.json'), configString);
+                } catch (error) {
+                    logger.warning?.(`Failed to persist multi-repo configuration to ${dir}: ${error.message}`);
+                }
+            }
 
             logger.info(`Multi-repo mode: ${gitConfig.mode}`);
             logger.info(`Backend: ${backendPath}`);
@@ -211,8 +234,61 @@ const chooseAction = async (i, args) => {
     // Handle --continue flag (resuming after clarification)
     if (continueFlag && i === 0) {
         // Load multi-repo config if exists (restore multi-repo mode on continue)
-        const multiRepoConfigPath = path.join(state.claudiomiroFolder, 'multi-repo.json');
-        if (fs.existsSync(multiRepoConfigPath)) {
+        const resolveMultiRepoConfigPath = () => {
+            const visited = new Set();
+            const candidates = [];
+
+            const addCandidate = (filePath) => {
+                if (!filePath) return;
+                const resolved = path.resolve(filePath);
+                if (visited.has(resolved)) return;
+                visited.add(resolved);
+                candidates.push(resolved);
+            };
+
+            // Current workspace-first storage (.claudiomiro/task-executor/multi-repo.json)
+            addCandidate(state.workspaceClaudiomiroFolder && path.join(state.workspaceClaudiomiroFolder, 'multi-repo.json'));
+            addCandidate(state.claudiomiroFolder && path.join(state.claudiomiroFolder, 'multi-repo.json'));
+
+            // Legacy storage (.claudiomiro/multi-repo.json) for backward compatibility
+            addCandidate(state.workspaceClaudiomiroRoot && path.join(state.workspaceClaudiomiroRoot, 'multi-repo.json'));
+            addCandidate(state.claudiomiroRoot && path.join(state.claudiomiroRoot, 'multi-repo.json'));
+
+            const migrateIfNeeded = (legacyPath) => {
+                const preferredPath = state.workspaceClaudiomiroFolder
+                    ? path.join(state.workspaceClaudiomiroFolder, 'multi-repo.json')
+                    : (state.claudiomiroFolder ? path.join(state.claudiomiroFolder, 'multi-repo.json') : null);
+
+                if (!preferredPath || preferredPath === legacyPath) {
+                    return legacyPath;
+                }
+
+                try {
+                    if (!fs.existsSync(preferredPath)) {
+                        fs.mkdirSync(path.dirname(preferredPath), { recursive: true });
+                        fs.copyFileSync(legacyPath, preferredPath);
+                    }
+                    return preferredPath;
+                } catch {
+                    // If migration fails, fall back to legacy location
+                    return legacyPath;
+                }
+            };
+
+            for (const candidate of candidates) {
+                if (candidate && fs.existsSync(candidate)) {
+                    const parentDir = path.basename(path.dirname(candidate));
+                    if (parentDir === '.claudiomiro') {
+                        return migrateIfNeeded(candidate);
+                    }
+                    return candidate;
+                }
+            }
+            return null;
+        };
+
+        const multiRepoConfigPath = resolveMultiRepoConfigPath();
+        if (multiRepoConfigPath) {
             try {
                 const config = JSON.parse(fs.readFileSync(multiRepoConfigPath, 'utf-8'));
                 if (config.enabled) {

@@ -40,11 +40,24 @@ logger.step = jest.fn();
 // Mock state with getters and setters
 let mockFolder = null;
 let mockClaudiomiroFolder = null;
+let mockClaudiomiroRoot = null;
+let mockWorkspaceRoot = null;
+let mockWorkspaceClaudiomiroRoot = null;
+let mockWorkspaceClaudiomiroFolder = null;
 let mockExecutorType = 'claude';
 
 state.setFolder = jest.fn((folderPath) => {
-    mockFolder = path.resolve(folderPath);
-    mockClaudiomiroFolder = path.join(mockFolder, '.claudiomiro');
+    const resolved = path.resolve(folderPath);
+    mockFolder = resolved;
+
+    if (!mockWorkspaceRoot) {
+        mockWorkspaceRoot = resolved;
+        mockWorkspaceClaudiomiroRoot = path.join(mockWorkspaceRoot, '.claudiomiro');
+        mockWorkspaceClaudiomiroFolder = path.join(mockWorkspaceClaudiomiroRoot, 'task-executor');
+    }
+
+    mockClaudiomiroRoot = path.join(mockFolder, '.claudiomiro');
+    mockClaudiomiroFolder = path.join(mockClaudiomiroRoot, 'task-executor');
 });
 
 state.initializeCache = jest.fn();
@@ -56,6 +69,21 @@ Object.defineProperty(state, 'folder', {
 
 Object.defineProperty(state, 'claudiomiroFolder', {
     get: () => mockClaudiomiroFolder,
+    configurable: true,
+});
+
+Object.defineProperty(state, 'claudiomiroRoot', {
+    get: () => mockClaudiomiroRoot,
+    configurable: true,
+});
+
+Object.defineProperty(state, 'workspaceClaudiomiroFolder', {
+    get: () => mockWorkspaceClaudiomiroFolder,
+    configurable: true,
+});
+
+Object.defineProperty(state, 'workspaceClaudiomiroRoot', {
+    get: () => mockWorkspaceClaudiomiroRoot,
     configurable: true,
 });
 
@@ -86,6 +114,10 @@ describe('src/commands/task-executor/cli.js', () => {
         // Reset state
         mockFolder = null;
         mockClaudiomiroFolder = null;
+        mockClaudiomiroRoot = null;
+        mockWorkspaceRoot = null;
+        mockWorkspaceClaudiomiroRoot = null;
+        mockWorkspaceClaudiomiroFolder = null;
         mockExecutorType = 'claude';
 
         // Mock process.exit
@@ -99,6 +131,9 @@ describe('src/commands/task-executor/cli.js', () => {
         fs.readdirSync = jest.fn().mockReturnValue([]);
         fs.statSync = jest.fn().mockReturnValue({ isDirectory: () => true });
         fs.readFileSync = jest.fn().mockReturnValue('');
+        fs.writeFileSync = jest.fn();
+        fs.mkdirSync = jest.fn();
+        fs.copyFileSync = jest.fn();
     });
 
     afterEach(() => {
@@ -281,12 +316,22 @@ describe('src/commands/task-executor/cli.js', () => {
 
             await cliModule.init(['.', `--backend=${backendPath}`, `--frontend=${frontendPath}`]);
 
-            expect(fs.writeFileSync).toHaveBeenCalled();
-            const writeCall = fs.writeFileSync.mock.calls.find(
+            const configWrites = fs.writeFileSync.mock.calls.filter(
                 call => call[0] && call[0].includes('multi-repo.json'),
             );
-            expect(writeCall).toBeDefined();
-            const config = JSON.parse(writeCall[1]);
+            expect(configWrites.length).toBeGreaterThanOrEqual(3);
+
+            const expectedPaths = [
+                path.join(path.resolve(process.cwd()), '.claudiomiro', 'task-executor', 'multi-repo.json'),
+                path.join(path.resolve(backendPath), '.claudiomiro', 'task-executor', 'multi-repo.json'),
+                path.join(path.resolve(frontendPath), '.claudiomiro', 'task-executor', 'multi-repo.json'),
+            ];
+
+            expectedPaths.forEach((expectedPath) => {
+                expect(configWrites.some(([filePath]) => filePath === expectedPath)).toBe(true);
+            });
+
+            const config = JSON.parse(configWrites[0][1]);
             expect(config.enabled).toBe(true);
             expect(config.mode).toBe('separate');
         });
@@ -478,6 +523,93 @@ describe('src/commands/task-executor/cli.js', () => {
             await cliModule.init(['.', '--continue']);
 
             expect(state.setMultiRepo).not.toHaveBeenCalled();
+        });
+
+        test('should restore multi-repo mode from legacy config path on --continue', async () => {
+            const legacyConfigPath = path.join(process.cwd(), '.claudiomiro', 'multi-repo.json');
+            const workspaceConfigPath = path.join(process.cwd(), '.claudiomiro', 'task-executor', 'multi-repo.json');
+            const pendingPath = path.join(process.cwd(), '.claudiomiro', 'PENDING_CLARIFICATION.flag');
+            const answersPath = path.join(process.cwd(), '.claudiomiro', 'CLARIFICATION_ANSWERS.json');
+
+            fs.existsSync = jest.fn((p) => {
+                if (!p) return false;
+                if (p === workspaceConfigPath) return false;
+                if (p === legacyConfigPath) return true;
+                if (p === pendingPath || p === answersPath) return true;
+                if (p === process.cwd()) return true;
+                if (typeof p === 'string' && p.includes('.claudiomiro')) return true;
+                return true;
+            });
+
+            fs.readFileSync = jest.fn((p) => {
+                if (p === workspaceConfigPath || p === legacyConfigPath) {
+                    return JSON.stringify({
+                        enabled: true,
+                        mode: 'separate',
+                        repositories: {
+                            backend: '/legacy/backend',
+                            frontend: '/legacy/frontend',
+                        },
+                        gitRoots: ['/legacy/backend', '/legacy/frontend'],
+                    });
+                }
+                return '';
+            });
+
+            await cliModule.init(['.', '--continue']);
+
+            expect(state.setMultiRepo).toHaveBeenCalledWith(
+                '/legacy/backend',
+                '/legacy/frontend',
+                { mode: 'separate', gitRoots: ['/legacy/backend', '/legacy/frontend'] },
+            );
+            expect(fs.copyFileSync).toHaveBeenCalledWith(
+                legacyConfigPath,
+                workspaceConfigPath,
+            );
+        });
+
+        test('should restore multi-repo mode when config exists in repo-scoped folder on --continue', async () => {
+            const backendPath = path.join(process.cwd(), 'backend-repo');
+            const repoClaudiomiro = path.join(backendPath, '.claudiomiro', 'task-executor');
+            const configPath = path.join(repoClaudiomiro, 'multi-repo.json');
+            const pendingPath = path.join(repoClaudiomiro, 'PENDING_CLARIFICATION.flag');
+            const answersPath = path.join(repoClaudiomiro, 'CLARIFICATION_ANSWERS.json');
+
+            const configContent = {
+                enabled: true,
+                mode: 'separate',
+                repositories: {
+                    backend: '/shared/backend',
+                    frontend: '/shared/frontend',
+                },
+                gitRoots: ['/shared/backend', '/shared/frontend'],
+            };
+
+            fs.existsSync = jest.fn((p) => {
+                if (!p) return false;
+                if (p === backendPath) return true;
+                if (p === configPath) return true;
+                if (p === pendingPath || p === answersPath) return true;
+                if (typeof p === 'string' && p.startsWith(repoClaudiomiro)) return true;
+                return true;
+            });
+
+            fs.readFileSync = jest.fn((p) => {
+                if (p === configPath) {
+                    return JSON.stringify(configContent);
+                }
+                return '';
+            });
+
+            await cliModule.init([backendPath, '--continue']);
+
+            expect(state.setMultiRepo).toHaveBeenCalledWith(
+                '/shared/backend',
+                '/shared/frontend',
+                { mode: 'separate', gitRoots: ['/shared/backend', '/shared/frontend'] },
+            );
+            expect(logger.info).toHaveBeenCalledWith('Restored multi-repo mode: separate');
         });
 
         test('should continue as single-repo when multi-repo.json has enabled: false', async () => {

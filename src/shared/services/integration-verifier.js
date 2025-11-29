@@ -1,14 +1,21 @@
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const { executeClaude } = require('../executors/claude-executor');
+const state = require('../config/state');
+
+const escapeForDoubleQuotes = (value) => value.replace(/(["\\$`])/g, '\\$1');
 
 /**
  * Builds a prompt for Claude to analyze backend and frontend codebases
  * for integration issues
  * @param {string} backendPath - Path to the backend codebase
  * @param {string} frontendPath - Path to the frontend codebase
+ * @param {string} [outputPath] - Optional file path where Claude must write the JSON result
  * @returns {string} The prompt for Claude
  */
-const buildVerificationPrompt = (backendPath, frontendPath) => {
-    return `Analyze the integration between these two codebases and identify any mismatches:
+const buildVerificationPrompt = (backendPath, frontendPath, outputPath) => {
+    const basePrompt = `Analyze the integration between these two codebases and identify any mismatches:
 
 BACKEND CODEBASE: ${backendPath}
 FRONTEND CODEBASE: ${frontendPath}
@@ -48,6 +55,28 @@ If no issues are found, return:
 }
 
 Do not include any explanation or text outside the JSON object.`;
+
+    if (!outputPath) {
+        return basePrompt;
+    }
+
+    const quotedPath = `"${escapeForDoubleQuotes(outputPath)}"`;
+
+    return `${basePrompt}
+
+After generating the JSON response, follow these mandatory steps:
+
+OUTPUT_FILE: ${outputPath}
+OUTPUT_FILE_QUOTED: ${quotedPath}
+
+1. Run: mkdir -p "$(dirname ${quotedPath})"
+2. Write ONLY the JSON object to the output file using:
+   cat <<'EOF' > ${quotedPath}
+   {paste the JSON object here}
+   EOF
+3. Do not add commentary before or after the JSON content.
+4. Overwrite any previous contents of the file.
+5. Confirm completion only after the file has been written successfully.`;
 };
 
 /**
@@ -172,11 +201,41 @@ const parseVerificationResult = (claudeOutput) => {
  */
 const verifyIntegration = async ({ backendPath, frontendPath }) => {
     try {
-        const prompt = buildVerificationPrompt(backendPath, frontendPath);
+        const baseDir = state.workspaceClaudiomiroFolder
+            || state.claudiomiroFolder
+            || path.join(os.tmpdir(), 'claudiomiro', 'integration');
+        const outputDir = path.join(baseDir, 'integration-verification');
+        fs.mkdirSync(outputDir, { recursive: true });
+        const outputPath = path.join(outputDir, `result-${Date.now()}.json`);
 
-        const result = await executeClaude(prompt, 'integration-verify', { cwd: backendPath });
+        const prompt = buildVerificationPrompt(backendPath, frontendPath, outputPath);
 
-        return parseVerificationResult(result);
+        await executeClaude(prompt, 'integration-verify', { cwd: backendPath });
+
+        let fileContent;
+        try {
+            fileContent = fs.readFileSync(outputPath, 'utf-8');
+        } catch (readError) {
+            return {
+                success: false,
+                mismatches: [{
+                    type: 'parse_error',
+                    description: `Integration result file not found or unreadable: ${readError.message}`,
+                    backendFile: null,
+                    frontendFile: null,
+                }],
+            };
+        } finally {
+            try {
+                if (fs.existsSync(outputPath)) {
+                    fs.unlinkSync(outputPath);
+                }
+            } catch {
+                // Ignore cleanup errors
+            }
+        }
+
+        return parseVerificationResult(fileContent);
     } catch (error) {
         return {
             success: false,

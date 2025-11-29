@@ -7,6 +7,9 @@ class State {
         this._folder = null;
         this._claudiomiroRoot = null;
         this._taskExecutorFolder = null;
+        this._workspaceRoot = null;
+        this._workspaceClaudiomiroRoot = null;
+        this._workspaceTaskExecutorFolder = null;
         this._executorType = 'claude';
         this._multiRepoEnabled = false;
         this._repositories = new Map();
@@ -15,9 +18,22 @@ class State {
     }
 
     setFolder(folderPath) {
-        this._folder = path.resolve(folderPath);
-        this._claudiomiroRoot = path.join(this._folder, '.claudiomiro');
-        this._taskExecutorFolder = path.join(this._claudiomiroRoot, 'task-executor');
+        const resolvedFolder = path.resolve(folderPath);
+        this._folder = resolvedFolder;
+
+        this._claudiomiroRoot = path.join(resolvedFolder, '.claudiomiro');
+
+        if (!this._workspaceRoot) {
+            this._workspaceRoot = resolvedFolder;
+            this._workspaceClaudiomiroRoot = this._claudiomiroRoot;
+        }
+
+        this._taskExecutorFolder = this._resolveTaskExecutorFolder();
+
+        if (!this._workspaceTaskExecutorFolder) {
+            // First setFolder call defines the workspace-scoped folder
+            this._workspaceTaskExecutorFolder = this._taskExecutorFolder;
+        }
     }
 
     get folder() {
@@ -30,6 +46,18 @@ class State {
 
     get claudiomiroRoot() {
         return this._claudiomiroRoot;
+    }
+
+    get workspaceRoot() {
+        return this._workspaceRoot;
+    }
+
+    get workspaceClaudiomiroRoot() {
+        return this._workspaceClaudiomiroRoot;
+    }
+
+    get workspaceClaudiomiroFolder() {
+        return this._workspaceTaskExecutorFolder;
     }
 
     /**
@@ -49,10 +77,6 @@ class State {
             return;
         }
 
-        if (!fs.existsSync(this._claudiomiroRoot)) {
-            fs.mkdirSync(this._claudiomiroRoot, { recursive: true });
-        }
-
         if (!fs.existsSync(this._taskExecutorFolder)) {
             fs.mkdirSync(this._taskExecutorFolder, { recursive: true });
         }
@@ -68,6 +92,9 @@ class State {
      * @returns {boolean} True if cache folder exists
      */
     hasCacheFolder() {
+        if (!this._taskExecutorFolder) {
+            return false;
+        }
         return fs.existsSync(this.cacheFolder);
     }
 
@@ -106,6 +133,7 @@ class State {
         this._gitMode = gitConfig.mode;
         this._gitRoots = gitConfig.gitRoots;
         this.setFolder(backendPath);
+        this.initializeCache();
     }
 
     /**
@@ -163,6 +191,105 @@ class State {
 
     get executorType() {
         return this._executorType;
+    }
+
+    _resolveTaskExecutorFolder() {
+        const preferredFolder = path.join(this._claudiomiroRoot, 'task-executor');
+
+        if (!fs.existsSync(this._claudiomiroRoot)) {
+            return preferredFolder;
+        }
+
+        if (fs.existsSync(preferredFolder)) {
+            return preferredFolder;
+        }
+
+        const legacyEntries = this._collectLegacyTaskExecutorEntries();
+        if (legacyEntries.length === 0) {
+            return preferredFolder;
+        }
+
+        try {
+            fs.mkdirSync(preferredFolder, { recursive: true });
+            this._migrateLegacyEntries(legacyEntries, preferredFolder);
+
+            const logger = require('../utils/logger');
+            logger.info?.('Migrated legacy .claudiomiro session into .claudiomiro/task-executor');
+            return preferredFolder;
+        } catch (error) {
+            const logger = require('../utils/logger');
+            logger.warning?.(`Failed to migrate legacy .claudiomiro layout: ${error.message}`);
+            return this._claudiomiroRoot;
+        }
+    }
+
+    _collectLegacyTaskExecutorEntries() {
+        try {
+            const entries = fs.readdirSync(this._claudiomiroRoot);
+            const legacyFiles = new Set([
+                'AI_PROMPT.md',
+                'INITIAL_PROMPT.md',
+                'CLARIFICATION_QUESTIONS.json',
+                'CLARIFICATION_ANSWERS.json',
+                'CRITICAL_REVIEW_PASSED.md',
+                'BUGS.md',
+                'PENDING_CLARIFICATION.flag',
+                'done.txt',
+                'newbranch.txt',
+                'log.txt',
+                'multi-repo.json',
+            ]);
+            const legacyDirectories = new Set([
+                'cache',
+                'insights',
+            ]);
+
+            return entries.filter((entry) => {
+                if (entry === 'task-executor') {
+                    return false;
+                }
+                if (/^TASK\d+/.test(entry)) {
+                    return true;
+                }
+                if (legacyFiles.has(entry) || legacyDirectories.has(entry)) {
+                    return true;
+                }
+                return false;
+            });
+        } catch {
+            return [];
+        }
+    }
+
+    _migrateLegacyEntries(entries, destination) {
+        for (const entry of entries) {
+            const from = path.join(this._claudiomiroRoot, entry);
+            const to = path.join(destination, entry);
+
+            if (!fs.existsSync(from) || fs.existsSync(to)) {
+                continue;
+            }
+
+            try {
+                fs.renameSync(from, to);
+                continue;
+            } catch (_) {
+                // Fall through to copy/remove path-based migration
+            }
+
+            try {
+                const stats = fs.statSync(from);
+                if (stats.isDirectory()) {
+                    fs.cpSync(from, to, { recursive: true });
+                    fs.rmSync(from, { recursive: true, force: true });
+                } else {
+                    fs.copyFileSync(from, to);
+                    fs.unlinkSync(from);
+                }
+            } catch {
+                // Best effort migration; leave the legacy file in place if copy/remove fails
+            }
+        }
     }
 }
 

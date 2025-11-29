@@ -29,7 +29,7 @@ claudiomiro --token-optimizer --command="<cmd>" --filter="<instruction>" [--verb
 1. **Execute Command**: Runs the specified shell command
 2. **Capture Output**: Collects both stdout and stderr
 3. **Filter with LLM**: Sends output to local LLM with your filter instruction
-4. **Save Full Output**: Saves complete output to `.claudiomiro/token-optimizer/`
+4. **Save Full Output**: Saves complete output to `.claudiomiro/task-executor/token-optimizer/`
 5. **Return Filtered**: Displays only the filtered/summarized result
 
 ### Fallback Behavior
@@ -84,12 +84,13 @@ The filtered output is displayed directly to the console. With `--verbose`, you'
 
 ### Saved Files
 
-Full command output is saved to `.claudiomiro/token-optimizer/`:
+Full command output is saved to `.claudiomiro/task-executor/token-optimizer/`:
 
 ```
 .claudiomiro/
-└── token-optimizer/
-    └── output-2024-01-15T10-30-45-123Z.txt
+└── task-executor/
+    └── token-optimizer/
+        └── output-2024-01-15T10-30-45-123Z.txt
 ```
 
 ### File Format

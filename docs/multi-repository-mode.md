@@ -78,7 +78,7 @@ Tasks that require coordination between both codebases:
 
 ## Configuration Persistence
 
-Multi-repo settings are saved to `.claudiomiro/multi-repo.json`:
+Multi-repo settings are saved to `.claudiomiro/task-executor/multi-repo.json`:
 
 ```json
 {
@@ -209,25 +209,26 @@ claudiomiro \
 
 ```
 .claudiomiro/
-├── multi-repo.json              # Multi-repo configuration
-├── AI_PROMPT.md                 # Generated prompt
-├── CLARIFICATION_QUESTIONS.json # Questions (if any)
-├── CLARIFICATION_ANSWERS.json   # User answers (if any)
-├── CRITICAL_REVIEW_PASSED.md    # Integration verification passed
-├── BUGS.md                      # Integration issues found
-├── done.txt                     # Completion marker
-├── TASK1/
-│   ├── TASK.md                 # @scope backend
-│   ├── TODO.md
-│   ├── RESEARCH.md
-│   ├── CONTEXT.md
-│   └── CODE_REVIEW.md
-├── TASK2/
-│   ├── TASK.md                 # @scope frontend
-│   └── ...
-└── TASK3/
-    ├── TASK.md                 # @scope integration
-    └── ...
+├── task-executor/
+│   ├── multi-repo.json              # Multi-repo configuration
+│   ├── AI_PROMPT.md                 # Generated prompt
+│   ├── CLARIFICATION_QUESTIONS.json # Questions (if any)
+│   ├── CLARIFICATION_ANSWERS.json   # User answers (if any)
+│   ├── CRITICAL_REVIEW_PASSED.md    # Integration verification passed
+│   ├── BUGS.md                      # Integration issues found
+│   ├── done.txt                     # Completion marker
+│   ├── TASK1/
+│   │   ├── TASK.md                 # @scope backend
+│   │   ├── TODO.md
+│   │   ├── RESEARCH.md
+│   │   ├── CONTEXT.md
+│   │   └── CODE_REVIEW.md
+│   ├── TASK2/
+│   │   ├── TASK.md                 # @scope frontend
+│   │   └── ...
+│   └── TASK3/
+│       ├── TASK.md                 # @scope integration
+│       └── ...
 ```
 
 ## Limitations

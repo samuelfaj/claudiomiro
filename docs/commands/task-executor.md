@@ -149,23 +149,24 @@ After execution, the `.claudiomiro` folder contains:
 
 ```
 .claudiomiro/
-├── AI_PROMPT.md              # Generated AI prompt
-├── CLARIFICATION_QUESTIONS.json  # Questions (if any)
-├── CLARIFICATION_ANSWERS.json    # User answers (if any)
-├── CRITICAL_REVIEW_PASSED.md     # Created when step 7 passes
-├── BUGS.md                   # Critical bugs found (step 7)
-├── done.txt                  # Completion marker
-├── TASK1/
-│   ├── TASK.md              # Task description
-│   ├── TODO.md              # Implementation checklist
-│   ├── RESEARCH.md          # Codebase analysis
-│   ├── CONTEXT.md           # Implementation context
-│   ├── CODE_REVIEW.md       # Review results
-│   └── split.txt            # Split analysis marker
-├── TASK2/
-│   └── ...
-└── TASK3/
-    └── ...
+├── task-executor/
+│   ├── AI_PROMPT.md              # Generated AI prompt
+│   ├── CLARIFICATION_QUESTIONS.json  # Questions (if any)
+│   ├── CLARIFICATION_ANSWERS.json    # User answers (if any)
+│   ├── CRITICAL_REVIEW_PASSED.md     # Created when step 7 passes
+│   ├── BUGS.md                   # Critical bugs found (step 7)
+│   ├── done.txt                  # Completion marker
+│   ├── TASK1/
+│   │   ├── TASK.md              # Task description
+│   │   ├── TODO.md              # Implementation checklist
+│   │   ├── RESEARCH.md          # Codebase analysis
+│   │   ├── CONTEXT.md           # Implementation context
+│   │   ├── CODE_REVIEW.md       # Review results
+│   │   └── split.txt            # Split analysis marker
+│   ├── TASK2/
+│   │   └── ...
+│   └── TASK3/
+│       └── ...
 ```
 
 ## Error Handling
@@ -186,7 +187,7 @@ claudiomiro --backend=./api --frontend=./web --prompt="Add user authentication"
 ### How It Works
 
 1. **Git Detection**: Claudiomiro automatically detects if the paths are in a monorepo or separate repositories
-2. **Configuration Persistence**: Settings are saved to `.claudiomiro/multi-repo.json` for `--continue` support
+2. **Configuration Persistence**: Settings are saved to `.claudiomiro/task-executor/multi-repo.json` for `--continue` support
 3. **Scope Tags**: Each task must include a `@scope` tag in its `TASK.md`:
 
 ```markdown
@@ -216,17 +217,18 @@ In Step 7 (Critical Bug Sweep), Claudiomiro analyzes integration points between 
 
 ```
 .claudiomiro/
-├── multi-repo.json           # Multi-repo configuration
-├── AI_PROMPT.md
-├── TASK1/
-│   ├── TASK.md              # Contains @scope backend
-│   └── ...
-├── TASK2/
-│   ├── TASK.md              # Contains @scope frontend
-│   └── ...
-└── TASK3/
-    ├── TASK.md              # Contains @scope integration
-    └── ...
+├── task-executor/
+│   ├── multi-repo.json           # Multi-repo configuration
+│   ├── AI_PROMPT.md
+│   ├── TASK1/
+│   │   ├── TASK.md              # Contains @scope backend
+│   │   └── ...
+│   ├── TASK2/
+│   │   ├── TASK.md              # Contains @scope frontend
+│   │   └── ...
+│   └── TASK3/
+│       ├── TASK.md              # Contains @scope integration
+│       └── ...
 ```
 
 ## Related Commands
