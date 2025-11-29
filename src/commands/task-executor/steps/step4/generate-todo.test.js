@@ -33,7 +33,7 @@ jest.mock('../../../../shared/services/context-cache', () => ({
 // Import after mocks
 const { generateTodo } = require('./generate-todo');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
-const { buildConsolidatedContextAsync, getContextFilePaths } = require('../../../../shared/services/context-cache');
+const { buildOptimizedContextAsync, getContextFilePaths } = require('../../../../shared/services/context-cache');
 const state = require('../../../../shared/config/state');
 
 describe('generate-todo', () => {
@@ -181,7 +181,7 @@ describe('generate-todo', () => {
             await generateTodo(mockTask);
 
             // Verify context-cache service was called (file filtering now happens there)
-            expect(buildConsolidatedContextAsync).toHaveBeenCalled();
+            expect(buildOptimizedContextAsync).toHaveBeenCalled();
             expect(getContextFilePaths).toHaveBeenCalledWith('/test/.claudiomiro', mockTask, {
                 includeContext: true,
                 includeResearch: true,

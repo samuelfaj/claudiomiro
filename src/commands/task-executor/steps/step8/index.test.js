@@ -402,7 +402,7 @@ describe('step8', () => {
 
             // Assert - should log warning but continue
             expect(logger.warning).toHaveBeenCalledWith(
-                expect.stringContaining('Failed to update backend PR'),
+                expect.stringContaining('Failed to update PR in'),
             );
             expect(mockExit).toHaveBeenCalledWith(0);
         });

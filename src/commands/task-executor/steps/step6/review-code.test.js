@@ -209,7 +209,7 @@ describe('review-code', () => {
 
         test('should call context-cache service with current task excluded', async () => {
             // Arrange
-            const { getContextFilePaths, buildConsolidatedContextAsync } = require('../../../../shared/services/context-cache');
+            const { getContextFilePaths, buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
 
             fs.existsSync.mockReturnValue(false);
 
@@ -217,11 +217,12 @@ describe('review-code', () => {
             await reviewCode(mockTask);
 
             // Assert - context-cache service should be called with current task to be excluded
-            expect(buildConsolidatedContextAsync).toHaveBeenCalledWith(
+            expect(buildOptimizedContextAsync).toHaveBeenCalledWith(
                 '/test/.claudiomiro',
                 mockTask,
                 expect.anything(), // projectFolder (state.folder)
                 expect.any(String), // taskDescription
+                expect.anything(), // options
             );
             expect(getContextFilePaths).toHaveBeenCalledWith(
                 '/test/.claudiomiro',
