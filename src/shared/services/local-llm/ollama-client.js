@@ -262,7 +262,7 @@ Return JSON: {"explicit": ["TASK1"], "implicit": ["TASK2"], "reasoning": "brief 
    * @returns {Promise<{completed: boolean, confidence: number, reason: string}>}
    */
     async checkCompletion(todoContent) {
-        const prompt = `Analyze this TODO.md and determine if the task is FULLY completed.
+        const prompt = `Analyze this TODO.md and determine if the task is FULLY implemented.
 
 Check for:
 1. "Fully implemented: YES" or similar declaration
