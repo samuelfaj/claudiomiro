@@ -37,7 +37,7 @@ describe('generate-context', () => {
             fs.existsSync.mockImplementation((filePath) => {
                 if(filePath.includes('TODO.md')) return true;
                 if(filePath.includes('info.json')) return true;
-                if(filePath.includes('CONTEXT.md') && filePath.includes('templates')) return true;
+                if(filePath.includes('context.md') && filePath.includes('templates')) return true;
                 return false;
             });
 
@@ -48,7 +48,7 @@ describe('generate-context', () => {
             fs.readFileSync.mockImplementation((filePath) => {
                 if(filePath.includes('TODO.md')) return todoContent;
                 if(filePath.includes('info.json')) return infoContent;
-                if(filePath.includes('CONTEXT.md') && filePath.includes('templates')) return templateContent;
+                if(filePath.includes('context.md') && filePath.includes('templates')) return templateContent;
                 return '';
             });
 
@@ -65,7 +65,7 @@ describe('generate-context', () => {
             fs.existsSync.mockImplementation((filePath) => {
                 if(filePath.includes('TODO.md')) return true;
                 if(filePath.includes('info.json')) return false;
-                if(filePath.includes('CONTEXT.md') && filePath.includes('templates')) return true;
+                if(filePath.includes('context.md') && filePath.includes('templates')) return true;
                 return false;
             });
 
@@ -74,7 +74,7 @@ describe('generate-context', () => {
 
             fs.readFileSync.mockImplementation((filePath) => {
                 if(filePath.includes('TODO.md')) return todoContent;
-                if(filePath.includes('CONTEXT.md') && filePath.includes('templates')) return templateContent;
+                if(filePath.includes('context.md') && filePath.includes('templates')) return templateContent;
                 return '';
             });
 
@@ -91,7 +91,7 @@ describe('generate-context', () => {
             fs.existsSync.mockImplementation((filePath) => {
                 if(filePath.includes('TODO.md')) return true;
                 if(filePath.includes('RESEARCH.md')) return true;
-                if(filePath.includes('CONTEXT.md') && filePath.includes('templates')) return true;
+                if(filePath.includes('context.md') && filePath.includes('templates')) return true;
                 return false;
             });
 
@@ -102,7 +102,7 @@ describe('generate-context', () => {
             fs.readFileSync.mockImplementation((filePath) => {
                 if(filePath.includes('TODO.md')) return todoContent;
                 if(filePath.includes('RESEARCH.md')) return researchContent;
-                if(filePath.includes('CONTEXT.md') && filePath.includes('templates')) return templateContent;
+                if(filePath.includes('context.md') && filePath.includes('templates')) return templateContent;
                 return '';
             });
 
@@ -115,7 +115,7 @@ describe('generate-context', () => {
             fs.existsSync.mockImplementation((filePath) => {
                 if(filePath.includes('TODO.md')) return true;
                 if(filePath.includes('info.json')) return false;
-                if(filePath.includes('CONTEXT.md') && filePath.includes('templates')) return true;
+                if(filePath.includes('context.md') && filePath.includes('templates')) return true;
                 return false;
             });
 
@@ -124,7 +124,7 @@ describe('generate-context', () => {
 
             fs.readFileSync.mockImplementation((filePath) => {
                 if(filePath.includes('TODO.md')) return todoContent;
-                if(filePath.includes('CONTEXT.md') && filePath.includes('templates')) return templateContent;
+                if(filePath.includes('context.md') && filePath.includes('templates')) return templateContent;
                 return '';
             });
 

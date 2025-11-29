@@ -360,7 +360,7 @@ describe('reanalyze-failed', () => {
                 return true;
             });
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('TODO.md') && filePath.includes('templates')) {
+                if (filePath.includes('todo.md') && filePath.includes('templates')) {
                     return '# TODO Template\n- [ ] Item 1\n- [ ] Item 2';
                 }
                 if (filePath.includes('reanalyze-prompt.md')) {
@@ -377,7 +377,7 @@ describe('reanalyze-failed', () => {
 
             // Assert
             expect(fs.readFileSync).toHaveBeenCalledWith(
-                expect.stringContaining('templates/TODO.md'),
+                expect.stringContaining('templates/todo.md'),
                 'utf-8',
             );
             const actualCall = executeClaude.mock.calls[0][0];

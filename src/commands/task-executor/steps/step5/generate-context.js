@@ -68,7 +68,7 @@ const generateContextFile = async (task) => {
     }
 
     // Load CONTEXT.md template
-    let contextTemplate = fs.readFileSync(path.join(__dirname, '../../templates/CONTEXT.md'), 'utf-8');
+    let contextTemplate = fs.readFileSync(path.join(__dirname, '../../templates/context.md'), 'utf-8');
 
     // Prepare data for template
     const attempts = fs.existsSync(folder('info.json'))

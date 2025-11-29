@@ -12,7 +12,7 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
  */
 const reanalyzeFailed = async (task) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
-    const TODOtemplate = fs.readFileSync(path.join(__dirname, '../../templates', 'TODO.md'), 'utf-8');
+    const TODOtemplate = fs.readFileSync(path.join(__dirname, '../../templates', 'todo.md'), 'utf-8');
 
     // When we have been into a block state, too much failed code reviews
     if (fs.existsSync(folder('TODO.old.md'))) {

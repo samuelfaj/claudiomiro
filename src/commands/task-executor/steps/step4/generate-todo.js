@@ -48,7 +48,7 @@ const generateTodo = async (task) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
 
     // Keep template reference - Claude needs to see the structure
-    const TODOtemplate = fs.readFileSync(path.join(__dirname, '../../templates', 'TODO.md'), 'utf-8');
+    const TODOtemplate = fs.readFileSync(path.join(__dirname, '../../templates', 'todo.md'), 'utf-8');
 
     // Read task content and extract scope for multi-repo support
     const taskMdPath = folder('TASK.md');

@@ -53,7 +53,7 @@ describe('generate-todo', () => {
         test('should load TODO.md template and call executeClaude with processed prompt', async () => {
             // Mock template files
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) {
+                if (filePath.includes('templates/todo.md')) {
                     return 'TODO template content';
                 }
                 if (filePath.includes('prompt-generate-todo.md')) {
@@ -72,7 +72,7 @@ describe('generate-todo', () => {
             await generateTodo(mockTask);
 
             expect(fs.readFileSync).toHaveBeenCalledWith(
-                expect.stringContaining('templates/TODO.md'),
+                expect.stringContaining('templates/todo.md'),
                 'utf-8',
             );
             expect(fs.readFileSync).toHaveBeenCalledWith(
@@ -88,7 +88,7 @@ describe('generate-todo', () => {
 
         test('should include AI_PROMPT.md in reference files section', async () => {
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
                 return '';
             });
@@ -116,7 +116,7 @@ describe('generate-todo', () => {
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
                 return '';
             });
@@ -149,7 +149,7 @@ describe('generate-todo', () => {
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
                 return '';
             });
@@ -174,7 +174,7 @@ describe('generate-todo', () => {
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
                 return '';
             });
@@ -206,7 +206,7 @@ describe('generate-todo', () => {
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
                 if (filePath.includes('TASK.md')) return 'Task description content';
                 return '';
@@ -229,7 +229,7 @@ describe('generate-todo', () => {
             const promptTemplate = 'Task: {{taskMdPath}} Prompt: {{promptMdPath}} TODO: {{todoMdPath}} AI: {{aiPromptPath}} Template: {{todoTemplate}} Context: {{contextSection}}';
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return todoTemplate;
+                if (filePath.includes('templates/todo.md')) return todoTemplate;
                 if (filePath.includes('prompt-generate-todo.md')) return promptTemplate;
                 return '';
             });
@@ -255,7 +255,7 @@ describe('generate-todo', () => {
             getContextFilePaths.mockReturnValue([]);
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
                 return '';
             });
@@ -284,7 +284,7 @@ describe('generate-todo', () => {
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
                 return '';
             });
@@ -311,7 +311,7 @@ describe('generate-todo', () => {
 
         test('should handle error when TODO.md template is missing', async () => {
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) {
+                if (filePath.includes('templates/todo.md')) {
                     throw new Error('ENOENT: no such file or directory');
                 }
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
@@ -326,7 +326,7 @@ describe('generate-todo', () => {
 
         test('should handle error when prompt template is missing', async () => {
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) {
                     throw new Error('ENOENT: no such file or directory');
                 }
@@ -343,7 +343,7 @@ describe('generate-todo', () => {
             const customTask = 'TASK2.1';
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt template';
                 return '';
             });
@@ -368,7 +368,7 @@ describe('generate-todo', () => {
             ]);
 
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                if (filePath.includes('templates/todo.md')) return 'TODO template';
                 if (filePath.includes('prompt-generate-todo.md')) return 'Prompt {{contextSection}}';
                 return '';
             });
@@ -393,7 +393,7 @@ describe('generate-todo', () => {
                 state.isMultiRepo.mockReturnValue(true);
 
                 fs.readFileSync.mockImplementation((filePath) => {
-                    if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                    if (filePath.includes('templates/todo.md')) return 'TODO template';
                     if (filePath.includes('prompt-generate-todo.md')) return 'Prompt template';
                     if (filePath.includes('TASK.md')) return '# Task without scope\nSome task content';
                     return '';
@@ -409,7 +409,7 @@ describe('generate-todo', () => {
                 state.getRepository.mockReturnValue('/test/backend');
 
                 fs.readFileSync.mockImplementation((filePath) => {
-                    if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                    if (filePath.includes('templates/todo.md')) return 'TODO template';
                     if (filePath.includes('prompt-generate-todo.md')) return 'Prompt template';
                     if (filePath.includes('TASK.md')) return '@scope backend\n# Backend task';
                     return '';
@@ -433,7 +433,7 @@ describe('generate-todo', () => {
                 state.getRepository.mockReturnValue('/test/frontend');
 
                 fs.readFileSync.mockImplementation((filePath) => {
-                    if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                    if (filePath.includes('templates/todo.md')) return 'TODO template';
                     if (filePath.includes('prompt-generate-todo.md')) return 'Prompt template';
                     if (filePath.includes('TASK.md')) return '@scope frontend\n# Frontend task';
                     return '';
