@@ -61,7 +61,8 @@ const step1 = async (sameBranch = false) => {
     logger.newline();
     logger.startSpinner('Generating AI_PROMPT.md with clarifications...');
 
-    const branchStep = sameBranch
+    // In multi-repo mode, branches are already created programmatically in step0
+    const branchStep = (sameBranch || state.isMultiRepo())
         ? ''
         : '## FIRST STEP: \n\nCreate a git branch for this task\n\n';
 

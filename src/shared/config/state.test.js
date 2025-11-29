@@ -3,6 +3,8 @@ const path = require('path');
 describe('State', () => {
     let state;
     let mockFs;
+    let mockFindGitRoot;
+    let mockLogger;
 
     beforeEach(() => {
     // Reset all modules and mocks
@@ -10,14 +12,28 @@ describe('State', () => {
 
         // Create mock fs
         mockFs = {
-            existsSync: jest.fn(),
+            existsSync: jest.fn().mockReturnValue(true), // Default to paths existing
             mkdirSync: jest.fn(),
         };
 
-        // Mock fs module
-        jest.doMock('fs', () => mockFs);
+        // Create mock findGitRoot
+        mockFindGitRoot = jest.fn().mockReturnValue('/test/git-root');
 
-        // Now require state with mocked fs
+        // Create mock logger
+        mockLogger = {
+            warning: jest.fn(),
+            info: jest.fn(),
+            error: jest.fn(),
+        };
+
+        // Mock modules
+        jest.doMock('fs', () => mockFs);
+        jest.doMock('../services/git-detector', () => ({
+            findGitRoot: mockFindGitRoot,
+        }));
+        jest.doMock('../utils/logger', () => mockLogger);
+
+        // Now require state with mocked dependencies
         state = require('./state');
     });
 
@@ -181,6 +197,42 @@ describe('State', () => {
                 expect(state.getGitMode()).toBe('separate');
                 expect(state.getGitRoots()).toEqual(['/test/backend', '/test/frontend']);
             });
+
+            test('should throw error if backend path does not exist', () => {
+                mockFs.existsSync.mockImplementation((p) => {
+                    return !p.includes('backend');
+                });
+
+                expect(() => state.setMultiRepo(backendPath, frontendPath, gitConfig))
+                    .toThrow('Backend path does not exist');
+            });
+
+            test('should throw error if frontend path does not exist', () => {
+                mockFs.existsSync.mockImplementation((p) => {
+                    return !p.includes('frontend');
+                });
+
+                expect(() => state.setMultiRepo(backendPath, frontendPath, gitConfig))
+                    .toThrow('Frontend path does not exist');
+            });
+
+            test('should throw error if backend is not a git repository', () => {
+                mockFindGitRoot.mockImplementation((p) => {
+                    return p.includes('backend') ? null : '/test/git-root';
+                });
+
+                expect(() => state.setMultiRepo(backendPath, frontendPath, gitConfig))
+                    .toThrow('Backend path is not a git repository');
+            });
+
+            test('should throw error if frontend is not a git repository', () => {
+                mockFindGitRoot.mockImplementation((p) => {
+                    return p.includes('frontend') ? null : '/test/git-root';
+                });
+
+                expect(() => state.setMultiRepo(backendPath, frontendPath, gitConfig))
+                    .toThrow('Frontend path is not a git repository');
+            });
         });
 
         describe('getRepository', () => {
@@ -202,6 +254,25 @@ describe('State', () => {
             test('should return primary folder for unknown scope', () => {
                 state.setMultiRepo(backendPath, frontendPath, gitConfig);
                 expect(state.getRepository('unknown')).toBe(path.resolve(backendPath));
+            });
+
+            test('should log warning for unknown scope in multi-repo mode', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+                state.getRepository('typo-scope');
+
+                expect(mockLogger.warning).toHaveBeenCalledWith(
+                    expect.stringContaining('Unknown scope "typo-scope"'),
+                );
+            });
+
+            test('should not log warning for valid scopes', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+
+                state.getRepository('backend');
+                state.getRepository('frontend');
+                state.getRepository('integration');
+
+                expect(mockLogger.warning).not.toHaveBeenCalled();
             });
 
             test('should return _folder in single-repo mode', () => {

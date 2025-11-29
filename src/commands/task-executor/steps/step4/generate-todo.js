@@ -8,6 +8,7 @@ const {
     buildOptimizedContextAsync,
     getContextFilePaths,
 } = require('../../../../shared/services/context-cache');
+const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 
 /**
  * Generates a comprehensive TODO.md file for a task
@@ -25,11 +26,19 @@ const generateTodo = async (task) => {
     // Keep template reference - Claude needs to see the structure
     const TODOtemplate = fs.readFileSync(path.join(__dirname, '../../templates', 'TODO.md'), 'utf-8');
 
-    // Read task description for code-index symbol search
+    // Read task content and extract scope for multi-repo support
     const taskMdPath = folder('TASK.md');
-    const taskDescription = fs.existsSync(taskMdPath)
-        ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
-        : task;
+    const taskMdContent = fs.existsSync(taskMdPath)
+        ? fs.readFileSync(taskMdPath, 'utf-8')
+        : '';
+    const taskDescription = taskMdContent.substring(0, 500) || task;
+
+    // Determine working directory based on scope (multi-repo support)
+    const scope = parseTaskScope(taskMdContent);
+    validateScope(scope, state.isMultiRepo()); // Throws if scope missing in multi-repo mode
+    const projectFolder = state.isMultiRepo() && scope
+        ? state.getRepository(scope)
+        : state.folder;
 
     // Try optimized context with Local LLM (40-60% token reduction)
     // Falls back to consolidated context if LLM not available
@@ -40,7 +49,7 @@ const generateTodo = async (task) => {
         const optimizedResult = await buildOptimizedContextAsync(
             state.claudiomiroFolder,
             task,
-            state.folder,
+            projectFolder, // Use scope-aware folder for multi-repo support
             taskDescription,
             { maxFiles: 10, minRelevance: 0.3, summarize: true },
         );
@@ -56,7 +65,7 @@ const generateTodo = async (task) => {
         consolidatedContext = await buildConsolidatedContextAsync(
             state.claudiomiroFolder,
             task,
-            state.folder,
+            projectFolder, // Use scope-aware folder for multi-repo support
             taskDescription,
         );
     }
@@ -90,7 +99,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         .replace(/\{\{aiPromptPath\}\}/g, path.join(state.claudiomiroFolder, 'AI_PROMPT.md'))
         .replace(/\{\{todoTemplate\}\}/g, TODOtemplate);
 
-    return executeClaude(promptTemplate, task);
+    return executeClaude(promptTemplate, task, projectFolder !== state.folder ? { cwd: projectFolder } : undefined);
 };
 
 module.exports = { generateTodo };

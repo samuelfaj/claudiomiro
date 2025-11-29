@@ -51,6 +51,52 @@ Do not include any explanation or text outside the JSON object.`;
 };
 
 /**
+ * Extracts the first balanced JSON object from a string
+ * This handles cases where Claude wraps JSON in explanation text
+ * @param {string} text - Text containing JSON
+ * @returns {string|null} The extracted JSON string or null
+ */
+const extractBalancedJson = (text) => {
+    const startIndex = text.indexOf('{');
+    if (startIndex === -1) return null;
+
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+
+    for (let i = startIndex; i < text.length; i++) {
+        const char = text[i];
+
+        if (escape) {
+            escape = false;
+            continue;
+        }
+
+        if (char === '\\' && inString) {
+            escape = true;
+            continue;
+        }
+
+        if (char === '"' && !escape) {
+            inString = !inString;
+            continue;
+        }
+
+        if (!inString) {
+            if (char === '{') depth++;
+            if (char === '}') {
+                depth--;
+                if (depth === 0) {
+                    return text.substring(startIndex, i + 1);
+                }
+            }
+        }
+    }
+
+    return null;
+};
+
+/**
  * Parses Claude's response to extract the verification result
  * @param {string} claudeOutput - Raw output from Claude
  * @returns {Object} Parsed verification result
@@ -70,9 +116,9 @@ const parseVerificationResult = (claudeOutput) => {
     }
 
     try {
-        // Extract JSON from the response (Claude may wrap it in explanation text)
-        const jsonMatch = claudeOutput.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
+        // Extract the first balanced JSON object from the response
+        const jsonString = extractBalancedJson(claudeOutput);
+        if (!jsonString) {
             return {
                 success: false,
                 mismatches: [{
@@ -84,7 +130,7 @@ const parseVerificationResult = (claudeOutput) => {
             };
         }
 
-        const parsed = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonString);
 
         // Validate required fields
         if (typeof parsed.success !== 'boolean' || !Array.isArray(parsed.mismatches)) {
@@ -148,4 +194,5 @@ module.exports = {
     verifyIntegration,
     buildVerificationPrompt,
     parseVerificationResult,
+    extractBalancedJson,
 };

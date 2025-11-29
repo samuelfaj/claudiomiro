@@ -8,6 +8,7 @@ const {
     buildOptimizedContextAsync,
     getContextFilePaths,
 } = require('../../../../shared/services/context-cache');
+const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 
 /**
  * Performs systematic code review of implemented task
@@ -29,11 +30,19 @@ const reviewCode = async (task) => {
         fs.rmSync(folder('GITHUB_PR.md'));
     }
 
-    // Read task description for code-index symbol search
+    // Read task content and extract scope for multi-repo support
     const taskMdPath = folder('TASK.md');
-    const taskDescription = fs.existsSync(taskMdPath)
-        ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
-        : task;
+    const taskMdContent = fs.existsSync(taskMdPath)
+        ? fs.readFileSync(taskMdPath, 'utf-8')
+        : '';
+    const taskDescription = taskMdContent.substring(0, 500) || task;
+
+    // Determine working directory based on scope (multi-repo support)
+    const scope = parseTaskScope(taskMdContent);
+    validateScope(scope, state.isMultiRepo()); // Throws if scope missing in multi-repo mode
+    const projectFolder = state.isMultiRepo() && scope
+        ? state.getRepository(scope)
+        : state.folder;
 
     // Try optimized context with Local LLM (40-60% token reduction)
     let consolidatedContext;
@@ -41,7 +50,7 @@ const reviewCode = async (task) => {
         const optimizedResult = await buildOptimizedContextAsync(
             state.claudiomiroFolder,
             task,
-            state.folder,
+            projectFolder, // Use scope-aware folder for multi-repo support
             taskDescription,
             { maxFiles: 8, minRelevance: 0.4, summarize: true },
         );
@@ -55,7 +64,7 @@ const reviewCode = async (task) => {
         consolidatedContext = await buildConsolidatedContextAsync(
             state.claudiomiroFolder,
             task,
-            state.folder,
+            projectFolder, // Use scope-aware folder for multi-repo support
             taskDescription,
         );
     }
@@ -116,7 +125,11 @@ These provide:
         .replace(/\{\{researchSection\}\}/g, researchSection);
 
     const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
-    const execution = await executeClaude(promptTemplate + '\n\n' + shellCommandRule, task);
+    const execution = await executeClaude(
+        promptTemplate + '\n\n' + shellCommandRule,
+        task,
+        projectFolder !== state.folder ? { cwd: projectFolder } : undefined,
+    );
 
     return execution;
 };

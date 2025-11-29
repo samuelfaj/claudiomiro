@@ -63,7 +63,7 @@ const step5 = async (task) => {
     }
 
     // PHASE 1: Research and context gathering (only on first run or after multiple failures)
-    await generateResearchFile(task);
+    await generateResearchFile(task, { cwd });
 
     if(fs.existsSync(folder('CODE_REVIEW.md'))){
         fs.rmSync(folder('CODE_REVIEW.md'));
@@ -84,7 +84,7 @@ const step5 = async (task) => {
     const consolidatedContext = await buildConsolidatedContextAsync(
         state.claudiomiroFolder,
         task,
-        state.folder,
+        cwd, // Use scope-aware project folder for multi-repo support
         taskDescription,
     );
 

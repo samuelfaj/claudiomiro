@@ -6,6 +6,8 @@ jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro',
     folder: '/test/project',
+    isMultiRepo: jest.fn().mockReturnValue(false),
+    getRepository: jest.fn().mockReturnValue('/test/project'),
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     startSpinner: jest.fn(),
@@ -19,6 +21,12 @@ jest.mock('../../../../shared/utils/logger', () => ({
 // Mock context-cache service (token optimization)
 jest.mock('../../../../shared/services/context-cache', () => ({
     buildConsolidatedContextAsync: jest.fn().mockResolvedValue('## Environment Summary\nMocked context'),
+    buildOptimizedContextAsync: jest.fn().mockResolvedValue({
+        context: '## Environment Summary\nMocked context',
+        tokenSavings: 0,
+        method: 'consolidated',
+        filesIncluded: 0,
+    }),
     getContextFilePaths: jest.fn().mockReturnValue([]),
 }));
 
@@ -26,6 +34,7 @@ jest.mock('../../../../shared/services/context-cache', () => ({
 const { generateTodo } = require('./generate-todo');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { buildConsolidatedContextAsync, getContextFilePaths } = require('../../../../shared/services/context-cache');
+const state = require('../../../../shared/config/state');
 
 describe('generate-todo', () => {
     const mockTask = 'TASK1';
@@ -67,6 +76,7 @@ describe('generate-todo', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('Generate TODO for'),
                 mockTask,
+                undefined, // cwd is undefined when projectFolder equals state.folder
             );
         });
 
@@ -315,7 +325,7 @@ describe('generate-todo', () => {
 
             await generateTodo(customTask);
 
-            expect(executeClaude).toHaveBeenCalledWith(expect.any(String), customTask);
+            expect(executeClaude).toHaveBeenCalledWith(expect.any(String), customTask, undefined);
         });
 
         test('should include custom files returned by context-cache (excluding standard files)', async () => {
@@ -345,6 +355,72 @@ describe('generate-todo', () => {
             expect(executeCall).toContain('/test/.claudiomiro/TASK2/ARCHITECTURE.md');
             expect(executeCall).toContain('/test/.claudiomiro/TASK2/API_DESIGN.md');
             // Standard files like PROMPT.md are excluded by context-cache, not by generate-todo
+        });
+
+        describe('multi-repo mode', () => {
+            test('should throw error when scope is missing in multi-repo mode', async () => {
+                // Enable multi-repo mode
+                state.isMultiRepo.mockReturnValue(true);
+
+                fs.readFileSync.mockImplementation((filePath) => {
+                    if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                    if (filePath.includes('prompt-generate-todo.md')) return 'Prompt template';
+                    if (filePath.includes('TASK.md')) return '# Task without scope\nSome task content';
+                    return '';
+                });
+
+                fs.existsSync.mockReturnValue(true);
+
+                await expect(generateTodo(mockTask)).rejects.toThrow('@scope tag is required');
+            });
+
+            test('should use correct repository path when scope is backend', async () => {
+                state.isMultiRepo.mockReturnValue(true);
+                state.getRepository.mockReturnValue('/test/backend');
+
+                fs.readFileSync.mockImplementation((filePath) => {
+                    if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                    if (filePath.includes('prompt-generate-todo.md')) return 'Prompt template';
+                    if (filePath.includes('TASK.md')) return '@scope backend\n# Backend task';
+                    return '';
+                });
+
+                fs.existsSync.mockReturnValue(true);
+                executeClaude.mockResolvedValue({ success: true });
+
+                await generateTodo(mockTask);
+
+                expect(state.getRepository).toHaveBeenCalledWith('backend');
+                expect(executeClaude).toHaveBeenCalledWith(
+                    expect.any(String),
+                    mockTask,
+                    { cwd: '/test/backend' },
+                );
+            });
+
+            test('should use correct repository path when scope is frontend', async () => {
+                state.isMultiRepo.mockReturnValue(true);
+                state.getRepository.mockReturnValue('/test/frontend');
+
+                fs.readFileSync.mockImplementation((filePath) => {
+                    if (filePath.includes('templates/TODO.md')) return 'TODO template';
+                    if (filePath.includes('prompt-generate-todo.md')) return 'Prompt template';
+                    if (filePath.includes('TASK.md')) return '@scope frontend\n# Frontend task';
+                    return '';
+                });
+
+                fs.existsSync.mockReturnValue(true);
+                executeClaude.mockResolvedValue({ success: true });
+
+                await generateTodo(mockTask);
+
+                expect(state.getRepository).toHaveBeenCalledWith('frontend');
+                expect(executeClaude).toHaveBeenCalledWith(
+                    expect.any(String),
+                    mockTask,
+                    { cwd: '/test/frontend' },
+                );
+            });
         });
     });
 });

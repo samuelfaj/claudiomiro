@@ -1,5 +1,6 @@
 const path = require('path');
 const fs = require('fs');
+const { findGitRoot } = require('../services/git-detector');
 
 class State {
     constructor() {
@@ -63,11 +64,31 @@ class State {
      * @param {Object} gitConfig - Git configuration from git-detector
      * @param {string} gitConfig.mode - 'monorepo' or 'separate'
      * @param {string[]} gitConfig.gitRoots - Array of git root paths
+     * @throws {Error} If paths don't exist or aren't git repositories
      */
     setMultiRepo(backendPath, frontendPath, gitConfig) {
+        const resolvedBackend = path.resolve(backendPath);
+        const resolvedFrontend = path.resolve(frontendPath);
+
+        // Validate paths exist
+        if (!fs.existsSync(resolvedBackend)) {
+            throw new Error(`Backend path does not exist: ${resolvedBackend}`);
+        }
+        if (!fs.existsSync(resolvedFrontend)) {
+            throw new Error(`Frontend path does not exist: ${resolvedFrontend}`);
+        }
+
+        // Validate are git repositories
+        if (!findGitRoot(resolvedBackend)) {
+            throw new Error(`Backend path is not a git repository: ${resolvedBackend}`);
+        }
+        if (!findGitRoot(resolvedFrontend)) {
+            throw new Error(`Frontend path is not a git repository: ${resolvedFrontend}`);
+        }
+
         this._multiRepoEnabled = true;
-        this._repositories.set('backend', path.resolve(backendPath));
-        this._repositories.set('frontend', path.resolve(frontendPath));
+        this._repositories.set('backend', resolvedBackend);
+        this._repositories.set('frontend', resolvedFrontend);
         this._gitMode = gitConfig.mode;
         this._gitRoots = gitConfig.gitRoots;
         this.setFolder(backendPath);
@@ -85,7 +106,13 @@ class State {
         if (scope === 'integration') {
             return this._folder;
         }
-        return this._repositories.get(scope) || this._folder;
+        const repo = this._repositories.get(scope);
+        if (!repo && scope) {
+            // Warn about unknown scope to help debug typos like "@scope backnd"
+            const logger = require('../utils/logger');
+            logger.warning(`Unknown scope "${scope}", using base folder. Valid scopes: backend, frontend, integration`);
+        }
+        return repo || this._folder;
     }
 
     /**

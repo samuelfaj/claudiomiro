@@ -72,6 +72,7 @@ describe('generate-research', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('RESEARCH PHASE: Deep Context Analysis'),
                 mockTask,
+                undefined, // cwd is undefined when not in multi-repo mode
             );
         });
 

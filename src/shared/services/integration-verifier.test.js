@@ -3,6 +3,7 @@ const {
     verifyIntegration,
     buildVerificationPrompt,
     parseVerificationResult,
+    extractBalancedJson,
 } = require('./integration-verifier');
 
 // Mock modules
@@ -11,6 +12,56 @@ jest.mock('../executors/claude-executor');
 describe('integration-verifier', () => {
     beforeEach(() => {
         jest.clearAllMocks();
+    });
+
+    describe('extractBalancedJson', () => {
+        test('should extract simple JSON object', () => {
+            const input = '{"success": true, "mismatches": []}';
+            expect(extractBalancedJson(input)).toBe(input);
+        });
+
+        test('should extract JSON from wrapped text', () => {
+            const input = 'Here is my analysis:\n{"success": true}\nEnd of analysis';
+            expect(extractBalancedJson(input)).toBe('{"success": true}');
+        });
+
+        test('should handle nested objects', () => {
+            const input = '{"outer": {"inner": {"deep": true}}}';
+            expect(extractBalancedJson(input)).toBe(input);
+        });
+
+        test('should handle arrays with objects', () => {
+            const input = '{"mismatches": [{"type": "error"}, {"type": "warning"}]}';
+            expect(extractBalancedJson(input)).toBe(input);
+        });
+
+        test('should handle strings with braces inside', () => {
+            const input = '{"description": "Use { and } for objects"}';
+            expect(extractBalancedJson(input)).toBe(input);
+        });
+
+        test('should handle escaped quotes in strings', () => {
+            const input = '{"text": "He said \\"hello\\""}';
+            expect(extractBalancedJson(input)).toBe(input);
+        });
+
+        test('should return null for no JSON', () => {
+            expect(extractBalancedJson('No JSON here')).toBeNull();
+        });
+
+        test('should return null for empty string', () => {
+            expect(extractBalancedJson('')).toBeNull();
+        });
+
+        test('should extract first JSON when multiple objects present', () => {
+            const input = 'First: {"a": 1} Second: {"b": 2}';
+            expect(extractBalancedJson(input)).toBe('{"a": 1}');
+        });
+
+        test('should handle unbalanced braces (return null)', () => {
+            const input = '{"unclosed": true';
+            expect(extractBalancedJson(input)).toBeNull();
+        });
     });
 
     describe('buildVerificationPrompt', () => {

@@ -76,7 +76,7 @@ describe('step5', () => {
             const result = await step5(mockTask);
 
             // Assert
-            expect(generateResearchFile).toHaveBeenCalledWith(mockTask);
+            expect(generateResearchFile).toHaveBeenCalledWith(mockTask, { cwd: '/test/project' });
             expect(executeClaude).toHaveBeenCalled();
             expect(generateContextFile).toHaveBeenCalledWith(mockTask);
 
