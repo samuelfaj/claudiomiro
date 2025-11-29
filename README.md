@@ -73,6 +73,23 @@ claudiomiro --glm         # GLM
 - [DeepSeek Setup](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
 - [GLM Setup](./docs/HOW-TO-RUN-WITH-GLM.md)
 
+### Multi-Repository Mode
+
+Work across backend and frontend repositories simultaneously:
+
+```bash
+# Monorepo or separate repos - Claudiomiro auto-detects
+claudiomiro --backend=./api --frontend=./web --prompt="Add user authentication with JWT"
+```
+
+Features:
+- Automatic git configuration detection (monorepo vs separate repos)
+- Scope-aware task decomposition (`@scope backend|frontend|integration`)
+- Integration verification between codebases
+- Coordinated commits across repositories
+
+See [Multi-Repository Mode Guide](./docs/multi-repository-mode.md) for details.
+
 ### Local LLM Co-Pilot (Optional)
 
 Reduce token consumption and latency by running a local LLM alongside the main AI:

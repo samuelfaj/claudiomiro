@@ -9,6 +9,8 @@ const COMMANDS = [
             { flag: '--executor=<name>', description: 'AI executor to use (claude, codex, gemini, deepseek, glm)' },
             { flag: '--model=<name>', description: 'Specific model to use with the executor' },
             { flag: '--skip-research', description: 'Skip the research phase' },
+            { flag: '--backend=<path>', description: 'Backend repository path (enables multi-repo mode)' },
+            { flag: '--frontend=<path>', description: 'Frontend repository path (enables multi-repo mode)' },
         ],
     },
     {
@@ -145,6 +147,9 @@ const printExamples = () => {
     console.log();
     console.log(chalk.gray('    # Filter command output with Ollama'));
     console.log(chalk.white('    $ claudiomiro --token-optimizer --command="npm test" --filter="return only errors"'));
+    console.log();
+    console.log(chalk.gray('    # Multi-repository mode (backend + frontend)'));
+    console.log(chalk.white('    $ claudiomiro --backend=./api --frontend=./web --prompt="Add user authentication"'));
     console.log();
 };
 
