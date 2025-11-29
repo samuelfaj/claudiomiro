@@ -36,10 +36,12 @@ const runClaude = (text, taskName = null, options = {}) => {
         // Use sh to execute command with cat substitution
         const command = `claude --dangerously-skip-permissions -p "$(cat '${tmpFile}')" --output-format stream-json --verbose`;
 
-        logger.stopSpinner();
-        logger.command('claude --dangerously-skip-permissions ...');
-        logger.separator();
-        logger.newline();
+        if (!suppressStreamingLogs) {
+            logger.stopSpinner();
+            logger.command('claude --dangerously-skip-permissions ...');
+            logger.separator();
+            logger.newline();
+        }
 
         const claude = spawn('sh', ['-c', command], {
             cwd: options.cwd || state.folder,
@@ -101,7 +103,7 @@ const runClaude = (text, taskName = null, options = {}) => {
 
             const log = (text) => {
                 // Sobrescreve o bloco anterior se existir
-                if (!suppressStreamingLogs && overwriteBlockLines > 0){
+                if (!suppressStreamingLogs && overwriteBlockLines > 0) {
                     overwriteBlock(overwriteBlockLines);
                 }
 
@@ -119,14 +121,14 @@ const runClaude = (text, taskName = null, options = {}) => {
 
                 // Processa e imprime o texto linha por linha
                 const lines = text.split('\n');
-                for(const line of lines){
-                    if(line.length > max){
+                for (const line of lines) {
+                    if (line.length > max) {
                         // Quebra linha longa em múltiplas linhas
-                        for(let i = 0; i < line.length; i += max){
+                        for (let i = 0; i < line.length; i += max) {
                             console.log(line.substring(i, i + max));
                             lineCount++;
                         }
-                    }else{
+                    } else {
                         console.log(line);
                         lineCount++;
                     }
@@ -138,7 +140,7 @@ const runClaude = (text, taskName = null, options = {}) => {
 
             for (const line of lines) {
                 const text = processClaudeMessage(line);
-                if(text){
+                if (text) {
                     log(text);
                     // Update state manager with Claude message if taskName provided
                     if (stateManager && taskName) {
@@ -220,7 +222,7 @@ const runClaude = (text, taskName = null, options = {}) => {
 
 const executeClaude = (text, taskName = null, options = {}) => {
     // Validate input before dispatching to any executor
-    if(!text){
+    if (!text) {
         return Promise.reject(new Error('no prompt'));
     }
 

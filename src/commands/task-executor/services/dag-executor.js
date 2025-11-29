@@ -203,14 +203,18 @@ class DAGExecutor {
                     step: null,
                     message: null,
                 });
-                logger.info(`📥 Added new task: ${_taskName} (deps: ${taskData.deps.join(', ') || 'none'}, scope: ${this.tasks[_taskName].scope})`);
+                if (!this.stateManager.isUIRendererActive()) {
+                    logger.info(`📥 Added new task: ${_taskName} (deps: ${taskData.deps.join(', ') || 'none'}, scope: ${this.tasks[_taskName].scope})`);
+                }
                 hasChanges = true;
             } else {
                 // Existing task - update deps but preserve status if running/completed
                 const oldDeps = this.tasks[_taskName].deps.join(',');
                 const newDeps = taskData.deps.join(',');
                 if (oldDeps !== newDeps) {
-                    logger.info(`🔄 Updated deps for ${_taskName}: [${oldDeps}] → [${newDeps}]`);
+                    if (!this.stateManager.isUIRendererActive()) {
+                        logger.info(`🔄 Updated deps for ${_taskName}: [${oldDeps}] → [${newDeps}]`);
+                    }
                     hasChanges = true;
                 }
                 this.tasks[_taskName].deps = taskData.deps;
@@ -218,7 +222,9 @@ class DAGExecutor {
                 if (this.tasks[_taskName].status === 'pending' && taskData.status === 'completed') {
                     this.tasks[_taskName].status = 'completed';
                     this.stateManager.updateTaskStatus(_taskName, 'completed');
-                    logger.info(`✅ ${_taskName} marked as completed from graph`);
+                    if (!this.stateManager.isUIRendererActive()) {
+                        logger.info(`✅ ${_taskName} marked as completed from graph`);
+                    }
                     hasChanges = true;
                 }
             }
@@ -227,7 +233,9 @@ class DAGExecutor {
         // Remove tasks that no longer exist in the graph (e.g., parent task that was split)
         for (const _taskName of Object.keys(this.tasks)) {
             if (!newGraph[_taskName] && this.tasks[_taskName].status === 'pending') {
-                logger.info(`🗑️ Removed task no longer in graph: ${_taskName}`);
+                if (!this.stateManager.isUIRendererActive()) {
+                    logger.info(`🗑️ Removed task no longer in graph: ${_taskName}`);
+                }
                 delete this.tasks[_taskName];
                 this.stateManager.taskStates.delete(_taskName);
                 hasChanges = true;
@@ -441,7 +449,7 @@ class DAGExecutor {
                         const missingDeps = t.deps.filter(d => !this.tasks[d] || this.tasks[d].status !== 'completed');
                         return `${name}(waiting: ${missingDeps.join(',') || 'ready!'})`;
                     });
-                if (pendingTasksDebug.length > 0 && this.running.size === 0) {
+                if (pendingTasksDebug.length > 0 && this.running.size === 0 && !this.stateManager.isUIRendererActive()) {
                     logger.info(`⏳ Pending tasks: ${pendingTasksDebug.join(', ')}`);
                     this._lastPendingTasksLog = now;
                 }
