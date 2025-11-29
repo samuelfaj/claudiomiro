@@ -76,7 +76,8 @@ Review the content above and adapt as needed for this specific task.
             .replace(/\{\{aiPromptPath\}\}/g, path.join(state.claudiomiroFolder, 'AI_PROMPT.md'))
             .replace(/\{\{task\}\}/g, task);
 
-        await executeClaude(prompt, task);
+        const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
+        await executeClaude(prompt + '\n\n' + shellCommandRule, task);
 
         logger.stopSpinner();
 

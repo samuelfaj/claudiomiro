@@ -166,7 +166,8 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
             .replace(/\{\{todoPath\}\}/g, folder('TODO.md'))
             .replace(/\{\{researchSection\}\}/g, researchSection);
 
-        const result = await executeClaude(promptTemplate, task, { cwd });
+        const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
+        const result = await executeClaude(promptTemplate + '\n\n' + shellCommandRule, task, { cwd });
 
         // Generate CONTEXT.md after successful execution
         await generateContextFile(task);
