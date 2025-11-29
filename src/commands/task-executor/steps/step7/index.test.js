@@ -9,6 +9,8 @@ jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro',
     folder: '/test',
     branch: 'test-branch',
+    isMultiRepo: jest.fn(() => false),
+    getRepository: jest.fn((scope) => scope === 'backend' ? '/backend' : '/frontend'),
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     success: jest.fn(),
@@ -19,12 +21,16 @@ jest.mock('../../../../shared/utils/logger', () => ({
 jest.mock('../../../fix-branch', () => ({
     run: jest.fn(),
 }));
+jest.mock('../../../../shared/services/integration-verifier', () => ({
+    verifyIntegration: jest.fn(),
+}));
 
 // Import after mocks
-const { step7 } = require('./index');
+const { step7, runIntegrationVerification } = require('./index');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { run: runFixBranch } = require('../../../fix-branch');
+const { verifyIntegration } = require('../../../../shared/services/integration-verifier');
 
 describe('step7', () => {
     const passedPath = '/test/.claudiomiro/CRITICAL_REVIEW_PASSED.md';
