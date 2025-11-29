@@ -35,6 +35,35 @@ class LocalLLMService {
         this.fallbackMode = true;
         this.initialized = false;
         this.initError = null;
+        this.currentTaskName = null;
+        this.ParallelStateManager = null;
+        try {
+            this.ParallelStateManager = require('../../executors/parallel-state-manager');
+        } catch (e) {
+            // Ignore if not available (e.g. in tests)
+        }
+    }
+
+    /**
+     * Set the current task context for UI updates
+     * @param {string} taskName - Task identifier (e.g., 'TASK1')
+     */
+    setTaskContext(taskName) {
+        this.currentTaskName = taskName;
+    }
+
+    /**
+     * Update UI with status message if task context is set
+     * @param {string} message - Status message to display
+     * @private
+     */
+    _updateUI(message) {
+        if (this.currentTaskName && this.ParallelStateManager) {
+            const stateManager = this.ParallelStateManager.getInstance();
+            if (stateManager && stateManager.isUIRendererActive()) {
+                stateManager.updateClaudeMessage(this.currentTaskName, message);
+            }
+        }
     }
 
     /**
@@ -162,6 +191,7 @@ class LocalLLMService {
    * @returns {Promise<string[]>}
    */
     async classifyTopics(content) {
+        this._updateUI('🤖 Classifying topics...');
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
@@ -192,6 +222,7 @@ class LocalLLMService {
    * @returns {Promise<string>}
    */
     async extractSection(markdown, sectionName) {
+        this._updateUI(`🤖 Extracting section: ${sectionName}...`);
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
@@ -214,6 +245,7 @@ class LocalLLMService {
    * @returns {Promise<string>}
    */
     async summarize(content, maxTokens = 500) {
+        this._updateUI('🤖 Summarizing content...');
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
@@ -241,6 +273,7 @@ class LocalLLMService {
    * @returns {Promise<{completed: boolean, confidence: number}>}
    */
     async checkCompletion(todoContent) {
+        this._updateUI('🤖 Checking task completion...');
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
@@ -271,6 +304,7 @@ class LocalLLMService {
    * @returns {Promise<{explicit: string[], implicit: string[]}>}
    */
     async analyzeDependencies(taskContent, availableTasks) {
+        this._updateUI('🤖 Analyzing dependencies...');
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
@@ -301,6 +335,7 @@ class LocalLLMService {
    * @returns {Promise<string|null>}
    */
     async generate(prompt, options = {}) {
+        this._updateUI('🤖 Generating content...');
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
@@ -327,6 +362,7 @@ class LocalLLMService {
    * @returns {Promise<Array<{path: string, summary: string, relevance: number}>>}
    */
     async summarizeContext(files, taskDescription) {
+        this._updateUI(`🤖 Summarizing ${files.length} context files...`);
         await this._ensureInitialized();
 
         if (!files || files.length === 0) {
@@ -368,6 +404,7 @@ class LocalLLMService {
    * @returns {Promise<Array<{path: string, relevance: number, reason: string}>>}
    */
     async rankFileRelevance(filePaths, taskDescription) {
+        this._updateUI(`🤖 Ranking ${filePaths.length} files...`);
         await this._ensureInitialized();
 
         if (!filePaths || filePaths.length === 0) {
@@ -411,6 +448,7 @@ class LocalLLMService {
    * @returns {Promise<{valid: boolean, issues: string[], suggestions: string[]}>}
    */
     async validateDecomposition(tasks) {
+        this._updateUI('🤖 Validating task decomposition...');
         await this._ensureInitialized();
 
         if (!tasks || tasks.length === 0) {
@@ -456,6 +494,7 @@ class LocalLLMService {
    * @returns {Promise<{passed: boolean, issues: Array<{type: string, message: string, severity: string}>}>}
    */
     async prescreenCode(code, language = 'javascript') {
+        this._updateUI('🤖 Pre-screening code...');
         await this._ensureInitialized();
 
         if (!code) {
@@ -496,6 +535,7 @@ class LocalLLMService {
    * @returns {Promise<{valid: boolean, confidence: number, issues: string[]}>}
    */
     async validateFix(command, error, proposedFix) {
+        this._updateUI('🤖 Validating fix...');
         await this._ensureInitialized();
 
         if (!proposedFix) {
@@ -533,6 +573,7 @@ class LocalLLMService {
    */
     async prescreenDiff(diff) {
         this._logToFile('prescreenDiff - Start', `Diff length: ${diff?.length || 0} chars`);
+        this._updateUI('🤖 Pre-screening git diff...');
         await this._ensureInitialized();
 
         if (!diff || diff.trim().length === 0) {
@@ -612,6 +653,7 @@ class LocalLLMService {
    * @returns {Promise<{errors: Array, summary: string, canAutoFix: boolean}>}
    */
     async analyzeValidatorOutput(command, output, exitCode) {
+        this._updateUI('🤖 Analyzing validator output...');
         await this._ensureInitialized();
 
         if (!output || output.trim().length === 0) {
@@ -680,6 +722,7 @@ class LocalLLMService {
    * @returns {Promise<{title: string, body: string}>}
    */
     async generateCommitMessage(diff, taskDescription) {
+        this._updateUI('🤖 Generating commit message...');
         await this._ensureInitialized();
 
         if (!diff) {
@@ -727,6 +770,7 @@ class LocalLLMService {
    * @returns {Promise<{title: string, body: string}>}
    */
     async generatePRDescription(summary, changedFiles, commitMessages) {
+        this._updateUI('🤖 Generating PR description...');
         await this._ensureInitialized();
 
         const defaultPR = {
@@ -914,7 +958,7 @@ class LocalLLMService {
 
             // Check for SQL injection patterns
             if (/(\$\{|\+\s*req\.|`.*\$\{.*\}.*SELECT|`.*\$\{.*\}.*INSERT|`.*\$\{.*\}.*UPDATE|`.*\$\{.*\}.*DELETE)/i.test(content) &&
-          /(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)/i.test(content)) {
+                /(SELECT|INSERT|UPDATE|DELETE|FROM|WHERE)/i.test(content)) {
                 issues.push({
                     file: currentFile,
                     line: i,

@@ -37,10 +37,12 @@ const runDeepSeek = (text, taskName = null) => {
         // Use sh to execute command with cat substitution
         const command = `deepseek --dangerously-skip-permissions -p "$(cat '${tmpFile}')" --output-format stream-json --verbose`;
 
-        logger.stopSpinner();
-        logger.command(command);
-        logger.separator();
-        logger.newline();
+        if (!suppressStreamingLogs) {
+            logger.stopSpinner();
+            logger.command(command);
+            logger.separator();
+            logger.newline();
+        }
 
         const deepSeek = spawn('sh', ['-c', command], {
             cwd: state.folder,
@@ -141,7 +143,9 @@ const runDeepSeek = (text, taskName = null) => {
             for (const line of lines) {
                 const text = processDeepSeekMessage(line);
                 if (text) {
-                    log(text);
+                    if (!suppressStreamingLogs) {
+                        log(text);
+                    }
                     // Update state manager with DeepSeek message if taskName provided
                     if (stateManager && taskName) {
                         stateManager.updateClaudeMessage(taskName, text);

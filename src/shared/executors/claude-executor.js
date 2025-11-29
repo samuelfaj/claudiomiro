@@ -141,7 +141,9 @@ const runClaude = (text, taskName = null, options = {}) => {
             for (const line of lines) {
                 const text = processClaudeMessage(line);
                 if (text) {
-                    log(text);
+                    if (!suppressStreamingLogs) {
+                        log(text);
+                    }
                     // Update state manager with Claude message if taskName provided
                     if (stateManager && taskName) {
                         stateManager.updateClaudeMessage(taskName, text);

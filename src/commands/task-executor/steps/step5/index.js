@@ -78,14 +78,18 @@ const step5 = async (task) => {
 
     // Check if we need to re-research due to multiple failures
     let needsReResearch = false;
-    if(fs.existsSync(folder('info.json'))){
+    if (fs.existsSync(folder('info.json'))) {
         const info = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
         // Re-research if: 3+ attempts AND last attempt failed
-        if(info.attempts >= 3 && info.lastError){
+        if (info.attempts >= 3 && info.lastError) {
             needsReResearch = true;
-            logger.warning(`Task has failed ${info.attempts} times. Re-analyzing approach...`);
+            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+            const stateManager = ParallelStateManager.getInstance();
+            if (!stateManager || !stateManager.isUIRendererActive()) {
+                logger.warning(`Task has failed ${info.attempts} times. Re-analyzing approach...`);
+            }
             // Remove old RESEARCH.md to force new analysis
-            if(fs.existsSync(folder('RESEARCH.md'))){
+            if (fs.existsSync(folder('RESEARCH.md'))) {
                 fs.renameSync(folder('RESEARCH.md'), folder('RESEARCH.old.md'));
             }
         }
@@ -94,7 +98,7 @@ const step5 = async (task) => {
     // PHASE 1: Research and context gathering (only on first run or after multiple failures)
     await generateResearchFile(task, { cwd });
 
-    if(fs.existsSync(folder('CODE_REVIEW.md'))){
+    if (fs.existsSync(folder('CODE_REVIEW.md'))) {
         fs.rmSync(folder('CODE_REVIEW.md'));
     }
 
@@ -126,16 +130,16 @@ const step5 = async (task) => {
     });
 
     // Add current task's RESEARCH.md if exists
-    if(fs.existsSync(folder('RESEARCH.md'))){
+    if (fs.existsSync(folder('RESEARCH.md'))) {
         contextFilePaths.push(folder('RESEARCH.md'));
     }
 
     // Update TODO.md with consolidated context (much smaller than listing all files)
-    if(fs.existsSync(folder('TODO.md'))){
+    if (fs.existsSync(folder('TODO.md'))) {
         let todo = fs.readFileSync(folder('TODO.md'), 'utf8');
 
-        if(!todo.includes('## CONSOLIDATED CONTEXT:')){
-        // Add consolidated context summary instead of file list
+        if (!todo.includes('## CONSOLIDATED CONTEXT:')) {
+            // Add consolidated context summary instead of file list
             const contextSection = `\n\n## CONSOLIDATED CONTEXT:
 ${consolidatedContext}
 
@@ -147,7 +151,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         }
     }
 
-    if(fs.existsSync(folder('info.json'))){
+    if (fs.existsSync(folder('info.json'))) {
         let info = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
         info.attempts += 1;
         info.lastError = null;
@@ -155,7 +159,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         info.reResearched = needsReResearch || info.reResearched || false;
 
         // Track execution history
-        if(!info.history) info.history = [];
+        if (!info.history) info.history = [];
         info.history.push({
             timestamp: new Date().toISOString(),
             attempt: info.attempts,
@@ -163,7 +167,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         });
 
         fs.writeFileSync(folder('info.json'), JSON.stringify(info, null, 2), 'utf8');
-    }else{
+    } else {
         let info = {
             firstRun: new Date().toISOString(),
             lastRun: new Date().toISOString(),
@@ -226,7 +230,11 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
                 }
             }
         } catch (error) {
-            logger.warning(`[Step5] Reflection skipped: ${error.message}`);
+            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+            const stateManager = ParallelStateManager.getInstance();
+            if (!stateManager || !stateManager.isUIRendererActive()) {
+                logger.warning(`[Step5] Reflection skipped: ${error.message}`);
+            }
         }
 
         return result;
@@ -240,7 +248,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         };
 
         // Add to error history
-        if(!info.errorHistory) info.errorHistory = [];
+        if (!info.errorHistory) info.errorHistory = [];
         info.errorHistory.push({
             timestamp: new Date().toISOString(),
             attempt: info.attempts,

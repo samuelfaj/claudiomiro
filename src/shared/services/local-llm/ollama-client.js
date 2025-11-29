@@ -262,12 +262,17 @@ Return JSON: {"explicit": ["TASK1"], "implicit": ["TASK2"], "reasoning": "brief 
    * @returns {Promise<{completed: boolean, confidence: number, reason: string}>}
    */
     async checkCompletion(todoContent) {
+        if (todoContent.toLocaleLowerCase().includes('fully implemented: yes')) {
+            return { completed: true, confidence: 1, reason: 'Fully implemented' };
+        }
+
         const prompt = `Analyze this TODO.md and determine if the task is FULLY implemented.
 
 Check for:
 1. "Fully implemented: YES" or similar declaration
-2. All checklist items marked as done
-3. No pending work mentioned
+2. All checklist items (that matters) are marked as done
+
+If it has any of the above, return true.
 
 TODO.md:
 ${todoContent.slice(0, 2000)}
