@@ -101,7 +101,7 @@ This guide contains the complete methodology for:
 - `path/to/file1.ext:lines` - [why relevant]
 - `path/to/file2.ext:lines` - [why relevant]
 
-## Code Patterns Found
+## Code Patterns
 [ONLY new patterns discovered during research]
 - `path/to/example.ext:lines` - [Pattern description]
 
@@ -127,7 +127,7 @@ This guide contains the complete methodology for:
 ## Risks & Challenges Identified
 [Things discovered during research]
 
-## Execution Strategy Recommendation
+## Execution Strategy
 [Based on research findings]
 - Step 1: [specific action with file:line]
 - Step 2: [specific action with file:line]
