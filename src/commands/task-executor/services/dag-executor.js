@@ -5,7 +5,7 @@ const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
 const { step4, step5, step6, step7 } = require('../steps');
 const { isFullyImplementedAsync, hasApprovedCodeReview } = require('../utils/validation');
-const ParallelStateManager = require('./parallel-state-manager');
+const ParallelStateManager = require('../../../shared/executors/parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
@@ -162,7 +162,7 @@ class DAGExecutor {
         return Object.entries(this.tasks)
             .filter(([_name, task]) =>
                 task.status === 'pending' &&
-        task.deps.every(dep => this.tasks[dep] && this.tasks[dep].status === 'completed'),
+                task.deps.every(dep => this.tasks[dep] && this.tasks[dep].status === 'completed'),
             )
             .map(([name]) => name);
     }
@@ -279,10 +279,10 @@ class DAGExecutor {
             const todoPath = path.join(taskPath, 'TODO.md');
             const todoOldPath = path.join(taskPath, 'TODO.old.md');
 
-            if(
+            if (
                 fs.existsSync(codeReviewPath) &&
-        !fs.existsSync(todoPath) &&
-        fs.existsSync(todoOldPath)
+                !fs.existsSync(todoPath) &&
+                fs.existsSync(todoOldPath)
             ) {
                 fs.cpSync(todoOldPath, todoPath);
                 fs.rmSync(todoOldPath, { force: true });
