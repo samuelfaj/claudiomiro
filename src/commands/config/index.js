@@ -8,9 +8,13 @@ const path = require('path');
 const chalk = require('chalk');
 const { select, input, confirm } = require('@inquirer/prompts');
 
-// Config file is saved in the same directory as claudiomiro's index.js (package root)
-const PACKAGE_ROOT = path.resolve(__dirname, '..', '..', '..');
-const CONFIG_FILE = path.join(PACKAGE_ROOT, 'claudiomiro.config.json');
+// Config directory in user's home (persists across updates)
+const CONFIG_DIR = path.join(require('os').homedir(), '.claudiomiro');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+
+// Legacy config location (for migration)
+const LEGACY_PACKAGE_ROOT = path.resolve(__dirname, '..', '..', '..');
+const LEGACY_CONFIG_FILE = path.join(LEGACY_PACKAGE_ROOT, 'claudiomiro.config.json');
 
 const CONFIG_SCHEMA = {
     CLAUDIOMIRO_LOCAL_LLM: {
@@ -62,11 +66,44 @@ const MENU_OPTIONS = {
 };
 
 /**
+ * Ensure config directory exists
+ */
+const ensureConfigDir = () => {
+    if (!fs.existsSync(CONFIG_DIR)) {
+        fs.mkdirSync(CONFIG_DIR, { recursive: true });
+    }
+};
+
+/**
+ * Migrate legacy config from package root to user home directory
+ * This runs automatically when loading config
+ */
+const migrateLegacyConfig = () => {
+    try {
+        // Check if legacy config exists and new config doesn't
+        if (fs.existsSync(LEGACY_CONFIG_FILE) && !fs.existsSync(CONFIG_FILE)) {
+            ensureConfigDir();
+            const legacyContent = fs.readFileSync(LEGACY_CONFIG_FILE, 'utf-8');
+            fs.writeFileSync(CONFIG_FILE, legacyContent);
+            // Remove legacy config after successful migration
+            fs.unlinkSync(LEGACY_CONFIG_FILE);
+            return true;
+        }
+    } catch (error) {
+        // Migration failed, but we can continue with empty config
+    }
+    return false;
+};
+
+/**
  * Load configuration from file
  * @returns {Object}
  */
 const loadConfig = () => {
     try {
+        // Attempt migration from legacy location
+        migrateLegacyConfig();
+
         if (fs.existsSync(CONFIG_FILE)) {
             const content = fs.readFileSync(CONFIG_FILE, 'utf-8');
             return JSON.parse(content);
@@ -82,6 +119,7 @@ const loadConfig = () => {
  * @param {Object} config
  */
 const saveConfig = (config) => {
+    ensureConfigDir();
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
 };
 
@@ -370,7 +408,10 @@ module.exports = {
     loadConfig,
     saveConfig,
     applyConfigToEnv,
+    ensureConfigDir,
+    migrateLegacyConfig,
     CONFIG_FILE,
-    PACKAGE_ROOT,
+    CONFIG_DIR,
+    LEGACY_CONFIG_FILE,
     CONFIG_SCHEMA,
 };
