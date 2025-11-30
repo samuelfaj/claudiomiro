@@ -7,7 +7,7 @@ describe('research-prompt.md template', () => {
     beforeAll(() => {
         promptContent = fs.readFileSync(
             path.join(__dirname, 'research-prompt.md'),
-            'utf8'
+            'utf8',
         );
     });
 

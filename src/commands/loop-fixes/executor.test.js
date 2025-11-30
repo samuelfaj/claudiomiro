@@ -725,10 +725,11 @@ describe('src/commands/loop-fixes/executor.js', () => {
                     return true;
                 }
                 if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
-                    return iterationCount === 1;
+                    return iterationCount === 1 || iterationCount === 3;
                 }
                 if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
-                    return iterationCount >= 2;
+                    // Return true later to allow loop to exit
+                    return iterationCount >= 3;
                 }
                 return false;
             });
@@ -750,7 +751,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             await loopFixes('Test prompt', 10);
 
             expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('CRITICAL_REVIEW_OVERVIEW.md'));
-            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting verification'));
+            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Verification Iteration'));
         });
     });
 });

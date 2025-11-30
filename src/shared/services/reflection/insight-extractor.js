@@ -151,7 +151,7 @@ const parseInsightLines = (content) => {
     for (const line of lines) {
         const trimmed = line.trim();
         const bulletMatch = trimmed.match(/^[-*+]\s+(.*)/);
-        const numberedMatch = trimmed.match(/^\d+[\).\]]\s+(.*)/);
+        const numberedMatch = trimmed.match(/^\d+[).\]]\s+(.*)/);
 
         if (bulletMatch || numberedMatch) {
             flushCurrent();

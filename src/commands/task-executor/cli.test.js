@@ -474,9 +474,7 @@ describe('src/commands/task-executor/cli.js', () => {
         });
 
         test('should restore multi-repo mode from multi-repo.json on --continue', async () => {
-            const configPath = path.join(process.cwd(), '.claudiomiro', 'multi-repo.json');
-            const pendingPath = path.join(process.cwd(), '.claudiomiro', 'PENDING_CLARIFICATION.flag');
-            const answersPath = path.join(process.cwd(), '.claudiomiro', 'CLARIFICATION_ANSWERS.json');
+            // Paths were unused
 
             fs.existsSync = jest.fn((p) => {
                 if (p && p.includes('multi-repo.json')) return true;

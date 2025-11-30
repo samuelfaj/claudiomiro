@@ -13,7 +13,7 @@ const mockState = {
     folder: '/test/project',
     isMultiRepo: jest.fn(() => false),
     getGitMode: jest.fn(() => null),
-    getRepository: jest.fn((scope) => '/test/project'),
+    getRepository: jest.fn((_scope) => '/test/project'),
 };
 jest.mock('../../../../shared/config/state', () => mockState);
 
@@ -138,7 +138,7 @@ describe('step0', () => {
             error.stderr = Buffer.from('fatal: A branch named \'test-branch\' already exists');
             execSync.mockImplementationOnce(() => { throw error; });
             // Second call (checkout) succeeds
-            execSync.mockImplementationOnce(() => {});
+            execSync.mockImplementationOnce(() => { });
 
             createBranches('test-branch');
 
@@ -178,8 +178,8 @@ describe('step0', () => {
                 return false;
             });
 
-            fs.writeFileSync.mockImplementation(() => {});
-            fs.unlinkSync.mockImplementation(() => {});
+            fs.writeFileSync.mockImplementation(() => { });
+            fs.unlinkSync.mockImplementation(() => { });
 
             // Act
             await step0(false, mockTask);
@@ -209,7 +209,7 @@ describe('step0', () => {
                 return false;
             });
 
-            fs.writeFileSync.mockImplementation(() => {});
+            fs.writeFileSync.mockImplementation(() => { });
 
             // Act
             await step0(true, mockTask);
@@ -248,7 +248,7 @@ describe('step0', () => {
                 return '';
             });
 
-            fs.writeFileSync.mockImplementation(() => {});
+            fs.writeFileSync.mockImplementation(() => { });
 
             askClarificationQuestions.mockResolvedValue('{"question1": "answer1", "question2": "answer2"}');
             executeClaude.mockResolvedValue({ success: true });
@@ -286,7 +286,7 @@ describe('step0', () => {
                 return '';
             });
 
-            fs.writeFileSync.mockImplementation(() => {});
+            fs.writeFileSync.mockImplementation(() => { });
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
@@ -323,7 +323,7 @@ describe('step0', () => {
                 return '';
             });
 
-            fs.writeFileSync.mockImplementation(() => {});
+            fs.writeFileSync.mockImplementation(() => { });
             executeClaude.mockResolvedValue({ success: true });
             askClarificationQuestions.mockRejectedValue(new Error('User cancelled input'));
 
@@ -355,8 +355,8 @@ describe('step0', () => {
                 return false;
             });
 
-            fs.writeFileSync.mockImplementation(() => {});
-            fs.unlinkSync.mockImplementation(() => {});
+            fs.writeFileSync.mockImplementation(() => { });
+            fs.unlinkSync.mockImplementation(() => { });
 
             // Act
             await step0(false, mockTask);
@@ -420,7 +420,7 @@ describe('step0', () => {
                 return false;
             });
 
-            fs.writeFileSync.mockImplementation(() => {});
+            fs.writeFileSync.mockImplementation(() => { });
 
             // Act
             await step0(false, exactTask);
@@ -449,7 +449,7 @@ describe('step0', () => {
                 return '';
             });
 
-            fs.writeFileSync.mockImplementation(() => {});
+            fs.writeFileSync.mockImplementation(() => { });
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
@@ -483,7 +483,7 @@ describe('step0', () => {
                     return '';
                 });
 
-                fs.writeFileSync.mockImplementation(() => {});
+                fs.writeFileSync.mockImplementation(() => { });
                 executeClaude.mockResolvedValue({ success: true });
 
                 // Act
@@ -521,7 +521,7 @@ describe('step0', () => {
                     return '';
                 });
 
-                fs.writeFileSync.mockImplementation(() => {});
+                fs.writeFileSync.mockImplementation(() => { });
                 executeClaude.mockResolvedValue({ success: true });
 
                 // Act
@@ -548,7 +548,7 @@ describe('step0', () => {
                     return false;
                 });
 
-                fs.writeFileSync.mockImplementation(() => {});
+                fs.writeFileSync.mockImplementation(() => { });
 
                 // Act
                 await step0(true, mockTask);

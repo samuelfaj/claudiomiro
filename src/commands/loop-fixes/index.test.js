@@ -106,7 +106,7 @@ describe('src/commands/loop-fixes/index.js', () => {
             await run(args);
 
             expect(logger.info).toHaveBeenCalledWith('Running loop-fixes (max iterations: 5)');
-            expect(loopFixes).toHaveBeenCalledWith('Test prompt', 5);
+            expect(loopFixes).toHaveBeenCalledWith('Test prompt', 5, { freshStart: true });
         });
 
         test('should default maxIterations to 20 when no limit flag', async () => {
@@ -115,7 +115,7 @@ describe('src/commands/loop-fixes/index.js', () => {
             await run(args);
 
             expect(logger.info).toHaveBeenCalledWith('Running loop-fixes (max iterations: 20)');
-            expect(loopFixes).toHaveBeenCalledWith('Test prompt', 20);
+            expect(loopFixes).toHaveBeenCalledWith('Test prompt', 20, { freshStart: true });
         });
 
         test('should show "no limit" when --no-limit is passed', async () => {
@@ -124,7 +124,7 @@ describe('src/commands/loop-fixes/index.js', () => {
             await run(args);
 
             expect(logger.info).toHaveBeenCalledWith('Running loop-fixes (max iterations: no limit)');
-            expect(loopFixes).toHaveBeenCalledWith('Test prompt', Infinity);
+            expect(loopFixes).toHaveBeenCalledWith('Test prompt', Infinity, { freshStart: true });
         });
 
         test('should set folder from args', async () => {
@@ -151,7 +151,7 @@ describe('src/commands/loop-fixes/index.js', () => {
             // --no-limit takes precedence
             expect(logger.info).toHaveBeenCalledWith('Running loop-fixes (max iterations: no limit)');
             expect(state.setFolder).toHaveBeenCalledWith('/some/path');
-            expect(loopFixes).toHaveBeenCalledWith('Test', Infinity);
+            expect(loopFixes).toHaveBeenCalledWith('Test', Infinity, { freshStart: true });
         });
 
         test('should call loopFixes with parsed prompt', async () => {
@@ -159,7 +159,7 @@ describe('src/commands/loop-fixes/index.js', () => {
 
             await run(args);
 
-            expect(loopFixes).toHaveBeenCalledWith('Check for inconsistencies', 20);
+            expect(loopFixes).toHaveBeenCalledWith('Check for inconsistencies', 20, { freshStart: true });
         });
 
         test('should use interactive input when --prompt= is not provided', async () => {
@@ -170,7 +170,7 @@ describe('src/commands/loop-fixes/index.js', () => {
 
             expect(logger.info).toHaveBeenCalledWith('No --prompt= provided. Please enter your prompt:');
             expect(getMultilineInput).toHaveBeenCalled();
-            expect(loopFixes).toHaveBeenCalledWith('Interactive user prompt', 20);
+            expect(loopFixes).toHaveBeenCalledWith('Interactive user prompt', 20, { freshStart: true });
         });
 
         test('should throw error when no prompt is provided and interactive input is empty', async () => {
@@ -194,7 +194,7 @@ describe('src/commands/loop-fixes/index.js', () => {
 
             await run(args);
 
-            expect(loopFixes).toHaveBeenCalledWith('Check for $pecial & <characters>', 20);
+            expect(loopFixes).toHaveBeenCalledWith('Check for $pecial & <characters>', 20, { freshStart: true });
         });
 
         test('should handle prompt with newlines (from shell escaping)', async () => {
@@ -202,7 +202,7 @@ describe('src/commands/loop-fixes/index.js', () => {
 
             await run(args);
 
-            expect(loopFixes).toHaveBeenCalledWith('Line1\\nLine2', 20);
+            expect(loopFixes).toHaveBeenCalledWith('Line1\\nLine2', 20, { freshStart: true });
         });
     });
 

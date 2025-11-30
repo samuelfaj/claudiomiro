@@ -34,7 +34,7 @@ const analyzeSplit = async (task) => {
         .replace(/\{\{claudiomiroFolder\}\}/g, state.claudiomiroFolder);
 
     const shellCommandRule = fs.readFileSync(path.join(__dirname, '../', '../', '../', '../', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
-    const execution = await executeClaude(promptTemplate + `\n\n` + shellCommandRule, task);
+    const execution = await executeClaude(promptTemplate + '\n\n' + shellCommandRule, task);
 
     // Only write split.txt if the original folder still exists (task was not split)
     if (fs.existsSync(folder('TASK.md'))) {

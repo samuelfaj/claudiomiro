@@ -264,6 +264,7 @@ describe('step7', () => {
 
             expect(runFixBranch).toHaveBeenCalledWith([
                 '--limit=20',
+                '--continue',
                 '--level=2',
                 '--no-clear',
                 '/test',
@@ -285,6 +286,7 @@ describe('step7', () => {
 
             expect(runFixBranch).toHaveBeenCalledWith([
                 '--limit=10',
+                '--continue',
                 '--level=2',
                 '--no-clear',
                 '/test',
@@ -305,6 +307,7 @@ describe('step7', () => {
 
             expect(runFixBranch).toHaveBeenCalledWith([
                 '--no-limit',
+                '--continue',
                 '--level=2',
                 '--no-clear',
                 '/test',
@@ -417,6 +420,7 @@ describe('step7', () => {
 
             expect(runFixBranch).toHaveBeenCalledWith([
                 '--limit=20',
+                '--continue',
                 '--level=2',
                 '--no-clear',
                 '/test',

@@ -210,7 +210,6 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
     const verificationPromptTemplate = fs.readFileSync(verificationPromptPath, 'utf-8');
     const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
 
-
     // Track progress for Local LLM analysis
     let previousPendingCount = null;
     let lastIterationError = '';
