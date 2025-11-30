@@ -37,10 +37,12 @@ const runGlm = (text, taskName = null) => {
         // Use sh to execute command with cat substitution
         const command = `glm --dangerously-skip-permissions -p "$(cat '${tmpFile}')" --output-format stream-json --verbose`;
 
-        logger.stopSpinner();
-        logger.command(command);
-        logger.separator();
-        logger.newline();
+        if (!suppressStreamingLogs) {
+            logger.stopSpinner();
+            logger.command(command);
+            logger.separator();
+            logger.newline();
+        }
 
         const glm = spawn('sh', ['-c', command], {
             cwd: state.folder,
@@ -141,7 +143,9 @@ const runGlm = (text, taskName = null) => {
             for (const line of lines) {
                 const text = processGlmMessage(line);
                 if (text) {
-                    log(text);
+                    if (!suppressStreamingLogs) {
+                        log(text);
+                    }
                     // Update state manager with Glm message if taskName provided
                     if (stateManager && taskName) {
                         stateManager.updateClaudeMessage(taskName, text);

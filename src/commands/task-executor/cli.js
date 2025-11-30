@@ -6,6 +6,7 @@ const { startFresh } = require('./services/file-manager');
 const { step0, step1, step2, step3, step7, step8 } = require('./steps');
 const { DAGExecutor } = require('./services/dag-executor');
 const { isFullyImplemented, hasApprovedCodeReview } = require('./utils/validation');
+const { detectGitConfiguration } = require('../../shared/services/git-detector');
 
 // Note: This uses the sync version (heuristic-based) for building the initial task graph.
 // The async version with Local LLM support is used in dag-executor.js for critical execution checks.
@@ -56,9 +57,14 @@ const chooseAction = async (i, args) => {
     const promptArg = args.find(arg => arg.startsWith('--prompt='));
     const promptText = promptArg ? promptArg.split('=').slice(1).join('=').replace(/^["']|["']$/g, '') : null;
 
-    // Check if --fresh was passed (or if --prompt was used, which automatically activates --fresh)
+    // Check if --backend and --frontend were passed for multi-repo mode
+    const backendArg = args.find(arg => arg.startsWith('--backend='));
+    const frontendArg = args.find(arg => arg.startsWith('--frontend='));
+
+    // Check if --fresh was passed
     // IMPORTANT: --continue should not activate --fresh
-    const shouldStartFresh = !continueFlag && (args.includes('--fresh') || promptText !== null);
+    // IMPORTANT: --prompt should NOT automatically activate --fresh (user must explicitly use --fresh if they want to start fresh)
+    const shouldStartFresh = !continueFlag && args.includes('--fresh');
 
     // Check if --push=false was passed
     const shouldPush = !args.some(arg => arg === '--push=false');
@@ -131,7 +137,9 @@ const chooseAction = async (i, args) => {
         arg !== '--claude' &&
         arg !== '--deep-seek' &&
         arg !== '--glm' &&
-        arg !== '--gemini',
+        arg !== '--gemini' &&
+        !arg.startsWith('--backend=') &&
+        !arg.startsWith('--frontend='),
     );
     const folderArg = filteredArgs[0] || process.cwd();
 
@@ -140,6 +148,72 @@ const chooseAction = async (i, args) => {
 
     // Initialize cache folder for token optimization
     state.initializeCache();
+
+    // Configure multi-repo mode if both --backend and --frontend are provided
+    if (backendArg && frontendArg) {
+        const backendPath = backendArg.split('=').slice(1).join('=');
+        const frontendPath = frontendArg.split('=').slice(1).join('=');
+
+        // Validate paths exist
+        if (!fs.existsSync(backendPath)) {
+            logger.error(`Backend path does not exist: ${backendPath}`);
+            process.exit(1);
+        }
+        if (!fs.existsSync(frontendPath)) {
+            logger.error(`Frontend path does not exist: ${frontendPath}`);
+            process.exit(1);
+        }
+
+        // Detect git configuration (may throw if paths are not in git repos)
+        try {
+            const gitConfig = detectGitConfiguration(backendPath, frontendPath);
+            state.setMultiRepo(backendPath, frontendPath, gitConfig);
+
+            // Persist configuration across all relevant workspaces
+            const configPayload = {
+                enabled: true,
+                mode: gitConfig.mode,
+                repositories: {
+                    backend: path.resolve(backendPath),
+                    frontend: path.resolve(frontendPath),
+                },
+                gitRoots: gitConfig.gitRoots,
+            };
+
+            const candidateDirs = new Set();
+            const addDir = (dirPath) => {
+                if (!dirPath) {
+                    return;
+                }
+                const resolvedDir = path.resolve(dirPath);
+                candidateDirs.add(resolvedDir);
+            };
+
+            addDir(state.workspaceClaudiomiroFolder);
+            addDir(state.claudiomiroFolder);
+            addDir(path.join(path.resolve(backendPath), '.claudiomiro', 'task-executor'));
+            addDir(path.join(path.resolve(frontendPath), '.claudiomiro', 'task-executor'));
+
+            const configString = JSON.stringify(configPayload, null, 2);
+
+            for (const dir of candidateDirs) {
+                try {
+                    fs.mkdirSync(dir, { recursive: true });
+                    fs.writeFileSync(path.join(dir, 'multi-repo.json'), configString);
+                } catch (error) {
+                    logger.warning?.(`Failed to persist multi-repo configuration to ${dir}: ${error.message}`);
+                }
+            }
+
+            logger.info(`Multi-repo mode: ${gitConfig.mode}`);
+            logger.info(`Backend: ${backendPath}`);
+            logger.info(`Frontend: ${frontendPath}`);
+        } catch (error) {
+            logger.error(`Invalid git configuration: ${error.message}`);
+            logger.error('Ensure both paths are inside git repositories');
+            process.exit(1);
+        }
+    }
 
     if (!fs.existsSync(state.folder)) {
         logger.error(`Folder does not exist: ${state.folder}`);
@@ -160,6 +234,75 @@ const chooseAction = async (i, args) => {
 
     // Handle --continue flag (resuming after clarification)
     if (continueFlag && i === 0) {
+        // Load multi-repo config if exists (restore multi-repo mode on continue)
+        const resolveMultiRepoConfigPath = () => {
+            const visited = new Set();
+            const candidates = [];
+
+            const addCandidate = (filePath) => {
+                if (!filePath) return;
+                const resolved = path.resolve(filePath);
+                if (visited.has(resolved)) return;
+                visited.add(resolved);
+                candidates.push(resolved);
+            };
+
+            // Current workspace-first storage (.claudiomiro/task-executor/multi-repo.json)
+            addCandidate(state.workspaceClaudiomiroFolder && path.join(state.workspaceClaudiomiroFolder, 'multi-repo.json'));
+            addCandidate(state.claudiomiroFolder && path.join(state.claudiomiroFolder, 'multi-repo.json'));
+
+            // Legacy storage (.claudiomiro/multi-repo.json) for backward compatibility
+            addCandidate(state.workspaceClaudiomiroRoot && path.join(state.workspaceClaudiomiroRoot, 'multi-repo.json'));
+            addCandidate(state.claudiomiroRoot && path.join(state.claudiomiroRoot, 'multi-repo.json'));
+
+            const migrateIfNeeded = (legacyPath) => {
+                const preferredPath = state.workspaceClaudiomiroFolder
+                    ? path.join(state.workspaceClaudiomiroFolder, 'multi-repo.json')
+                    : (state.claudiomiroFolder ? path.join(state.claudiomiroFolder, 'multi-repo.json') : null);
+
+                if (!preferredPath || preferredPath === legacyPath) {
+                    return legacyPath;
+                }
+
+                try {
+                    if (!fs.existsSync(preferredPath)) {
+                        fs.mkdirSync(path.dirname(preferredPath), { recursive: true });
+                        fs.copyFileSync(legacyPath, preferredPath);
+                    }
+                    return preferredPath;
+                } catch {
+                    // If migration fails, fall back to legacy location
+                    return legacyPath;
+                }
+            };
+
+            for (const candidate of candidates) {
+                if (candidate && fs.existsSync(candidate)) {
+                    const parentDir = path.basename(path.dirname(candidate));
+                    if (parentDir === '.claudiomiro') {
+                        return migrateIfNeeded(candidate);
+                    }
+                    return candidate;
+                }
+            }
+            return null;
+        };
+
+        const multiRepoConfigPath = resolveMultiRepoConfigPath();
+        if (multiRepoConfigPath) {
+            try {
+                const config = JSON.parse(fs.readFileSync(multiRepoConfigPath, 'utf-8'));
+                if (config.enabled) {
+                    const gitConfig = { mode: config.mode, gitRoots: config.gitRoots };
+                    state.setMultiRepo(config.repositories.backend, config.repositories.frontend, gitConfig);
+                    logger.info(`Restored multi-repo mode: ${config.mode}`);
+                }
+            } catch {
+                // Invalid JSON, continue as single-repo mode
+                logger.warning('Invalid multi-repo.json, continuing as single-repo mode');
+            }
+        }
+
         const pendingClarificationPath = path.join(state.claudiomiroFolder, 'PENDING_CLARIFICATION.flag');
         const clarificationAnswersPath = path.join(state.claudiomiroFolder, 'CLARIFICATION_ANSWERS.json');
 
@@ -607,7 +750,9 @@ const init = async (args) => {
         !arg.startsWith('--prompt') &&
         !arg.startsWith('--maxConcurrent') &&
         arg !== '--no-limit' &&
-        !arg.startsWith('--limit='),
+        !arg.startsWith('--limit=') &&
+        !arg.startsWith('--backend=') &&
+        !arg.startsWith('--frontend='),
     );
     const folderArg = filteredArgs[0] || process.cwd();
     state.setFolder(folderArg);

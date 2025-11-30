@@ -4,7 +4,7 @@ const _path = require('path');
 jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     newline: jest.fn(),
@@ -59,7 +59,7 @@ describe('step2', () => {
             expect(logger.newline).toHaveBeenCalled();
             expect(logger.startSpinner).toHaveBeenCalledWith('Creating tasks...');
             expect(executeClaude).toHaveBeenCalledWith(
-                'Create tasks in /test/.claudiomiro/TASKX directory',
+                'Create tasks in /test/.claudiomiro/task-executor/TASKX directory',
             );
             expect(logger.stopSpinner).toHaveBeenCalled();
             expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
@@ -248,7 +248,7 @@ describe('step2', () => {
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
-                'Tasks go in /test/.claudiomiro/TASKX and /test/.claudiomiro/TASKY',
+                'Tasks go in /test/.claudiomiro/task-executor/TASKX and /test/.claudiomiro/task-executor/TASKY',
             );
             expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
         });

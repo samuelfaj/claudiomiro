@@ -15,9 +15,12 @@ const {
  * Token-optimized: Reuses similar research when available (80%+ similarity)
  *
  * @param {string} task - Task identifier (e.g., 'TASK1', 'TASK2')
+ * @param {Object} options - Optional parameters
+ * @param {string} options.cwd - Working directory for Claude execution (multi-repo support)
  * @returns {Promise<void>}
  */
-const generateResearchFile = async (task) => {
+const generateResearchFile = async (task, options = {}) => {
+    const { cwd } = options;
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
 
     // Skip if RESEARCH.md already exists (already analyzed)
@@ -76,7 +79,8 @@ Review the content above and adapt as needed for this specific task.
             .replace(/\{\{aiPromptPath\}\}/g, path.join(state.claudiomiroFolder, 'AI_PROMPT.md'))
             .replace(/\{\{task\}\}/g, task);
 
-        await executeClaude(prompt, task);
+        const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
+        await executeClaude(prompt + '\n\n' + shellCommandRule, task, cwd ? { cwd } : undefined);
 
         logger.stopSpinner();
 

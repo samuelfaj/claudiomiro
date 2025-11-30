@@ -9,6 +9,7 @@ jest.mock('./parallel-ui-renderer');
 jest.mock('../utils/terminal-renderer');
 jest.mock('../utils/progress-calculator');
 jest.mock('../utils/validation');
+jest.mock('../utils/scope-parser');
 
 // Set up os.cpus mock before module import
 const os = require('os');
@@ -23,6 +24,7 @@ const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
 const { isFullyImplemented, hasApprovedCodeReview } = require('../utils/validation');
+const { parseTaskScope } = require('../utils/scope-parser');
 const { DAGExecutor } = require('./dag-executor');
 
 // Mock steps module
@@ -47,8 +49,15 @@ describe('DAGExecutor', () => {
 
         // Setup default mocks
         // os.cpus is already mocked before module import
-        state.claudiomiroFolder = '/test/.claudiomiro';
+        state.claudiomiroFolder = '/test/.claudiomiro/task-executor';
+        state.isMultiRepo = jest.fn().mockReturnValue(false);
+        state.getGitMode = jest.fn().mockReturnValue(null);
         path.join.mockImplementation((...args) => args.join('/'));
+
+        // Default scope-parser mock
+        parseTaskScope.mockReturnValue(null); // Defaults to 'integration'
+        fs.existsSync.mockReturnValue(false);
+        fs.readFileSync.mockReturnValue('');
 
         // Create mock state manager
         mockStateManager = {
@@ -1556,6 +1565,371 @@ describe('DAGExecutor', () => {
                 { calculateProgress },
             );
             expect(mockUIRenderer.stop).toHaveBeenCalled();
+        });
+    });
+
+    describe('Scope-Aware Parallelism', () => {
+        describe('_initializeTasks', () => {
+            test('should extract backend scope from TASK.md', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue('@scope backend\n# Task Description');
+                parseTaskScope.mockReturnValue('backend');
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                expect(exec.tasks.TASK1.scope).toBe('backend');
+            });
+
+            test('should extract frontend scope from TASK.md', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue('@scope frontend\n# Task Description');
+                parseTaskScope.mockReturnValue('frontend');
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                expect(exec.tasks.TASK1.scope).toBe('frontend');
+            });
+
+            test('should default to integration when @scope missing', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue('# Task Description without scope');
+                parseTaskScope.mockReturnValue(null);
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                expect(exec.tasks.TASK1.scope).toBe('integration');
+            });
+
+            test('should default to integration when TASK.md not found', () => {
+                fs.existsSync.mockReturnValue(false);
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                expect(exec.tasks.TASK1.scope).toBe('integration');
+            });
+
+            test('should handle file read error gracefully', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockImplementation(() => {
+                    throw new Error('Permission denied');
+                });
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                expect(exec.tasks.TASK1.scope).toBe('integration');
+            });
+        });
+
+        describe('totalRunning', () => {
+            test('should return sum of all scope counters', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                exec.runningByScope = { backend: 2, frontend: 1, integration: 0 };
+
+                expect(exec.totalRunning()).toBe(3);
+            });
+
+            test('should return 0 when no tasks running', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                expect(exec.totalRunning()).toBe(0);
+            });
+        });
+
+        describe('canExecute', () => {
+            test('should return false for non-existent task', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                expect(exec.canExecute('NONEXISTENT')).toBe(false);
+            });
+
+            test('should return false when dependencies not complete', () => {
+                const tasks = {
+                    TASK1: { deps: [], status: 'pending' },
+                    TASK2: { deps: ['TASK1'], status: 'pending' },
+                };
+                const exec = new DAGExecutor(tasks);
+                exec.tasks.TASK1.scope = 'backend';
+                exec.tasks.TASK2.scope = 'backend';
+
+                expect(exec.canExecute('TASK2')).toBe(false);
+            });
+
+            test('should return true in single-repo mode when under limit', () => {
+                state.isMultiRepo.mockReturnValue(false);
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks, null, 3);
+                exec.tasks.TASK1.scope = 'backend';
+
+                expect(exec.canExecute('TASK1')).toBe(true);
+            });
+
+            test('should return false in single-repo mode when at limit', () => {
+                state.isMultiRepo.mockReturnValue(false);
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks, null, 2);
+                exec.tasks.TASK1.scope = 'backend';
+                exec.runningByScope = { backend: 1, frontend: 1, integration: 0 };
+
+                expect(exec.canExecute('TASK1')).toBe(false);
+            });
+
+            test('should allow backend task in multi-repo when backend scope has capacity', () => {
+                state.isMultiRepo.mockReturnValue(true);
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks, null, 2);
+                // Manually set scope and runningByScope after construction
+                exec.tasks.TASK1.scope = 'backend';
+                exec.runningByScope = { backend: 1, frontend: 2, integration: 0 };
+
+                expect(exec.canExecute('TASK1')).toBe(true);
+            });
+
+            test('should block backend task in multi-repo when backend scope at limit', () => {
+                state.isMultiRepo.mockReturnValue(true);
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks, null, 2);
+                exec.tasks.TASK1.scope = 'backend';
+                exec.runningByScope = { backend: 2, frontend: 0, integration: 0 };
+
+                expect(exec.canExecute('TASK1')).toBe(false);
+            });
+
+            test('should use global limit for integration tasks in multi-repo', () => {
+                state.isMultiRepo.mockReturnValue(true);
+
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks, null, 2);
+                // scope defaults to 'integration' when no TASK.md found
+                exec.runningByScope = { backend: 1, frontend: 1, integration: 0 };
+
+                expect(exec.canExecute('TASK1')).toBe(false); // 2 total running = at limit
+            });
+        });
+
+        describe('markRunning', () => {
+            test('should update task status and increment scope counter', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+                exec.tasks.TASK1.scope = 'backend';
+
+                exec.markRunning('TASK1');
+
+                expect(exec.tasks.TASK1.status).toBe('running');
+                expect(exec.running.has('TASK1')).toBe(true);
+                expect(exec.runningByScope.backend).toBe(1);
+            });
+
+            test('should handle missing task gracefully', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                exec.markRunning('NONEXISTENT');
+
+                expect(exec.runningByScope.backend).toBe(0);
+            });
+
+            test('should default to integration scope if not specified', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } }; // No scope in TASK.md
+                const exec = new DAGExecutor(tasks);
+                // scope is already 'integration' by default from constructor
+
+                exec.markRunning('TASK1');
+
+                expect(exec.runningByScope.integration).toBe(1);
+            });
+        });
+
+        describe('markComplete', () => {
+            test('should update task status and decrement scope counter', () => {
+                const tasks = { TASK1: { deps: [], status: 'running' } };
+                const exec = new DAGExecutor(tasks);
+                exec.tasks.TASK1.scope = 'backend';
+                exec.running.add('TASK1');
+                exec.runningByScope.backend = 1;
+
+                exec.markComplete('TASK1', 'completed');
+
+                expect(exec.tasks.TASK1.status).toBe('completed');
+                expect(exec.running.has('TASK1')).toBe(false);
+                expect(exec.runningByScope.backend).toBe(0);
+            });
+
+            test('should handle failed status', () => {
+                const tasks = { TASK1: { deps: [], status: 'running' } };
+                const exec = new DAGExecutor(tasks);
+                exec.tasks.TASK1.scope = 'frontend';
+                exec.running.add('TASK1');
+                exec.runningByScope.frontend = 1;
+
+                exec.markComplete('TASK1', 'failed');
+
+                expect(exec.tasks.TASK1.status).toBe('failed');
+                expect(exec.runningByScope.frontend).toBe(0);
+            });
+
+            test('should never go negative', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+                exec.tasks.TASK1.scope = 'backend';
+                exec.runningByScope.backend = 0;
+
+                exec.markComplete('TASK1', 'completed');
+
+                expect(exec.runningByScope.backend).toBe(0);
+            });
+
+            test('should handle missing task gracefully', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                exec.markComplete('NONEXISTENT');
+
+                expect(exec.runningByScope.backend).toBe(0);
+            });
+        });
+
+        describe('Multi-repo execution', () => {
+            test('should allow backend + frontend tasks to run in parallel in multi-repo', () => {
+                state.isMultiRepo.mockReturnValue(true);
+
+                fs.existsSync.mockImplementation(filePath => {
+                    if (filePath.includes('TASK.md')) return true;
+                    return false;
+                });
+                fs.readFileSync.mockImplementation(filePath => {
+                    if (filePath.includes('TASK1')) return '@scope backend';
+                    if (filePath.includes('TASK2')) return '@scope frontend';
+                    return '';
+                });
+                parseTaskScope.mockImplementation(content => {
+                    if (content.includes('backend')) return 'backend';
+                    if (content.includes('frontend')) return 'frontend';
+                    return null;
+                });
+
+                const tasks = {
+                    TASK1: { deps: [], status: 'pending' },
+                    TASK2: { deps: [], status: 'pending' },
+                };
+                const exec = new DAGExecutor(tasks, null, 1); // maxConcurrent = 1
+
+                // Both should be executable because they're different scopes
+                expect(exec.canExecute('TASK1')).toBe(true);
+
+                exec.markRunning('TASK1');
+                expect(exec.runningByScope.backend).toBe(1);
+
+                // TASK2 is frontend, so it should still be executable
+                expect(exec.canExecute('TASK2')).toBe(true);
+            });
+
+            test('should block same-scope tasks when at capacity in multi-repo', () => {
+                state.isMultiRepo.mockReturnValue(true);
+
+                const tasks = {
+                    TASK1: { deps: [], status: 'pending' },
+                    TASK2: { deps: [], status: 'pending' },
+                };
+                const exec = new DAGExecutor(tasks, null, 1);
+                exec.tasks.TASK1.scope = 'backend';
+                exec.tasks.TASK2.scope = 'backend';
+                exec.runningByScope.backend = 1;
+
+                expect(exec.canExecute('TASK2')).toBe(false);
+            });
+
+            test('should use standard limit in single-repo mode', () => {
+                state.isMultiRepo.mockReturnValue(false);
+
+                const tasks = {
+                    TASK1: { deps: [], status: 'pending' },
+                    TASK2: { deps: [], status: 'pending' },
+                };
+                const exec = new DAGExecutor(tasks, null, 1);
+                exec.tasks.TASK1.scope = 'backend';
+                exec.tasks.TASK2.scope = 'frontend';
+
+                exec.markRunning('TASK1');
+
+                // Even though TASK2 is frontend, single-repo mode uses global limit
+                expect(exec.canExecute('TASK2')).toBe(false);
+            });
+
+            test('should properly track running counts across scopes', () => {
+                state.isMultiRepo.mockReturnValue(true);
+
+                const tasks = {
+                    BE1: { deps: [], status: 'pending' },
+                    BE2: { deps: [], status: 'pending' },
+                    FE1: { deps: [], status: 'pending' },
+                    INT1: { deps: [], status: 'pending' },
+                };
+                const exec = new DAGExecutor(tasks, null, 2);
+                exec.tasks.BE1.scope = 'backend';
+                exec.tasks.BE2.scope = 'backend';
+                exec.tasks.FE1.scope = 'frontend';
+                exec.tasks.INT1.scope = 'integration';
+
+                exec.markRunning('BE1');
+                exec.markRunning('FE1');
+
+                expect(exec.totalRunning()).toBe(2);
+                expect(exec.runningByScope.backend).toBe(1);
+                expect(exec.runningByScope.frontend).toBe(1);
+                expect(exec.runningByScope.integration).toBe(0);
+
+                // BE2 can run (backend at 1, limit is 2)
+                expect(exec.canExecute('BE2')).toBe(true);
+
+                // INT1 cannot run (total is 2, at limit)
+                expect(exec.canExecute('INT1')).toBe(false);
+            });
+
+            test('should handle counter cleanup on task failure', () => {
+                state.isMultiRepo.mockReturnValue(true);
+
+                const tasks = {
+                    TASK1: { deps: [], status: 'running' },
+                    TASK2: { deps: [], status: 'pending' },
+                };
+                const exec = new DAGExecutor(tasks, null, 1);
+                exec.tasks.TASK1.scope = 'backend';
+                exec.tasks.TASK2.scope = 'backend';
+                exec.running.add('TASK1');
+                exec.runningByScope.backend = 1;
+
+                // Simulate task failure
+                exec.markComplete('TASK1', 'failed');
+
+                // TASK2 should now be able to execute
+                expect(exec.canExecute('TASK2')).toBe(true);
+            });
+        });
+
+        describe('runningByScope initialization', () => {
+            test('should initialize runningByScope with all zeros', () => {
+                const tasks = { TASK1: { deps: [], status: 'pending' } };
+                const exec = new DAGExecutor(tasks);
+
+                expect(exec.runningByScope).toEqual({
+                    backend: 0,
+                    frontend: 0,
+                    integration: 0,
+                });
+            });
         });
     });
 });

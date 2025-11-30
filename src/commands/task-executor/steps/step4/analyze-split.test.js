@@ -4,7 +4,7 @@ const path = require('path');
 jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
 }));
 
 // Import after mocks
@@ -13,7 +13,7 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
 
 describe('analyze-split', () => {
     const mockTask = 'TASK1';
-    const mockTaskFolder = '/test/.claudiomiro/TASK1';
+    const mockTaskFolder = '/test/.claudiomiro/task-executor/TASK1';
 
     beforeEach(() => {
         jest.clearAllMocks();
@@ -78,11 +78,11 @@ describe('analyze-split', () => {
                 'utf-8',
             );
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Carefully analyze the task located at: /test/.claudiomiro/TASK1'),
+                expect.stringContaining('Carefully analyze the task located at: /test/.claudiomiro/task-executor/TASK1'),
                 mockTask,
             );
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Evaluate complexity and parallelism for /test/.claudiomiro'),
+                expect.stringContaining('Evaluate complexity and parallelism for /test/.claudiomiro/task-executor'),
                 mockTask,
             );
             expect(fs.writeFileSync).toHaveBeenCalledWith(
@@ -115,7 +115,7 @@ describe('analyze-split', () => {
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Analyze task at: /test/.claudiomiro/TASK1'),
+                expect.stringContaining('Analyze task at: /test/.claudiomiro/task-executor/TASK1'),
                 mockTask,
             );
             expect(fs.writeFileSync).not.toHaveBeenCalled();
@@ -125,7 +125,7 @@ describe('analyze-split', () => {
         test('should verify placeholder replacement in prompt', async () => {
             // Arrange
             const mockTask2 = 'TASK2';
-            const _mockTaskFolder2 = '/test/.claudiomiro/TASK2';
+            const _mockTaskFolder2 = '/test/.claudiomiro/task-executor/TASK2';
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('split.txt')) return false;
@@ -148,11 +148,11 @@ describe('analyze-split', () => {
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Task folder: /test/.claudiomiro/TASK2'),
+                expect.stringContaining('Task folder: /test/.claudiomiro/task-executor/TASK2'),
                 mockTask2,
             );
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Claudiomiro folder: /test/.claudiomiro'),
+                expect.stringContaining('Claudiomiro folder: /test/.claudiomiro/task-executor'),
                 mockTask2,
             );
             expect(executeClaude).toHaveBeenCalledWith(
@@ -189,7 +189,7 @@ describe('analyze-split', () => {
             await expect(analyzeSplit(mockTask)).rejects.toThrow('Claude execution failed');
 
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Analyze task at: /test/.claudiomiro/TASK1'),
+                expect.stringContaining('Analyze task at: /test/.claudiomiro/task-executor/TASK1'),
                 mockTask,
             );
             expect(fs.writeFileSync).not.toHaveBeenCalled();

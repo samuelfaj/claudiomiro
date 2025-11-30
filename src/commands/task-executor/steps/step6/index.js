@@ -6,6 +6,78 @@ const { smartCommit } = require('../../../../shared/services/git-commit');
 const { isFullyImplementedAsync } = require('../../utils/validation');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
+const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const { curateInsights } = require('./curate-insights');
+
+/**
+ * Commits changes based on task scope for multi-repo support
+ * @param {string} task - Task identifier
+ * @param {string|null} scope - Task scope ('backend', 'frontend', 'integration', or null)
+ * @param {string} commitMessage - Commit message (taskName)
+ * @param {boolean} shouldPush - Whether to push changes to remote
+ */
+const commitForScope = async (task, scope, commitMessage, shouldPush) => {
+    if (!state.isMultiRepo()) {
+        // Single-repo mode: commit to default folder
+        await smartCommit({ taskName: task, shouldPush, createPR: false });
+        return;
+    }
+
+    const gitMode = state.getGitMode();
+
+    const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+    const stateManager = ParallelStateManager.getInstance();
+    const isUIActive = stateManager && stateManager.isUIRendererActive();
+
+    if (gitMode === 'monorepo') {
+        // Monorepo: single commit covers both repos
+        await smartCommit({ taskName: task, shouldPush, createPR: false });
+        if (!isUIActive) logger.info(`Committed ${task} to monorepo`);
+        return;
+    }
+
+    // Separate repos: commit based on scope
+    switch (scope) {
+        case 'backend':
+            await smartCommit({
+                cwd: state.getRepository('backend'),
+                taskName: task,
+                shouldPush,
+                createPR: false,
+            });
+            if (!isUIActive) logger.info(`Committed ${task} to backend repo`);
+            break;
+
+        case 'frontend':
+            await smartCommit({
+                cwd: state.getRepository('frontend'),
+                taskName: task,
+                shouldPush,
+                createPR: false,
+            });
+            if (!isUIActive) logger.info(`Committed ${task} to frontend repo`);
+            break;
+
+        case 'integration':
+            // Integration: commit to both (backend first per clarification)
+            await smartCommit({
+                cwd: state.getRepository('backend'),
+                taskName: task,
+                shouldPush,
+                createPR: false,
+            });
+            if (!isUIActive) logger.info(`Committed ${task} to backend repo`);
+
+            await smartCommit({
+                cwd: state.getRepository('frontend'),
+                taskName: task,
+                shouldPush,
+                createPR: false,
+            });
+            if (!isUIActive) logger.info(`Committed ${task} to frontend repo`);
+            break;
+    }
+};
 
 /**
  * Step 6: Code Review
@@ -29,22 +101,48 @@ const step6 = async (task, shouldPush = true) => {
     const completionResult = await isFullyImplementedAsync(folder('TODO.md'));
     if (completionResult.completed) {
         try {
-            // Use smartCommit: tries shell + Ollama first, falls back to Claude on error
-            const commitResult = await smartCommit({
-                taskName: task,
-                shouldPush,
-                createPR: false,
-            });
+            // Parse scope for multi-repo commit routing
+            const taskMdPath = folder('TASK.md');
+            const taskMd = fs.existsSync(taskMdPath) ? fs.readFileSync(taskMdPath, 'utf-8') : '';
+            const scope = parseTaskScope(taskMd);
 
-            if (commitResult.method === 'shell') {
-                logger.debug('[Step6] Commit via shell (saved Claude tokens)');
+            // Validate scope in multi-repo mode
+            if (state.isMultiRepo()) {
+                validateScope(scope, true);
+            }
+
+            // Use scope-aware commit
+            await commitForScope(task, scope, task, shouldPush);
+
+            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+            const stateManager = ParallelStateManager.getInstance();
+            const isUIActive = stateManager && stateManager.isUIRendererActive();
+
+            if (!isUIActive) {
+                logger.debug('[Step6] Commit completed');
+            }
+            try {
+                await curateInsights(task, {
+                    todoPath: folder('TODO.md'),
+                    contextPath: folder('CONTEXT.md'),
+                    codeReviewPath: folder('CODE_REVIEW.md'),
+                    reflectionPath: folder('REFLECTION.md'),
+                });
+            } catch (curationError) {
+                if (!isUIActive) {
+                    logger.warning(`[Step6] Insight curation skipped: ${curationError.message}`);
+                }
             }
         } catch (error) {
             // Log but don't block execution
-            logger.warning('⚠️  Commit failed in step6, continuing anyway:', error.message);
+            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+            const stateManager = ParallelStateManager.getInstance();
+            if (!stateManager || !stateManager.isUIRendererActive()) {
+                logger.warning('⚠️  Commit failed in step6, continuing anyway:', error.message);
+            }
         }
     } else {
-    // If review failed, check if we need deep re-analysis
+        // If review failed, check if we need deep re-analysis
         if (fs.existsSync(folder('info.json'))) {
             const json = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
             // Every 3 attempts, rewrite TODO from scratch

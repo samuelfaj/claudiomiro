@@ -1,0 +1,64 @@
+FAIL src/commands/loop-fixes/executor.test.js
+  src/commands/loop-fixes/executor.js
+    countPendingItems()
+      ✓ should return 0 when file does not exist (3 ms)
+      ✓ should return 0 when file is empty (2 ms)
+      ✓ should count pending items correctly
+      ✓ should return 0 when all items are completed
+      ✓ should handle read errors gracefully (3 ms)
+    countCompletedItems()
+      ✓ should return 0 when file does not exist
+      ✓ should count completed items correctly (1 ms)
+      ✓ should handle case-insensitive [X] markers
+    initializeFolder()
+      ✓ should create .claudiomiro folder if it does not exist (1 ms)
+      ✓ should not create folder if it already exists
+      ✓ should call state.setFolder if claudiomiroFolder is not defined
+    loopFixes()
+      ✓ should throw error when prompt is empty (20 ms)
+      ✓ should throw error when prompt is null
+      ✓ should throw error when prompt is only whitespace (1 ms)
+      ✓ should throw error when prompt.md is not found
+      ✓ should throw error when verification-prompt.md is not found
+      ✓ should complete successfully after verification passes (CRITICAL_REVIEW_OVERVIEW.md + CRITICAL_REVIEW_PASSED.md) (1 ms)
+      ✓ should continue loop when verification finds new tasks (5 ms)
+      ✓ should iterate multiple times until CRITICAL_REVIEW_OVERVIEW.md is created then verify (2 ms)
+      ✓ should throw error when max iterations reached without completion (1 ms)
+      ✓ should throw error when max iterations reached during verification (2 ms)
+      ✓ should handle Claude execution failure (1 ms)
+      ✓ should replace placeholders in prompt template (1 ms)
+      ✓ should replace placeholders in verification prompt template (5 ms)
+      ✓ should handle unlimited iterations (Infinity) (1 ms)
+      ✓ should log iteration progress
+      ✓ should log summary when issues were fixed
+      ✓ should truncate long prompts in log output
+      ✓ should display pending and completed counts during iteration
+      ✕ should delete CRITICAL_REVIEW_OVERVIEW.md when entering verification mode (2 ms)
+
+  ● src/commands/loop-fixes/executor.js › loopFixes() › should delete CRITICAL_REVIEW_OVERVIEW.md when entering verification mode
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: StringContaining "Starting verification"
+    Received
+           1: "🔄 Starting loop-fixes..."
+           2: "📝 Prompt: \"Test prompt\""
+           3: "🔄 Max iterations: 10"
+
+    Number of calls: 14
+
+      752 |
+      753 |             expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('CRITICAL_REVIEW_OVERVIEW.md'));
+    > 754 |             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Starting verification'));
+          |                                 ^
+      755 |         });
+      756 |     });
+      757 | });
+
+      at Object.toHaveBeenCalledWith (src/commands/loop-fixes/executor.test.js:754:33)
+
+Test Suites: 1 failed, 1 total
+Tests:       1 failed, 29 passed, 30 total
+Snapshots:   0 total
+Time:        0.67 s, estimated 2 s
+Ran all test suites matching /src\/commands\/loop-fixes\/executor.test.js/i.

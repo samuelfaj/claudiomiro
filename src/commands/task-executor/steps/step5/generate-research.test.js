@@ -3,7 +3,7 @@ const fs = require('fs');
 jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     startSpinner: jest.fn(),
@@ -72,6 +72,7 @@ describe('generate-research', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('RESEARCH PHASE: Deep Context Analysis'),
                 mockTask,
+                undefined, // cwd is undefined when not in multi-repo mode
             );
         });
 

@@ -5,11 +5,12 @@ const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
 const { step4, step5, step6, step7 } = require('../steps');
 const { isFullyImplementedAsync, hasApprovedCodeReview } = require('../utils/validation');
-const ParallelStateManager = require('./parallel-state-manager');
+const ParallelStateManager = require('../../../shared/executors/parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
 const { resolveDeadlock } = require('./deadlock-resolver');
+const { parseTaskScope } = require('../utils/scope-parser');
 
 const CORE_COUNT = Math.max(1, os.cpus().length);
 
@@ -23,14 +24,118 @@ class DAGExecutor {
         this.maxConcurrent = maxConcurrent || defaultMax;
         this.running = new Set(); // Tasks atualmente em execução
 
+        // Scope-aware concurrency tracking
+        this.runningByScope = { backend: 0, frontend: 0, integration: 0 };
+
         // Deadlock detection state
         this._deadlockCounter = 0;
         this._deadlockResolutionAttempts = 0;
         this._lastPendingTasksLog = 0; // Throttle for pending tasks log
 
+        // Initialize task scopes from TASK.md files
+        this._initializeTasks(tasks);
+
         // Initialize ParallelStateManager
         this.stateManager = new ParallelStateManager();
         this.stateManager.initialize(tasks);
+    }
+
+    /**
+     * Initialize tasks with scope information from TASK.md files
+     * @param {Object} tasks - Task object { TASKN: { deps: [], status: 'pending' } }
+     */
+    _initializeTasks(tasks) {
+        for (const taskName of Object.keys(tasks)) {
+            try {
+                const taskMdPath = path.join(state.claudiomiroFolder, taskName, 'TASK.md');
+                if (fs.existsSync(taskMdPath)) {
+                    const content = fs.readFileSync(taskMdPath, 'utf8');
+                    const scope = parseTaskScope(content);
+                    tasks[taskName].scope = scope || 'integration';
+                } else {
+                    logger.warning(`No TASK.md found for ${taskName}, defaulting to integration scope`);
+                    tasks[taskName].scope = 'integration';
+                }
+            } catch (error) {
+                logger.warning(`Error reading TASK.md for ${taskName}: ${error.message}, defaulting to integration scope`);
+                tasks[taskName].scope = 'integration';
+            }
+        }
+    }
+
+    /**
+     * Returns total number of running tasks across all scopes
+     * @returns {number} Total running tasks
+     */
+    totalRunning() {
+        return Object.values(this.runningByScope).reduce((a, b) => a + b, 0);
+    }
+
+    /**
+     * Check if a task can execute based on scope-aware concurrency
+     * @param {string} taskName - Name of the task
+     * @returns {boolean} True if task can execute
+     */
+    canExecute(taskName) {
+        const task = this.tasks[taskName];
+        if (!task) return false;
+
+        // Check dependencies are complete
+        const depsComplete = task.deps.every(dep =>
+            this.tasks[dep] && this.tasks[dep].status === 'completed',
+        );
+        if (!depsComplete) return false;
+
+        const scope = task.scope || 'integration';
+
+        // Single-repo mode: use standard total limit
+        if (!state.isMultiRepo()) {
+            return this.totalRunning() < this.maxConcurrent;
+        }
+
+        // Multi-repo mode: scope-based limits
+        if (scope === 'integration') {
+            // Integration tasks respect global limit
+            return this.totalRunning() < this.maxConcurrent;
+        }
+
+        // Backend/frontend tasks can run independently per scope
+        return this.runningByScope[scope] < this.maxConcurrent;
+    }
+
+    /**
+     * Mark a task as running and update scope counter
+     * @param {string} taskName - Name of the task
+     */
+    markRunning(taskName) {
+        const task = this.tasks[taskName];
+        if (!task) return;
+
+        task.status = 'running';
+        this.running.add(taskName);
+
+        const scope = task.scope || 'integration';
+        if (this.runningByScope[scope] !== undefined) {
+            this.runningByScope[scope]++;
+        }
+    }
+
+    /**
+     * Mark a task as completed and update scope counter
+     * @param {string} taskName - Name of the task
+     * @param {string} status - Final status ('completed' or 'failed')
+     */
+    markComplete(taskName, status = 'completed') {
+        const task = this.tasks[taskName];
+        if (!task) return;
+
+        task.status = status;
+        this.running.delete(taskName);
+
+        const scope = task.scope || 'integration';
+        if (this.runningByScope[scope] !== undefined && this.runningByScope[scope] > 0) {
+            this.runningByScope[scope]--;
+        }
     }
 
     /**
@@ -57,7 +162,7 @@ class DAGExecutor {
         return Object.entries(this.tasks)
             .filter(([_name, task]) =>
                 task.status === 'pending' &&
-        task.deps.every(dep => this.tasks[dep] && this.tasks[dep].status === 'completed'),
+                task.deps.every(dep => this.tasks[dep] && this.tasks[dep].status === 'completed'),
             )
             .map(([name]) => name);
     }
@@ -78,19 +183,38 @@ class DAGExecutor {
             if (!this.tasks[_taskName]) {
                 // New task (e.g., from split) - add it
                 this.tasks[_taskName] = taskData;
+
+                // Initialize scope for new task
+                try {
+                    const taskMdPath = path.join(state.claudiomiroFolder, _taskName, 'TASK.md');
+                    if (fs.existsSync(taskMdPath)) {
+                        const content = fs.readFileSync(taskMdPath, 'utf8');
+                        const scope = parseTaskScope(content);
+                        this.tasks[_taskName].scope = scope || 'integration';
+                    } else {
+                        this.tasks[_taskName].scope = 'integration';
+                    }
+                } catch {
+                    this.tasks[_taskName].scope = 'integration';
+                }
+
                 this.stateManager.taskStates.set(_taskName, {
                     status: taskData.status,
                     step: null,
                     message: null,
                 });
-                logger.info(`📥 Added new task: ${_taskName} (deps: ${taskData.deps.join(', ') || 'none'})`);
+                if (!this.stateManager.isUIRendererActive()) {
+                    logger.info(`📥 Added new task: ${_taskName} (deps: ${taskData.deps.join(', ') || 'none'}, scope: ${this.tasks[_taskName].scope})`);
+                }
                 hasChanges = true;
             } else {
                 // Existing task - update deps but preserve status if running/completed
                 const oldDeps = this.tasks[_taskName].deps.join(',');
                 const newDeps = taskData.deps.join(',');
                 if (oldDeps !== newDeps) {
-                    logger.info(`🔄 Updated deps for ${_taskName}: [${oldDeps}] → [${newDeps}]`);
+                    if (!this.stateManager.isUIRendererActive()) {
+                        logger.info(`🔄 Updated deps for ${_taskName}: [${oldDeps}] → [${newDeps}]`);
+                    }
                     hasChanges = true;
                 }
                 this.tasks[_taskName].deps = taskData.deps;
@@ -98,7 +222,9 @@ class DAGExecutor {
                 if (this.tasks[_taskName].status === 'pending' && taskData.status === 'completed') {
                     this.tasks[_taskName].status = 'completed';
                     this.stateManager.updateTaskStatus(_taskName, 'completed');
-                    logger.info(`✅ ${_taskName} marked as completed from graph`);
+                    if (!this.stateManager.isUIRendererActive()) {
+                        logger.info(`✅ ${_taskName} marked as completed from graph`);
+                    }
                     hasChanges = true;
                 }
             }
@@ -107,7 +233,9 @@ class DAGExecutor {
         // Remove tasks that no longer exist in the graph (e.g., parent task that was split)
         for (const _taskName of Object.keys(this.tasks)) {
             if (!newGraph[_taskName] && this.tasks[_taskName].status === 'pending') {
-                logger.info(`🗑️ Removed task no longer in graph: ${_taskName}`);
+                if (!this.stateManager.isUIRendererActive()) {
+                    logger.info(`🗑️ Removed task no longer in graph: ${_taskName}`);
+                }
                 delete this.tasks[_taskName];
                 this.stateManager.taskStates.delete(_taskName);
                 hasChanges = true;
@@ -123,23 +251,23 @@ class DAGExecutor {
    */
     async executeWave() {
         const ready = this.getReadyTasks();
-        const availableSlots = this.maxConcurrent - this.running.size;
-        const toExecute = ready.slice(0, availableSlots);
+
+        // Filter by canExecute (scope-aware concurrency)
+        const toExecute = ready.filter(taskName => this.canExecute(taskName));
 
         if (toExecute.length === 0) {
             return false;
         }
 
-        // Marca como running
+        // Mark as running using scope-aware method
         toExecute.forEach(task => {
-            this.tasks[task].status = 'running';
-            this.running.add(task);
+            this.markRunning(task);
         });
 
-        // Executa em paralelo com Promise.allSettled para permitir controle individual
+        // Execute in parallel with Promise.allSettled
         const promises = toExecute.map(task => this.executeTask(task));
 
-        // Aguarda cada promise individualmente e verifica se novas tarefas podem começar
+        // Wait for all to complete
         await Promise.allSettled(promises);
 
         return true;
@@ -159,10 +287,10 @@ class DAGExecutor {
             const todoPath = path.join(taskPath, 'TODO.md');
             const todoOldPath = path.join(taskPath, 'TODO.old.md');
 
-            if(
+            if (
                 fs.existsSync(codeReviewPath) &&
-        !fs.existsSync(todoPath) &&
-        fs.existsSync(todoOldPath)
+                !fs.existsSync(todoPath) &&
+                fs.existsSync(todoOldPath)
             ) {
                 fs.cpSync(todoOldPath, todoPath);
                 fs.rmSync(todoOldPath, { force: true });
@@ -180,8 +308,7 @@ class DAGExecutor {
             // Verifica se já está completa
             if (await isTaskApproved()) {
                 this.stateManager.updateTaskStatus(taskName, 'completed');
-                this.tasks[taskName].status = 'completed';
-                this.running.delete(taskName);
+                this.markComplete(taskName, 'completed');
                 return;
             }
 
@@ -191,8 +318,7 @@ class DAGExecutor {
             if (!fs.existsSync(todoPath)) {
                 if (!this.shouldRunStep(4)) {
                     this.stateManager.updateTaskStatus(taskName, 'completed');
-                    this.tasks[taskName].status = 'completed';
-                    this.running.delete(taskName);
+                    this.markComplete(taskName, 'completed');
                     return;
                 }
                 this.stateManager.updateTaskStep(taskName, 'Step 4 - Research and planning');
@@ -201,8 +327,7 @@ class DAGExecutor {
                 // Check if task was split (original folder no longer exists)
                 if (!fs.existsSync(taskPath)) {
                     this.stateManager.updateTaskStatus(taskName, 'completed');
-                    this.tasks[taskName].status = 'completed';
-                    this.running.delete(taskName);
+                    this.markComplete(taskName, 'completed');
                     logger.info(`✅ ${taskName} was split into subtasks`);
                     return;
                 }
@@ -211,8 +336,7 @@ class DAGExecutor {
             // Se step 4 foi executado e não devemos executar step 5, para aqui
             if (!this.shouldRunStep(5)) {
                 this.stateManager.updateTaskStatus(taskName, 'completed');
-                this.tasks[taskName].status = 'completed';
-                this.running.delete(taskName);
+                this.markComplete(taskName, 'completed');
                 return;
             }
 
@@ -245,8 +369,7 @@ class DAGExecutor {
                 // Se step 5 foi executado e não devemos executar step 6, para aqui
                 if (!this.shouldRunStep(6)) {
                     this.stateManager.updateTaskStatus(taskName, 'completed');
-                    this.tasks[taskName].status = 'completed';
-                    this.running.delete(taskName);
+                    this.markComplete(taskName, 'completed');
                     return;
                 }
 
@@ -270,6 +393,7 @@ class DAGExecutor {
 
             if (attempts >= maxAttempts) {
                 this.stateManager.updateTaskStatus(taskName, 'failed');
+                this.markComplete(taskName, 'failed');
                 const errorMessage = lastStep5Error
                     ? `Maximum attempts (${maxAttempts}) reached for ${taskName}. Last error: ${lastStep5Error.message}`
                     : `Maximum attempts (${maxAttempts}) reached for ${taskName}`;
@@ -277,13 +401,11 @@ class DAGExecutor {
             }
 
             this.stateManager.updateTaskStatus(taskName, 'completed');
-            this.tasks[taskName].status = 'completed';
-            this.running.delete(taskName);
+            this.markComplete(taskName, 'completed');
             logger.success(`✅ ${taskName} completed successfully`);
         } catch (error) {
             this.stateManager.updateTaskStatus(taskName, 'failed');
-            this.tasks[taskName].status = 'failed';
-            this.running.delete(taskName);
+            this.markComplete(taskName, 'failed');
             logger.error(`❌ ${taskName} failed: ${error.message}`);
             throw error; // Propaga o erro
         }
@@ -298,6 +420,9 @@ class DAGExecutor {
         const isCustom = this.maxConcurrent !== defaultMax;
 
         logger.info(`Starting DAG executor with max ${this.maxConcurrent} concurrent tasks${isCustom ? ' (custom)' : ` (${coreCount} cores × 2, capped at 5)`}`);
+        if (state.isMultiRepo()) {
+            logger.info(`Multi-repo mode: ${state.getGitMode()}, backend and frontend tasks can run in parallel`);
+        }
         logger.newline();
 
         // Initialize and start UI renderer
@@ -324,29 +449,25 @@ class DAGExecutor {
                         const missingDeps = t.deps.filter(d => !this.tasks[d] || this.tasks[d].status !== 'completed');
                         return `${name}(waiting: ${missingDeps.join(',') || 'ready!'})`;
                     });
-                if (pendingTasksDebug.length > 0 && this.running.size === 0) {
+                if (pendingTasksDebug.length > 0 && this.running.size === 0 && !this.stateManager.isUIRendererActive()) {
                     logger.info(`⏳ Pending tasks: ${pendingTasksDebug.join(', ')}`);
                     this._lastPendingTasksLog = now;
                 }
             }
 
-            // Verifica se há slots disponíveis e tasks prontas
+            // Verifica se há slots disponíveis e tasks prontas (scope-aware)
             const ready = this.getReadyTasks();
-            const availableSlots = this.maxConcurrent - this.running.size;
+            const toExecute = ready.filter(taskName => this.canExecute(taskName));
 
             // Inicia novas tasks se houver slots disponíveis
-            if (ready.length > 0 && availableSlots > 0) {
-                const toExecute = ready.slice(0, availableSlots);
-
+            if (toExecute.length > 0) {
                 for (const taskName of toExecute) {
-                    this.tasks[taskName].status = 'running';
-                    this.running.add(taskName);
+                    this.markRunning(taskName);
 
                     // Cria a promise da task e armazena no mapa
                     const taskPromise = this.executeTask(taskName)
                         .finally(() => {
-                            // Remove do running set quando completar
-                            this.running.delete(taskName);
+                            // Note: markComplete is called in executeTask
                             runningPromises.delete(taskName);
                         });
 
@@ -591,25 +712,38 @@ class DAGExecutor {
    * @returns {boolean} true se executou pelo menos uma task
    */
     async executeStep2Wave() {
-    // Step 4: ignora dependências - todas as tarefas podem planejar em paralelo
-        const ready = Object.entries(this.tasks)
+        // Step 4: ignora dependências - todas as tarefas podem planejar em paralelo
+        // But still respect scope-based concurrency in multi-repo mode
+        const pending = Object.entries(this.tasks)
             .filter(([_name, task]) => task.status === 'pending')
             .map(([name]) => name);
 
-        const availableSlots = this.maxConcurrent - this.running.size;
-        const toExecute = ready.slice(0, availableSlots);
+        // Filter by scope-aware capacity (ignores dependency check for step2)
+        const toExecute = pending.filter(taskName => {
+            const task = this.tasks[taskName];
+            const scope = task.scope || 'integration';
+
+            if (!state.isMultiRepo()) {
+                return this.totalRunning() < this.maxConcurrent;
+            }
+
+            if (scope === 'integration') {
+                return this.totalRunning() < this.maxConcurrent;
+            }
+
+            return this.runningByScope[scope] < this.maxConcurrent;
+        });
 
         if (toExecute.length === 0) {
             return false;
         }
 
-        // Marca como running
+        // Mark as running using scope-aware method
         toExecute.forEach(task => {
-            this.tasks[task].status = 'running';
-            this.running.add(task);
+            this.markRunning(task);
         });
 
-        // Executa em paralelo
+        // Execute in parallel
         const promises = toExecute.map(task => this.executeStep2Task(task));
         await Promise.allSettled(promises);
 
@@ -630,16 +764,14 @@ class DAGExecutor {
             // Verifica se já tem TODO.md
             if (fs.existsSync(todoPath)) {
                 this.stateManager.updateTaskStatus(_taskName, 'completed');
-                this.tasks[_taskName].status = 'completed';
-                this.running.delete(_taskName);
+                this.markComplete(_taskName, 'completed');
                 return;
             }
 
             // Step 4: Planejamento (PROMPT.md → TODO.md)
             if (!this.shouldRunStep(4)) {
                 this.stateManager.updateTaskStatus(_taskName, 'completed');
-                this.tasks[_taskName].status = 'completed';
-                this.running.delete(_taskName);
+                this.markComplete(_taskName, 'completed');
                 return;
             }
 
@@ -649,20 +781,17 @@ class DAGExecutor {
             // Check if task was split (original folder no longer exists)
             if (!fs.existsSync(taskPath)) {
                 this.stateManager.updateTaskStatus(_taskName, 'completed');
-                this.tasks[_taskName].status = 'completed';
-                this.running.delete(_taskName);
+                this.markComplete(_taskName, 'completed');
                 logger.info(`✅ ${_taskName} was split into subtasks`);
                 return;
             }
 
             this.stateManager.updateTaskStatus(_taskName, 'completed');
-            this.tasks[_taskName].status = 'completed';
-            this.running.delete(_taskName);
+            this.markComplete(_taskName, 'completed');
             logger.success(`✅ ${_taskName} step 4 completed successfully`);
         } catch (error) {
             this.stateManager.updateTaskStatus(_taskName, 'failed');
-            this.tasks[_taskName].status = 'failed';
-            this.running.delete(_taskName);
+            this.markComplete(_taskName, 'failed');
             logger.error(`❌ ${_taskName} failed: ${error.message}`);
             throw error; // Propaga o erro
         }

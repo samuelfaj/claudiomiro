@@ -18,6 +18,11 @@ Detailed documentation for each Claudiomiro command:
 - [Loop Fixes](./commands/loop-fixes.md) - Iterative issue detection and fixing
 - [Help](./commands/help.md) - Help and version information
 
+### Advanced Features
+
+- [Multi-Repository Mode](./multi-repository-mode.md) - Working with backend + frontend codebases
+- [Local LLM Setup](./HOW-TO-RUN-WITH-LOCAL-LLM.md) - Using Ollama for token optimization
+
 ### AI Executors
 
 Guides for using different AI providers:
@@ -44,6 +49,9 @@ claudiomiro --fix-command="npm test"
 
 # Loop fixes with custom prompt
 claudiomiro --loop-fixes --prompt="Fix security issues"
+
+# Multi-repository mode (backend + frontend)
+claudiomiro --backend=./api --frontend=./web --prompt="Add user authentication"
 
 # Show help
 claudiomiro --help

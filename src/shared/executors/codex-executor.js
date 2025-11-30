@@ -36,10 +36,12 @@ const executeCodex = (text, taskName = null) => {
 
         const command = `codex exec --json --full-auto --sandbox danger-full-access "$(cat '${tmpFile}')"`;
 
-        logger.stopSpinner();
-        logger.command('codex exec --json --full-auto --sandbox danger-full-access ...');
-        logger.separator();
-        logger.newline();
+        if (!suppressStreamingLogs) {
+            logger.stopSpinner();
+            logger.command('codex exec --json --full-auto --sandbox danger-full-access ...');
+            logger.separator();
+            logger.newline();
+        }
 
         const codex = spawn('sh', ['-c', command], {
             cwd: state.folder,
@@ -129,7 +131,9 @@ const executeCodex = (text, taskName = null) => {
             for (const line of lines) {
                 const formatted = processCodexEvent(line);
                 if (formatted) {
-                    logMessage(formatted);
+                    if (!suppressStreamingLogs) {
+                        logMessage(formatted);
+                    }
                     if (stateManager && taskName) {
                         stateManager.updateClaudeMessage(taskName, formatted);
                     }

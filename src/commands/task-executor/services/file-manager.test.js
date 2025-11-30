@@ -1,10 +1,18 @@
 const fs = require('fs');
+const os = require('os');
 const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
 const { startFresh } = require('./file-manager');
 
 // Mock modules
 jest.mock('fs');
+jest.mock('os', () => {
+    const actual = jest.requireActual('os');
+    return {
+        ...actual,
+        tmpdir: jest.fn(() => '/tmp/claudiomiro-tests'),
+    };
+});
 jest.mock('../../../shared/utils/logger');
 jest.mock('../../../shared/config/state');
 
@@ -15,12 +23,15 @@ describe('file-manager', () => {
         jest.resetAllMocks();
 
         // Set default mock implementation for state
-        state.claudiomiroFolder = '/test/path/.claudiomiro';
+        state.claudiomiroFolder = '/test/path/.claudiomiro/task-executor';
 
         // Reset fs mocks to default (no-op) implementations
         fs.existsSync.mockReturnValue(false);
         fs.rmSync.mockImplementation(() => {});
         fs.mkdirSync.mockImplementation(() => {});
+        fs.cpSync = jest.fn();
+        fs.readdirSync = jest.fn(() => []);
+        os.tmpdir.mockReturnValue('/tmp/claudiomiro-tests');
     });
 
     describe('startFresh()', () => {
@@ -35,9 +46,9 @@ describe('file-manager', () => {
                 // Assert
                 expect(logger.task).toHaveBeenCalledWith('Cleaning up previous files...');
                 expect(logger.indent).toHaveBeenCalled();
-                expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
-                expect(fs.rmSync).toHaveBeenCalledWith('/test/path/.claudiomiro', { recursive: true });
-                expect(logger.success).toHaveBeenCalledWith('/test/path/.claudiomiro removed\n');
+                expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor');
+                expect(fs.rmSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor', { recursive: true });
+                expect(logger.success).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor removed\n');
                 expect(fs.mkdirSync).not.toHaveBeenCalled();
                 expect(logger.outdent).toHaveBeenCalled();
             });
@@ -71,10 +82,10 @@ describe('file-manager', () => {
                 // Assert
                 expect(logger.task).toHaveBeenCalledWith('Cleaning up previous files...');
                 expect(logger.indent).toHaveBeenCalled();
-                expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
-                expect(fs.rmSync).toHaveBeenCalledWith('/test/path/.claudiomiro', { recursive: true });
-                expect(logger.success).toHaveBeenCalledWith('/test/path/.claudiomiro removed\n');
-                expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
+                expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor');
+                expect(fs.rmSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor', { recursive: true });
+                expect(logger.success).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor removed\n');
+                expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor', { recursive: true });
                 expect(logger.outdent).toHaveBeenCalled();
             });
 
@@ -119,7 +130,7 @@ describe('file-manager', () => {
                 // Assert
                 expect(logger.task).toHaveBeenCalledWith('Cleaning up previous files...');
                 expect(logger.indent).toHaveBeenCalled();
-                expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
+                expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor');
                 expect(fs.rmSync).not.toHaveBeenCalled();
                 expect(logger.success).not.toHaveBeenCalled();
                 expect(fs.mkdirSync).not.toHaveBeenCalled();
@@ -136,10 +147,10 @@ describe('file-manager', () => {
                 // Assert
                 expect(logger.task).toHaveBeenCalledWith('Cleaning up previous files...');
                 expect(logger.indent).toHaveBeenCalled();
-                expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
+                expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor');
                 expect(fs.rmSync).not.toHaveBeenCalled();
                 expect(logger.success).not.toHaveBeenCalled();
-                expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
+                expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor', { recursive: true });
                 expect(logger.outdent).toHaveBeenCalled();
             });
 
@@ -173,6 +184,60 @@ describe('file-manager', () => {
 
                 // Assert
                 expect(callOrder).toEqual(['task', 'indent', 'outdent']);
+            });
+        });
+
+        describe('insights preservation', () => {
+            it('should backup and restore insights folder when present', () => {
+                // Arrange
+                fs.existsSync.mockImplementation((target) => {
+                    if (target === '/test/path/.claudiomiro/task-executor') {
+                        return true;
+                    }
+                    if (target === '/test/path/.claudiomiro/task-executor/insights') {
+                        return true;
+                    }
+                    return false;
+                });
+
+                fs.readdirSync.mockImplementation((target) => {
+                    if (target === '/test/path/.claudiomiro/task-executor/insights') {
+                        return ['project-insights.json'];
+                    }
+                    return [];
+                });
+
+                const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(1700000000000);
+                os.tmpdir.mockReturnValue('/tmp/claudiomiro-tests');
+
+                try {
+                    // Act
+                    startFresh(false);
+
+                    // Assert
+                    expect(fs.cpSync).toHaveBeenNthCalledWith(
+                        1,
+                        '/test/path/.claudiomiro/task-executor/insights',
+                        '/tmp/claudiomiro-tests/claudiomiro-insights-1700000000000',
+                        { recursive: true },
+                    );
+                    expect(fs.rmSync).toHaveBeenNthCalledWith(1, '/test/path/.claudiomiro/task-executor', { recursive: true });
+                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor', { recursive: true });
+                    expect(fs.cpSync).toHaveBeenNthCalledWith(
+                        2,
+                        '/tmp/claudiomiro-tests/claudiomiro-insights-1700000000000',
+                        '/test/path/.claudiomiro/task-executor/insights',
+                        { recursive: true },
+                    );
+                    expect(fs.rmSync).toHaveBeenNthCalledWith(
+                        2,
+                        '/tmp/claudiomiro-tests/claudiomiro-insights-1700000000000',
+                        { recursive: true },
+                    );
+                    expect(logger.info).toHaveBeenCalledWith('Insights preserved in /test/path/.claudiomiro/task-executor/insights');
+                } finally {
+                    nowSpy.mockRestore();
+                }
             });
         });
 
@@ -279,7 +344,7 @@ describe('file-manager', () => {
                 startFresh(false);
 
                 // Assert
-                expect(logger.success).toHaveBeenCalledWith('/test/path/.claudiomiro removed\n');
+                expect(logger.success).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor removed\n');
                 expect(callOrder.indexOf('success')).toBeGreaterThan(callOrder.indexOf('indent'));
             });
 
@@ -297,13 +362,13 @@ describe('file-manager', () => {
             it('should verify correct message format in success()', () => {
                 // Arrange
                 fs.existsSync.mockReturnValue(true);
-                state.claudiomiroFolder = '/custom/path/.claudiomiro';
+                state.claudiomiroFolder = '/custom/path/.claudiomiro/task-executor';
 
                 // Act
                 startFresh(false);
 
                 // Assert
-                expect(logger.success).toHaveBeenCalledWith('/custom/path/.claudiomiro removed\n');
+                expect(logger.success).toHaveBeenCalledWith('/custom/path/.claudiomiro/task-executor removed\n');
             });
 
             it('should call all logger methods in proper sequence for full flow', () => {
@@ -343,8 +408,8 @@ describe('file-manager', () => {
                     expect(() => startFresh(false)).toThrow('EACCES: permission denied, unlink');
                     expect(logger.task).toHaveBeenCalled();
                     expect(logger.indent).toHaveBeenCalled();
-                    expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
-                    expect(fs.rmSync).toHaveBeenCalledWith('/test/path/.claudiomiro', { recursive: true });
+                    expect(fs.existsSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor');
+                    expect(fs.rmSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor', { recursive: true });
                 });
 
                 it('should handle EPERM operation not permitted during rmSync', () => {
@@ -376,7 +441,7 @@ describe('file-manager', () => {
                     // Act & Assert
                     expect(() => startFresh(true)).toThrow('EACCES: permission denied, mkdir');
                     expect(fs.existsSync).toHaveBeenCalled();
-                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
+                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor', { recursive: true });
                 });
 
                 it('should handle EPERM operation not permitted during mkdirSync', () => {
@@ -418,7 +483,7 @@ describe('file-manager', () => {
 
                     // Act & Assert
                     expect(() => startFresh(true)).toThrow('ENOENT: no such file or directory, mkdir');
-                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro');
+                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/path/.claudiomiro/task-executor', { recursive: true });
                 });
             });
 
@@ -457,21 +522,21 @@ describe('file-manager', () => {
                     // Arrange
                     const error = new Error('EINVAL: invalid argument, stat');
                     error.code = 'EINVAL';
-                    state.claudiomiroFolder = 'invalid<>path/.claudiomiro';
+                    state.claudiomiroFolder = 'invalid<>path/.claudiomiro/task-executor';
                     fs.existsSync.mockImplementation(() => {
                         throw error;
                     });
 
                     // Act & Assert
                     expect(() => startFresh(false)).toThrow('EINVAL: invalid argument, stat');
-                    expect(fs.existsSync).toHaveBeenCalledWith('invalid<>path/.claudiomiro');
+                    expect(fs.existsSync).toHaveBeenCalledWith('invalid<>path/.claudiomiro/task-executor');
                 });
 
                 it('should handle ENAMETOOLONG path too long error', () => {
                     // Arrange
                     const error = new Error('ENAMETOOLONG: name too long');
                     error.code = 'ENAMETOOLONG';
-                    const longPath = '/test/' + 'a'.repeat(1000) + '/.claudiomiro';
+                    const longPath = '/test/' + 'a'.repeat(1000) + '/.claudiomiro/task-executor';
                     state.claudiomiroFolder = longPath;
                     fs.existsSync.mockImplementation(() => {
                         throw error;
@@ -518,7 +583,7 @@ describe('file-manager', () => {
             describe('nested directory scenarios', () => {
                 it('should handle deeply nested directory paths during removal', () => {
                     // Arrange
-                    const nestedPath = '/very/deep/nested/structure/with/many/levels/.claudiomiro';
+                    const nestedPath = '/very/deep/nested/structure/with/many/levels/.claudiomiro/task-executor';
                     state.claudiomiroFolder = nestedPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -533,7 +598,7 @@ describe('file-manager', () => {
 
                 it('should handle deeply nested directory paths during creation', () => {
                     // Arrange
-                    const nestedPath = '/very/deep/nested/structure/with/many/levels/.claudiomiro';
+                    const nestedPath = '/very/deep/nested/structure/with/many/levels/.claudiomiro/task-executor';
                     state.claudiomiroFolder = nestedPath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -542,12 +607,12 @@ describe('file-manager', () => {
 
                     // Assert
                     expect(fs.existsSync).toHaveBeenCalledWith(nestedPath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(nestedPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(nestedPath, { recursive: true });
                 });
 
                 it('should remove and recreate deeply nested directories', () => {
                     // Arrange
-                    const nestedPath = '/a/b/c/d/e/f/g/h/i/j/.claudiomiro';
+                    const nestedPath = '/a/b/c/d/e/f/g/h/i/j/.claudiomiro/task-executor';
                     state.claudiomiroFolder = nestedPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -556,14 +621,14 @@ describe('file-manager', () => {
 
                     // Assert
                     expect(fs.rmSync).toHaveBeenCalledWith(nestedPath, { recursive: true });
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(nestedPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(nestedPath, { recursive: true });
                 });
             });
 
             describe('special directory names', () => {
                 it('should handle directory names with spaces', () => {
                     // Arrange
-                    const spacedPath = '/test/with spaces/.claudiomiro';
+                    const spacedPath = '/test/with spaces/.claudiomiro/task-executor';
                     state.claudiomiroFolder = spacedPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -578,7 +643,7 @@ describe('file-manager', () => {
 
                 it('should handle directory names with special characters', () => {
                     // Arrange
-                    const specialPath = '/test/project-with_special.chars&numbers123/.claudiomiro';
+                    const specialPath = '/test/project-with_special.chars&numbers123/.claudiomiro/task-executor';
                     state.claudiomiroFolder = specialPath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -587,12 +652,12 @@ describe('file-manager', () => {
 
                     // Assert
                     expect(fs.existsSync).toHaveBeenCalledWith(specialPath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(specialPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(specialPath, { recursive: true });
                 });
 
                 it('should handle unicode directory names', () => {
                     // Arrange
-                    const unicodePath = '/test/项目文件系统/.claudiomiro';
+                    const unicodePath = '/test/项目文件系统/.claudiomiro/task-executor';
                     state.claudiomiroFolder = unicodePath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -606,7 +671,7 @@ describe('file-manager', () => {
 
                 it('should handle emoji in directory names', () => {
                     // Arrange
-                    const emojiPath = '/test/🚀project📁/.claudiomiro';
+                    const emojiPath = '/test/🚀project📁/.claudiomiro/task-executor';
                     state.claudiomiroFolder = emojiPath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -615,7 +680,7 @@ describe('file-manager', () => {
 
                     // Assert
                     expect(fs.existsSync).toHaveBeenCalledWith(emojiPath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(emojiPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(emojiPath, { recursive: true });
                 });
             });
 
@@ -623,7 +688,7 @@ describe('file-manager', () => {
                 it('should handle long directory names within limits', () => {
                     // Arrange
                     const longName = 'a'.repeat(200); // 200 characters, within typical limits
-                    const longPath = `/test/${longName}/.claudiomiro`;
+                    const longPath = `/test/${longName}/.claudiomiro/task-executor`;
                     state.claudiomiroFolder = longPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -641,7 +706,7 @@ describe('file-manager', () => {
                     for (let i = 0; i < 10; i++) {
                         segments.push('segment'.repeat(20)); // Each segment 140 chars
                     }
-                    const veryLongPath = '/' + segments.join('/') + '/.claudiomiro';
+                    const veryLongPath = '/' + segments.join('/') + '/.claudiomiro/task-executor';
                     state.claudiomiroFolder = veryLongPath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -650,14 +715,14 @@ describe('file-manager', () => {
 
                     // Assert
                     expect(fs.existsSync).toHaveBeenCalledWith(veryLongPath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(veryLongPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(veryLongPath, { recursive: true });
                 });
             });
 
             describe('edge case path patterns', () => {
                 it('should handle paths ending with dots', () => {
                     // Arrange
-                    const dotPath = '/test/project.. /.claudiomiro';
+                    const dotPath = '/test/project.. /.claudiomiro/task-executor';
                     state.claudiomiroFolder = dotPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -671,7 +736,7 @@ describe('file-manager', () => {
 
                 it('should handle paths with multiple consecutive slashes', () => {
                     // Arrange - note: Node.js normalizes double slashes, but we test what gets passed
-                    const slashPath = '/test//project///.claudiomiro';
+                    const slashPath = '/test//project///.claudiomiro/task-executor';
                     state.claudiomiroFolder = slashPath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -680,12 +745,12 @@ describe('file-manager', () => {
 
                     // Assert
                     expect(fs.existsSync).toHaveBeenCalledWith(slashPath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(slashPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(slashPath, { recursive: true });
                 });
 
                 it('should handle paths with trailing slash', () => {
                     // Arrange
-                    const trailingSlashPath = '/test/project/.claudiomiro/';
+                    const trailingSlashPath = '/test/project/.claudiomiro/task-executor/';
                     state.claudiomiroFolder = trailingSlashPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -715,7 +780,7 @@ describe('file-manager', () => {
 
                 it('should handle relative paths', () => {
                     // Arrange
-                    const relativePath = './project/.claudiomiro';
+                    const relativePath = './project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = relativePath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -724,12 +789,12 @@ describe('file-manager', () => {
 
                     // Assert
                     expect(fs.existsSync).toHaveBeenCalledWith(relativePath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(relativePath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(relativePath, { recursive: true });
                 });
 
                 it('should handle parent directory references', () => {
                     // Arrange
-                    const parentPath = '../current/project/.claudiomiro';
+                    const parentPath = '../current/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = parentPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -745,7 +810,7 @@ describe('file-manager', () => {
             describe('directory cleanup simulation', () => {
                 it('should simulate cleanup of directory with mixed content', () => {
                     // Arrange - Simulate a directory that contains files and subdirectories
-                    const contentPath = '/test/project/.claudiomiro';
+                    const contentPath = '/test/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = contentPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -759,7 +824,7 @@ describe('file-manager', () => {
 
                 it('should handle cleanup of empty directory', () => {
                     // Arrange - Empty directory scenario
-                    const emptyPath = '/test/empty/.claudiomiro';
+                    const emptyPath = '/test/empty/.claudiomiro/task-executor';
                     state.claudiomiroFolder = emptyPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -778,8 +843,8 @@ describe('file-manager', () => {
             describe('backup creation scenarios', () => {
                 it('should create backup before removing existing directory', () => {
                     // Arrange - This test will be applicable when backup functionality is implemented
-                    const originalPath = '/test/project/.claudiomiro';
-                    // Future: const backupPath = '/test/project/.claudiomiro.backup.20231201-120000';
+                    const originalPath = '/test/project/.claudiomiro/task-executor';
+                    // Future: const backupPath = '/test/project/.claudiomiro/task-executor.backup.20231201-120000';
                     state.claudiomiroFolder = originalPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -795,13 +860,13 @@ describe('file-manager', () => {
                     expect(logger.success).toHaveBeenCalledWith(originalPath + ' removed\n');
 
                     // Future assertions when backup is implemented:
-                    // expect(fs.mkdirSync).toHaveBeenCalledWith(backupPath);
+                    // expect(fs.mkdirSync).toHaveBeenCalledWith(backupPath, { recursive: true });
                     // expect(logger.info).toHaveBeenCalledWith(`Created backup: ${backupPath}`);
                 });
 
                 it('should handle backup creation failure gracefully', () => {
                     // Arrange
-                    const originalPath = '/test/project/.claudiomiro';
+                    const originalPath = '/test/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = originalPath;
                     fs.existsSync.mockReturnValue(true);
                     const backupError = new Error('ENOSPC: no space left on device for backup');
@@ -823,7 +888,7 @@ describe('file-manager', () => {
 
                 it('should create timestamped backup directories', () => {
                     // Arrange
-                    const originalPath = '/test/project/.claudiomiro';
+                    const originalPath = '/test/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = originalPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -841,15 +906,15 @@ describe('file-manager', () => {
             describe('backup version management', () => {
                 it('should handle multiple backup versions', () => {
                     // Arrange
-                    const originalPath = '/test/project/.claudiomiro';
+                    const originalPath = '/test/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = originalPath;
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock existing backups (when backup functionality is implemented)
                     // Future: const existingBackups = [
-                    //     '/test/project/.claudiomiro.backup.20231201-100000',
-                    //     '/test/project/.claudiomiro.backup.20231201-110000',
-                    //     '/test/project/.claudiomiro.backup.20231201-120000',
+                    //     '/test/project/.claudiomiro/task-executor.backup.20231201-100000',
+                    //     '/test/project/.claudiomiro/task-executor.backup.20231201-110000',
+                    //     '/test/project/.claudiomiro/task-executor.backup.20231201-120000',
                     // ];
 
                     // Act
@@ -867,7 +932,7 @@ describe('file-manager', () => {
 
                 it('should clean up old backups when exceeding limit', () => {
                     // Arrange - Mock scenario with many existing backups
-                    const originalPath = '/test/project/.claudiomiro';
+                    const originalPath = '/test/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = originalPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -885,7 +950,7 @@ describe('file-manager', () => {
 
                 it('should preserve backup retention policy', () => {
                     // Arrange
-                    const originalPath = '/test/project/.claudiomiro';
+                    const originalPath = '/test/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = originalPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -903,8 +968,8 @@ describe('file-manager', () => {
             describe('restore functionality', () => {
                 it('should prepare for restore operation logging', () => {
                     // Arrange
-                    const _backupPath = '/test/project/.claudiomiro.backup.20231201-120000';
-                    const targetPath = '/test/project/.claudiomiro';
+                    const _backupPath = '/test/project/.claudiomiro/task-executor.backup.20231201-120000';
+                    const targetPath = '/test/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = targetPath;
                     fs.existsSync.mockReturnValue(false); // Target doesn't exist
 
@@ -912,7 +977,7 @@ describe('file-manager', () => {
                     startFresh(true);
 
                     // Assert - Current behavior
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(targetPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(targetPath, { recursive: true });
 
                     // Future when restore is implemented:
                     // Should be able to restore from backup:
@@ -921,29 +986,29 @@ describe('file-manager', () => {
 
                 it('should handle restore from latest backup', () => {
                     // Arrange - This will be used when restore functionality is implemented
-                    // Future: const latestBackup = '/test/project/.claudiomiro.backup.20231201-120000';
-                    state.claudiomiroFolder = '/test/project/.claudiomiro';
+                    // Future: const latestBackup = '/test/project/.claudiomiro/task-executor.backup.20231201-120000';
+                    state.claudiomiroFolder = '/test/project/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(false);
 
                     // Act
                     startFresh(true);
 
                     // Assert - Future restore functionality
-                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/project/.claudiomiro');
+                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/project/.claudiomiro/task-executor', { recursive: true });
 
                     // Future: Should identify and use latest backup for restore
                 });
 
                 it('should validate backup integrity before restore', () => {
                     // Arrange - Backup integrity validation when implemented
-                    state.claudiomiroFolder = '/test/project/.claudiomiro';
+                    state.claudiomiroFolder = '/test/project/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(false);
 
                     // Act
                     startFresh(true);
 
                     // Assert - Should validate backup before restore
-                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/project/.claudiomiro');
+                    expect(fs.mkdirSync).toHaveBeenCalledWith('/test/project/.claudiomiro/task-executor', { recursive: true });
 
                     // Future: Should check backup exists, is readable, contains valid data
                 });
@@ -952,7 +1017,7 @@ describe('file-manager', () => {
             describe('backup storage management', () => {
                 it('should handle backup storage space management', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/project/.claudiomiro';
+                    state.claudiomiroFolder = '/test/project/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock disk space check for backup storage
@@ -969,28 +1034,28 @@ describe('file-manager', () => {
                     startFresh(false);
 
                     // Assert - Should handle storage constraints gracefully
-                    expect(fs.rmSync).toHaveBeenCalledWith('/test/project/.claudiomiro', { recursive: true });
+                    expect(fs.rmSync).toHaveBeenCalledWith('/test/project/.claudiomiro/task-executor', { recursive: true });
 
                     // Future: Should check available space before creating backup
                 });
 
                 it('should compress large backups when configured', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/project/.claudiomiro';
+                    state.claudiomiroFolder = '/test/project/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Act
                     startFresh(false);
 
                     // Assert - Should implement backup compression when feature is added
-                    expect(fs.rmSync).toHaveBeenCalledWith('/test/project/.claudiomiro', { recursive: true });
+                    expect(fs.rmSync).toHaveBeenCalledWith('/test/project/.claudiomiro/task-executor', { recursive: true });
 
                     // Future: Should compress backups based on size threshold
                 });
 
                 it('should handle backup path conflicts', () => {
                     // Arrange
-                    const originalPath = '/test/project/.claudiomiro';
+                    const originalPath = '/test/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = originalPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -1007,7 +1072,7 @@ describe('file-manager', () => {
             describe('backup logging and observability', () => {
                 it('should log backup creation process', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/project/.claudiomiro';
+                    state.claudiomiroFolder = '/test/project/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Act
@@ -1015,7 +1080,7 @@ describe('file-manager', () => {
 
                     // Assert - Current logging
                     expect(logger.task).toHaveBeenCalledWith('Cleaning up previous files...');
-                    expect(logger.success).toHaveBeenCalledWith('/test/project/.claudiomiro removed\n');
+                    expect(logger.success).toHaveBeenCalledWith('/test/project/.claudiomiro/task-executor removed\n');
 
                     // Future backup logging when implemented:
                     // expect(logger.info).toHaveBeenCalledWith('Creating backup...');
@@ -1024,7 +1089,7 @@ describe('file-manager', () => {
 
                 it('should report backup operation status', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/project/.claudiomiro';
+                    state.claudiomiroFolder = '/test/project/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Act
@@ -1042,27 +1107,27 @@ describe('file-manager', () => {
             describe('basic file existence scenarios', () => {
                 it('should handle directory existence validation', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/existing/.claudiomiro';
+                    state.claudiomiroFolder = '/test/existing/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Act
                     startFresh(false);
 
                     // Assert
-                    expect(fs.existsSync).toHaveBeenCalledWith('/test/existing/.claudiomiro');
-                    expect(fs.rmSync).toHaveBeenCalledWith('/test/existing/.claudiomiro', { recursive: true });
+                    expect(fs.existsSync).toHaveBeenCalledWith('/test/existing/.claudiomiro/task-executor');
+                    expect(fs.rmSync).toHaveBeenCalledWith('/test/existing/.claudiomiro/task-executor', { recursive: true });
                 });
 
                 it('should handle non-existent directory validation', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/nonexistent/.claudiomiro';
+                    state.claudiomiroFolder = '/test/nonexistent/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(false);
 
                     // Act
                     startFresh(false);
 
                     // Assert
-                    expect(fs.existsSync).toHaveBeenCalledWith('/test/nonexistent/.claudiomiro');
+                    expect(fs.existsSync).toHaveBeenCalledWith('/test/nonexistent/.claudiomiro/task-executor');
                     expect(fs.rmSync).not.toHaveBeenCalled();
                 });
 
@@ -1084,7 +1149,7 @@ describe('file-manager', () => {
             describe('symbolic link handling', () => {
                 it('should handle valid symbolic links', () => {
                     // Arrange - Path is a valid symbolic link
-                    state.claudiomiroFolder = '/test/symlink/.claudiomiro';
+                    state.claudiomiroFolder = '/test/symlink/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock additional fs functions for symlink detection (future enhancement)
@@ -1097,13 +1162,13 @@ describe('file-manager', () => {
                     startFresh(false);
 
                     // Assert
-                    expect(fs.existsSync).toHaveBeenCalledWith('/test/symlink/.claudiomiro');
-                    expect(fs.rmSync).toHaveBeenCalledWith('/test/symlink/.claudiomiro', { recursive: true });
+                    expect(fs.existsSync).toHaveBeenCalledWith('/test/symlink/.claudiomiro/task-executor');
+                    expect(fs.rmSync).toHaveBeenCalledWith('/test/symlink/.claudiomiro/task-executor', { recursive: true });
                 });
 
                 it('should handle broken symbolic links', () => {
                     // Arrange - Symbolic link points to non-existent target
-                    state.claudiomiroFolder = '/test/broken-symlink/.claudiomiro';
+                    state.claudiomiroFolder = '/test/broken-symlink/.claudiomiro/task-executor';
 
                     // existsSync returns true for broken symlinks in most systems
                     fs.existsSync.mockReturnValue(true);
@@ -1118,13 +1183,13 @@ describe('file-manager', () => {
                     startFresh(false);
 
                     // Assert
-                    expect(fs.existsSync).toHaveBeenCalledWith('/test/broken-symlink/.claudiomiro');
-                    expect(fs.rmSync).toHaveBeenCalledWith('/test/broken-symlink/.claudiomiro', { recursive: true });
+                    expect(fs.existsSync).toHaveBeenCalledWith('/test/broken-symlink/.claudiomiro/task-executor');
+                    expect(fs.rmSync).toHaveBeenCalledWith('/test/broken-symlink/.claudiomiro/task-executor', { recursive: true });
                 });
 
                 it('should handle symbolic link loops', () => {
                     // Arrange - Circular symbolic links
-                    state.claudiomiroFolder = '/test/loop-symlink/.claudiomiro';
+                    state.claudiomiroFolder = '/test/loop-symlink/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock symlink loop scenario
@@ -1137,15 +1202,15 @@ describe('file-manager', () => {
                     startFresh(false);
 
                     // Assert - Should handle loop gracefully
-                    expect(fs.existsSync).toHaveBeenCalledWith('/test/loop-symlink/.claudiomiro');
-                    expect(fs.rmSync).toHaveBeenCalledWith('/test/loop-symlink/.claudiomiro', { recursive: true });
+                    expect(fs.existsSync).toHaveBeenCalledWith('/test/loop-symlink/.claudiomiro/task-executor');
+                    expect(fs.rmSync).toHaveBeenCalledWith('/test/loop-symlink/.claudiomiro/task-executor', { recursive: true });
                 });
             });
 
             describe('file accessibility validation', () => {
                 it('should handle read-only directories', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/readonly/.claudiomiro';
+                    state.claudiomiroFolder = '/test/readonly/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock read-only access during removal
@@ -1162,7 +1227,7 @@ describe('file-manager', () => {
 
                 it('should handle directories with restricted permissions', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/restricted/.claudiomiro';
+                    state.claudiomiroFolder = '/test/restricted/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock permission error during access
@@ -1178,7 +1243,7 @@ describe('file-manager', () => {
 
                 it('should handle directories owned by different users', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/otheruser/.claudiomiro';
+                    state.claudiomiroFolder = '/test/otheruser/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock ownership permission error
@@ -1196,7 +1261,7 @@ describe('file-manager', () => {
             describe('file integrity and validation', () => {
                 it('should handle corrupted directory structures', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/corrupted/.claudiomiro';
+                    state.claudiomiroFolder = '/test/corrupted/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock directory corruption error
@@ -1212,7 +1277,7 @@ describe('file-manager', () => {
 
                 it('should handle directories with invalid entries', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/invalid-entries/.claudiomiro';
+                    state.claudiomiroFolder = '/test/invalid-entries/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock invalid entry error during deletion
@@ -1228,7 +1293,7 @@ describe('file-manager', () => {
 
                 it('should handle directories with locked files', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/locked/.claudiomiro';
+                    state.claudiomiroFolder = '/test/locked/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock file lock error
@@ -1246,7 +1311,7 @@ describe('file-manager', () => {
             describe('special file system scenarios', () => {
                 it('should handle network file system paths', () => {
                     // Arrange
-                    const networkPath = '/network/mount/project/.claudiomiro';
+                    const networkPath = '/network/mount/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = networkPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -1266,7 +1331,7 @@ describe('file-manager', () => {
 
                 it('should handle virtual file system paths', () => {
                     // Arrange
-                    const virtualPath = '/virtual/fs/project/.claudiomiro';
+                    const virtualPath = '/virtual/fs/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = virtualPath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -1275,12 +1340,12 @@ describe('file-manager', () => {
 
                     // Assert
                     expect(fs.existsSync).toHaveBeenCalledWith(virtualPath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(virtualPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(virtualPath, { recursive: true });
                 });
 
                 it('should handle temporary file system paths', () => {
                     // Arrange
-                    const tempPath = '/tmp/project/.claudiomiro';
+                    const tempPath = '/tmp/project/.claudiomiro/task-executor';
                     state.claudiomiroFolder = tempPath;
                     fs.existsSync.mockReturnValue(true);
 
@@ -1296,7 +1361,7 @@ describe('file-manager', () => {
             describe('path traversal and security validation', () => {
                 it('should handle path traversal attempts in validation', () => {
                     // Arrange - Path traversal attempt
-                    const traversalPath = '../../../etc/passwd/.claudiomiro';
+                    const traversalPath = '../../../etc/passwd/.claudiomiro/task-executor';
                     state.claudiomiroFolder = traversalPath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -1306,12 +1371,12 @@ describe('file-manager', () => {
                     // Assert - Current implementation doesn't validate paths
                     // Future enhancement should validate and sanitize paths
                     expect(fs.existsSync).toHaveBeenCalledWith(traversalPath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(traversalPath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(traversalPath, { recursive: true });
                 });
 
                 it('should handle null byte injection attempts', () => {
                     // Arrange - Null byte injection attempt
-                    const nullBytePath = '/test/project\0malicious/.claudiomiro';
+                    const nullBytePath = '/test/project\0malicious/.claudiomiro/task-executor';
                     state.claudiomiroFolder = nullBytePath;
                     fs.existsSync.mockReturnValue(false);
 
@@ -1321,12 +1386,12 @@ describe('file-manager', () => {
                     // Assert - Current implementation passes through as-is
                     // Future enhancement should detect and reject null bytes
                     expect(fs.existsSync).toHaveBeenCalledWith(nullBytePath);
-                    expect(fs.mkdirSync).toHaveBeenCalledWith(nullBytePath);
+                    expect(fs.mkdirSync).toHaveBeenCalledWith(nullBytePath, { recursive: true });
                 });
 
                 it('should handle extremely long path traversal', () => {
                     // Arrange
-                    const longTraversal = '../' + 'a'.repeat(1000) + '/.claudiomiro';
+                    const longTraversal = '../' + 'a'.repeat(1000) + '/.claudiomiro/task-executor';
                     state.claudiomiroFolder = longTraversal;
                     fs.existsSync.mockReturnValue(true);
 
@@ -1342,7 +1407,7 @@ describe('file-manager', () => {
             describe('concurrent access validation', () => {
                 it('should handle directory modified during operation', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/concurrent/.claudiomiro';
+                    state.claudiomiroFolder = '/test/concurrent/.claudiomiro/task-executor';
 
                     // Directory exists initially
                     fs.existsSync.mockReturnValue(true);
@@ -1360,7 +1425,7 @@ describe('file-manager', () => {
 
                 it('should handle directory locked by another process', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/locked/.claudiomiro';
+                    state.claudiomiroFolder = '/test/locked/.claudiomiro/task-executor';
                     fs.existsSync.mockReturnValue(true);
 
                     // Mock process lock
@@ -1378,7 +1443,7 @@ describe('file-manager', () => {
             describe('validation error handling', () => {
                 it('should handle validation system errors gracefully', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/validation/.claudiomiro';
+                    state.claudiomiroFolder = '/test/validation/.claudiomiro/task-executor';
 
                     // System error during validation
                     const systemError = new Error('System error during path validation');
@@ -1392,7 +1457,7 @@ describe('file-manager', () => {
 
                 it('should handle validation timeout scenarios', () => {
                     // Arrange
-                    state.claudiomiroFolder = '/test/timeout/.claudiomiro';
+                    state.claudiomiroFolder = '/test/timeout/.claudiomiro/task-executor';
 
                     // Timeout during validation
                     const timeoutError = new Error('ETIMEDOUT: operation timed out');

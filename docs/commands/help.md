@@ -26,7 +26,7 @@ claudiomiro -v
 When running `claudiomiro --help`, you'll see:
 
 ```
-Claudiomiro v1.9.5
+Claudiomiro v2.5.0
 AI-Powered Development Agent
 
 USAGE
@@ -41,6 +41,8 @@ COMMANDS
     --executor=<name>         AI executor to use (claude, codex, gemini, deepseek, glm)
     --model=<name>            Specific model to use with the executor
     --skip-research           Skip the research phase
+    --backend=<path>          Backend repository path (enables multi-repo mode)
+    --frontend=<path>         Frontend repository path (enables multi-repo mode)
 
   claudiomiro --fix-command="<command>" [folder] [options]
     Run a command repeatedly until it succeeds (useful for fixing tests/linting)
@@ -73,6 +75,9 @@ EXAMPLES
   # Loop fixes with custom limit
   $ claudiomiro --loop-fixes --limit=50
 
+  # Multi-repository mode (backend + frontend)
+  $ claudiomiro --backend=./api --frontend=./web --prompt="Add user authentication"
+
 For more information, visit:
 https://github.com/samuelfaj/claudiomiro
 ```
@@ -82,7 +87,7 @@ https://github.com/samuelfaj/claudiomiro
 When running `claudiomiro --version`:
 
 ```
-claudiomiro v1.9.5
+claudiomiro v2.5.0
 ```
 
 ## Implementation Details

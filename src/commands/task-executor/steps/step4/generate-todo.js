@@ -8,6 +8,31 @@ const {
     buildOptimizedContextAsync,
     getContextFilePaths,
 } = require('../../../../shared/services/context-cache');
+const {
+    getCuratedInsightsForTask,
+    incrementInsightUsage,
+} = require('../../../../shared/services/insights');
+const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+
+const formatInsightsSection = (insights) => {
+    if (!insights || insights.length === 0) {
+        return '';
+    }
+
+    const lines = insights.map((item) => {
+        const confidence = typeof item.confidence === 'number'
+            ? `confidence ${(item.confidence * 100).toFixed(0)}%`
+            : null;
+        const scope = item.scope ? `${item.scope} scope` : null;
+        const category = item.category || null;
+        const metadata = [category, confidence, scope].filter(Boolean).join(' | ');
+        const insightText = item.insight || item.description || '';
+        const evidence = item.evidence ? `\n  Evidence: ${item.evidence}` : '';
+        return `- ${insightText}${metadata ? ` (${metadata})` : ''}${evidence}`;
+    });
+
+    return `## CURATED INSIGHTS TO CONSIDER:\n${lines.join('\n')}\n\n`;
+};
 
 /**
  * Generates a comprehensive TODO.md file for a task
@@ -23,13 +48,33 @@ const generateTodo = async (task) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
 
     // Keep template reference - Claude needs to see the structure
-    const TODOtemplate = fs.readFileSync(path.join(__dirname, '../../templates', 'TODO.md'), 'utf-8');
+    const TODOtemplate = fs.readFileSync(path.join(__dirname, '../../templates', 'todo.md'), 'utf-8');
 
-    // Read task description for code-index symbol search
+    // Read task content and extract scope for multi-repo support
     const taskMdPath = folder('TASK.md');
-    const taskDescription = fs.existsSync(taskMdPath)
-        ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
-        : task;
+    const taskMdContent = fs.existsSync(taskMdPath)
+        ? fs.readFileSync(taskMdPath, 'utf-8')
+        : '';
+    const taskDescription = taskMdContent.substring(0, 500) || task;
+
+    // Retrieve curated insights relevant to this task
+    const curatedInsights = getCuratedInsightsForTask(
+        taskDescription,
+        { maxInsights: 5, minConfidence: 0.6 },
+    );
+
+    curatedInsights.forEach((insight) => {
+        if (insight && insight.id) {
+            incrementInsightUsage(insight.id, insight.scope);
+        }
+    });
+
+    // Determine working directory based on scope (multi-repo support)
+    const scope = parseTaskScope(taskMdContent);
+    validateScope(scope, state.isMultiRepo()); // Throws if scope missing in multi-repo mode
+    const projectFolder = state.isMultiRepo() && scope
+        ? state.getRepository(scope)
+        : state.folder;
 
     // Try optimized context with Local LLM (40-60% token reduction)
     // Falls back to consolidated context if LLM not available
@@ -40,7 +85,7 @@ const generateTodo = async (task) => {
         const optimizedResult = await buildOptimizedContextAsync(
             state.claudiomiroFolder,
             task,
-            state.folder,
+            projectFolder, // Use scope-aware folder for multi-repo support
             taskDescription,
             { maxFiles: 10, minRelevance: 0.3, summarize: true },
         );
@@ -56,7 +101,7 @@ const generateTodo = async (task) => {
         consolidatedContext = await buildConsolidatedContextAsync(
             state.claudiomiroFolder,
             task,
-            state.folder,
+            projectFolder, // Use scope-aware folder for multi-repo support
             taskDescription,
         );
     }
@@ -70,7 +115,9 @@ const generateTodo = async (task) => {
     });
 
     // Build optimized context section with summary + reference paths
-    const contextSection = `\n\n## CONTEXT SUMMARY:
+    const insightsSection = formatInsightsSection(curatedInsights);
+
+    const contextSection = `\n\n${insightsSection !== '' ? insightsSection : ''}## CONTEXT SUMMARY:
 ${consolidatedContext}
 
 ## REFERENCE FILES (read only if you need more detail):
@@ -90,7 +137,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         .replace(/\{\{aiPromptPath\}\}/g, path.join(state.claudiomiroFolder, 'AI_PROMPT.md'))
         .replace(/\{\{todoTemplate\}\}/g, TODOtemplate);
 
-    return executeClaude(promptTemplate, task);
+    return executeClaude(promptTemplate, task, projectFolder !== state.folder ? { cwd: projectFolder } : undefined);
 };
 
 module.exports = { generateTodo };

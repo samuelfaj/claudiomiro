@@ -30,6 +30,8 @@ If no folder is specified, the current working directory is used.
 | `--maxConcurrent=<n>` | Maximum concurrent tasks in parallel execution |
 | `--limit=<n>` | Maximum attempts per task (default: 20) |
 | `--no-limit` | Run without attempt limit |
+| `--backend=<path>` | Backend repository path (enables multi-repo mode) |
+| `--frontend=<path>` | Frontend repository path (enables multi-repo mode) |
 
 ## Execution Steps
 
@@ -147,23 +149,24 @@ After execution, the `.claudiomiro` folder contains:
 
 ```
 .claudiomiro/
-├── AI_PROMPT.md              # Generated AI prompt
-├── CLARIFICATION_QUESTIONS.json  # Questions (if any)
-├── CLARIFICATION_ANSWERS.json    # User answers (if any)
-├── CRITICAL_REVIEW_PASSED.md     # Created when step 7 passes
-├── BUGS.md                   # Critical bugs found (step 7)
-├── done.txt                  # Completion marker
-├── TASK1/
-│   ├── TASK.md              # Task description
-│   ├── TODO.md              # Implementation checklist
-│   ├── RESEARCH.md          # Codebase analysis
-│   ├── CONTEXT.md           # Implementation context
-│   ├── CODE_REVIEW.md       # Review results
-│   └── split.txt            # Split analysis marker
-├── TASK2/
-│   └── ...
-└── TASK3/
-    └── ...
+├── task-executor/
+│   ├── AI_PROMPT.md              # Generated AI prompt
+│   ├── CLARIFICATION_QUESTIONS.json  # Questions (if any)
+│   ├── CLARIFICATION_ANSWERS.json    # User answers (if any)
+│   ├── CRITICAL_REVIEW_PASSED.md     # Created when step 7 passes
+│   ├── BUGS.md                   # Critical bugs found (step 7)
+│   ├── done.txt                  # Completion marker
+│   ├── TASK1/
+│   │   ├── TASK.md              # Task description
+│   │   ├── TODO.md              # Implementation checklist
+│   │   ├── RESEARCH.md          # Codebase analysis
+│   │   ├── CONTEXT.md           # Implementation context
+│   │   ├── CODE_REVIEW.md       # Review results
+│   │   └── split.txt            # Split analysis marker
+│   ├── TASK2/
+│   │   └── ...
+│   └── TASK3/
+│       └── ...
 ```
 
 ## Error Handling
@@ -172,6 +175,61 @@ After execution, the `.claudiomiro` folder contains:
 - Use `--limit=<n>` to control retry attempts
 - Check the `.claudiomiro` folder for detailed logs and intermediate files
 - The `--continue` flag allows resuming from clarification phase
+
+## Multi-Repository Mode
+
+When working with separate backend and frontend codebases, use multi-repo mode:
+
+```bash
+claudiomiro --backend=./api --frontend=./web --prompt="Add user authentication"
+```
+
+### How It Works
+
+1. **Git Detection**: Claudiomiro automatically detects if the paths are in a monorepo or separate repositories
+2. **Configuration Persistence**: Settings are saved to `.claudiomiro/task-executor/multi-repo.json` for `--continue` support
+3. **Scope Tags**: Each task must include a `@scope` tag in its `TASK.md`:
+
+```markdown
+@scope backend
+@dependencies [TASK1]
+
+Implement JWT token generation...
+```
+
+### Scope Values
+
+| Scope | Description |
+|-------|-------------|
+| `backend` | Task executes in the backend repository |
+| `frontend` | Task executes in the frontend repository |
+| `integration` | Task involves both repositories (e.g., API contract verification) |
+
+### Integration Verification
+
+In Step 7 (Critical Bug Sweep), Claudiomiro analyzes integration points between repositories:
+- Endpoint URL mismatches
+- Request/response payload differences
+- Missing or undefined endpoints
+- HTTP method inconsistencies
+
+### Multi-Repo Output Structure
+
+```
+.claudiomiro/
+├── task-executor/
+│   ├── multi-repo.json           # Multi-repo configuration
+│   ├── AI_PROMPT.md
+│   ├── TASK1/
+│   │   ├── TASK.md              # Contains @scope backend
+│   │   └── ...
+│   ├── TASK2/
+│   │   ├── TASK.md              # Contains @scope frontend
+│   │   └── ...
+│   └── TASK3/
+│       ├── TASK.md              # Contains @scope integration
+│       └── ...
+```
 
 ## Related Commands
 

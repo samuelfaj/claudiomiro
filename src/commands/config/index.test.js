@@ -17,8 +17,11 @@ const {
     loadConfig,
     saveConfig,
     applyConfigToEnv,
+    ensureConfigDir,
+    migrateLegacyConfig,
     CONFIG_FILE,
-    PACKAGE_ROOT,
+    CONFIG_DIR,
+    LEGACY_CONFIG_FILE,
     CONFIG_SCHEMA,
 } = require('./index');
 
@@ -36,6 +39,7 @@ describe('config command', () => {
         fs.readFileSync.mockReturnValue('{}');
         fs.writeFileSync.mockImplementation();
         fs.unlinkSync.mockImplementation();
+        fs.mkdirSync.mockImplementation();
     });
 
     afterEach(() => {
@@ -43,11 +47,92 @@ describe('config command', () => {
         process.env = originalEnv;
     });
 
-    describe('CONFIG_FILE and PACKAGE_ROOT', () => {
-        test('should use package root for config file', () => {
-            // PACKAGE_ROOT should be the claudiomiro package directory
-            expect(PACKAGE_ROOT).toContain('claudiomiro');
-            expect(CONFIG_FILE).toBe(path.join(PACKAGE_ROOT, 'claudiomiro.config.json'));
+    describe('CONFIG_FILE and CONFIG_DIR', () => {
+        test('should use user home directory for config', () => {
+            const os = require('os');
+            expect(CONFIG_DIR).toBe(path.join(os.homedir(), '.claudiomiro'));
+            expect(CONFIG_FILE).toBe(path.join(CONFIG_DIR, 'config.json'));
+        });
+
+        test('should define legacy config path for migration', () => {
+            expect(LEGACY_CONFIG_FILE).toContain('claudiomiro.config.json');
+        });
+    });
+
+    describe('ensureConfigDir', () => {
+        test('should create config directory if it does not exist', () => {
+            fs.existsSync.mockReturnValue(false);
+
+            ensureConfigDir();
+
+            expect(fs.mkdirSync).toHaveBeenCalledWith(CONFIG_DIR, { recursive: true });
+        });
+
+        test('should not create directory if it already exists', () => {
+            fs.existsSync.mockReturnValue(true);
+
+            ensureConfigDir();
+
+            expect(fs.mkdirSync).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('migrateLegacyConfig', () => {
+        test('should migrate legacy config when it exists and new config does not', () => {
+            // Legacy exists, new does not
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath === LEGACY_CONFIG_FILE) return true;
+                if (filePath === CONFIG_FILE) return false;
+                if (filePath === CONFIG_DIR) return true;
+                return false;
+            });
+            fs.readFileSync.mockReturnValue('{"CLAUDIOMIRO_LOCAL_LLM": "old-model"}');
+
+            const result = migrateLegacyConfig();
+
+            expect(result).toBe(true);
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                CONFIG_FILE,
+                '{"CLAUDIOMIRO_LOCAL_LLM": "old-model"}',
+            );
+            expect(fs.unlinkSync).toHaveBeenCalledWith(LEGACY_CONFIG_FILE);
+        });
+
+        test('should not migrate if new config already exists', () => {
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath === LEGACY_CONFIG_FILE) return true;
+                if (filePath === CONFIG_FILE) return true;
+                return false;
+            });
+
+            const result = migrateLegacyConfig();
+
+            expect(result).toBe(false);
+            expect(fs.writeFileSync).not.toHaveBeenCalled();
+        });
+
+        test('should not migrate if legacy config does not exist', () => {
+            fs.existsSync.mockReturnValue(false);
+
+            const result = migrateLegacyConfig();
+
+            expect(result).toBe(false);
+            expect(fs.writeFileSync).not.toHaveBeenCalled();
+        });
+
+        test('should handle migration errors gracefully', () => {
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath === LEGACY_CONFIG_FILE) return true;
+                if (filePath === CONFIG_FILE) return false;
+                return false;
+            });
+            fs.readFileSync.mockImplementation(() => {
+                throw new Error('Read error');
+            });
+
+            const result = migrateLegacyConfig();
+
+            expect(result).toBe(false);
         });
     });
 
@@ -102,13 +187,25 @@ describe('config command', () => {
     });
 
     describe('saveConfig', () => {
-        test('should write config as JSON to package root', () => {
+        test('should create config directory and write config as JSON', () => {
+            fs.existsSync.mockReturnValue(false);
+
             saveConfig({ CLAUDIOMIRO_LOCAL_LLM: 'test' });
 
+            expect(fs.mkdirSync).toHaveBeenCalledWith(CONFIG_DIR, { recursive: true });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 CONFIG_FILE,
                 JSON.stringify({ CLAUDIOMIRO_LOCAL_LLM: 'test' }, null, 2),
             );
+        });
+
+        test('should not recreate directory if it already exists', () => {
+            fs.existsSync.mockReturnValue(true);
+
+            saveConfig({ CLAUDIOMIRO_LOCAL_LLM: 'test' });
+
+            expect(fs.mkdirSync).not.toHaveBeenCalled();
+            expect(fs.writeFileSync).toHaveBeenCalled();
         });
     });
 

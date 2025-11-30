@@ -40,6 +40,7 @@ const parsePromptArg = (args) => {
  * @param {string[]} args - Command line arguments
  */
 const run = async (args) => {
+    const freshStart = !args.includes('--continue');
     // Parse iteration limits
     const noLimit = args.includes('--no-limit');
     const limitArg = args.find(arg => arg.startsWith('--limit='));
@@ -65,7 +66,7 @@ const run = async (args) => {
     logger.info(`Running loop-fixes (max iterations: ${noLimit ? 'no limit' : maxIterations})`);
 
     // Execute the loop
-    await loopFixes(userPrompt, maxIterations);
+    await loopFixes(userPrompt, maxIterations, { freshStart });
 };
 
 module.exports = { run, parsePromptArg };

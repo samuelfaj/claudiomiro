@@ -9,6 +9,8 @@ const {
     markTaskCompleted,
     getContextFilePaths,
 } = require('../../../../shared/services/context-cache');
+const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const reflectionHook = require('./reflection-hook');
 
 /**
  * Step 5: Task Execution
@@ -27,36 +29,82 @@ const _listFolders = (dir) => {
     return fs.readdirSync(dir).filter(f => fs.statSync(path.join(dir, f)).isDirectory());
 };
 
+const estimateCodeChangeSize = (contextPath, todoPath) => {
+    const readContent = (filePath) => (fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '');
+    const context = readContent(contextPath);
+    const todo = readContent(todoPath);
+    return context.split('\n').length + Math.floor(todo.split('\n').length / 2);
+};
+
+const estimateTaskComplexity = (todoPath) => {
+    if (!fs.existsSync(todoPath)) {
+        return 'medium';
+    }
+    const content = fs.readFileSync(todoPath, 'utf8');
+    if (/complexity:\s*high/i.test(content)) {
+        return 'high';
+    }
+    if (/complexity:\s*low/i.test(content)) {
+        return 'low';
+    }
+    const checklist = (content.match(/- \[ \]/g) || []).length;
+    if (checklist >= 8) {
+        return 'high';
+    }
+    if (checklist <= 3) {
+        return 'low';
+    }
+    return 'medium';
+};
+
 const step5 = async (task) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
     const logger = require('../../../../shared/utils/logger');
 
+    // Read and parse scope from TASK.md for multi-repo support
+    const taskMdPath = folder('TASK.md');
+    const taskMdContent = fs.existsSync(taskMdPath)
+        ? fs.readFileSync(taskMdPath, 'utf-8')
+        : '';
+    const scope = parseTaskScope(taskMdContent);
+
+    // Validate scope in multi-repo mode (throws if missing)
+    validateScope(scope, state.isMultiRepo());
+
+    // Determine working directory based on scope
+    const cwd = state.isMultiRepo()
+        ? state.getRepository(scope)
+        : state.folder;
+
     // Check if we need to re-research due to multiple failures
     let needsReResearch = false;
-    if(fs.existsSync(folder('info.json'))){
+    if (fs.existsSync(folder('info.json'))) {
         const info = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
         // Re-research if: 3+ attempts AND last attempt failed
-        if(info.attempts >= 3 && info.lastError){
+        if (info.attempts >= 3 && info.lastError) {
             needsReResearch = true;
-            logger.warning(`Task has failed ${info.attempts} times. Re-analyzing approach...`);
+            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+            const stateManager = ParallelStateManager.getInstance();
+            if (!stateManager || !stateManager.isUIRendererActive()) {
+                logger.warning(`Task has failed ${info.attempts} times. Re-analyzing approach...`);
+            }
             // Remove old RESEARCH.md to force new analysis
-            if(fs.existsSync(folder('RESEARCH.md'))){
+            if (fs.existsSync(folder('RESEARCH.md'))) {
                 fs.renameSync(folder('RESEARCH.md'), folder('RESEARCH.old.md'));
             }
         }
     }
 
     // PHASE 1: Research and context gathering (only on first run or after multiple failures)
-    await generateResearchFile(task);
+    await generateResearchFile(task, { cwd });
 
-    if(fs.existsSync(folder('CODE_REVIEW.md'))){
+    if (fs.existsSync(folder('CODE_REVIEW.md'))) {
         fs.rmSync(folder('CODE_REVIEW.md'));
     }
 
-    // Read task description for code-index symbol search
-    const taskMdPath = folder('TASK.md');
-    const taskDescription = fs.existsSync(taskMdPath)
-        ? fs.readFileSync(taskMdPath, 'utf-8').substring(0, 500)
+    // Read task description for code-index symbol search (reuse taskMdContent from scope parsing)
+    const taskDescription = taskMdContent.length > 0
+        ? taskMdContent.substring(0, 500)
         : task;
 
     // Use incremental context collection instead of reading all files
@@ -69,7 +117,7 @@ const step5 = async (task) => {
     const consolidatedContext = await buildConsolidatedContextAsync(
         state.claudiomiroFolder,
         task,
-        state.folder,
+        cwd, // Use scope-aware project folder for multi-repo support
         taskDescription,
     );
 
@@ -82,16 +130,16 @@ const step5 = async (task) => {
     });
 
     // Add current task's RESEARCH.md if exists
-    if(fs.existsSync(folder('RESEARCH.md'))){
+    if (fs.existsSync(folder('RESEARCH.md'))) {
         contextFilePaths.push(folder('RESEARCH.md'));
     }
 
     // Update TODO.md with consolidated context (much smaller than listing all files)
-    if(fs.existsSync(folder('TODO.md'))){
+    if (fs.existsSync(folder('TODO.md'))) {
         let todo = fs.readFileSync(folder('TODO.md'), 'utf8');
 
-        if(!todo.includes('## CONSOLIDATED CONTEXT:')){
-        // Add consolidated context summary instead of file list
+        if (!todo.includes('## CONSOLIDATED CONTEXT:')) {
+            // Add consolidated context summary instead of file list
             const contextSection = `\n\n## CONSOLIDATED CONTEXT:
 ${consolidatedContext}
 
@@ -103,7 +151,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         }
     }
 
-    if(fs.existsSync(folder('info.json'))){
+    if (fs.existsSync(folder('info.json'))) {
         let info = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
         info.attempts += 1;
         info.lastError = null;
@@ -111,7 +159,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         info.reResearched = needsReResearch || info.reResearched || false;
 
         // Track execution history
-        if(!info.history) info.history = [];
+        if (!info.history) info.history = [];
         info.history.push({
             timestamp: new Date().toISOString(),
             attempt: info.attempts,
@@ -119,7 +167,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         });
 
         fs.writeFileSync(folder('info.json'), JSON.stringify(info, null, 2), 'utf8');
-    }else{
+    } else {
         let info = {
             firstRun: new Date().toISOString(),
             lastRun: new Date().toISOString(),
@@ -151,13 +199,43 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
             .replace(/\{\{todoPath\}\}/g, folder('TODO.md'))
             .replace(/\{\{researchSection\}\}/g, researchSection);
 
-        const result = await executeClaude(promptTemplate, task);
+        const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
+        const result = await executeClaude(promptTemplate + '\n\n' + shellCommandRule, task, { cwd });
 
         // Generate CONTEXT.md after successful execution
         await generateContextFile(task);
 
         // Mark task as completed in cache for incremental context tracking
         markTaskCompleted(state.claudiomiroFolder, task);
+
+        try {
+            const info = fs.existsSync(folder('info.json'))
+                ? JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'))
+                : null;
+
+            const metrics = {
+                attempts: info?.attempts || 1,
+                hasErrors: Boolean(info?.errorHistory && info.errorHistory.length > 0),
+                codeChangeSize: estimateCodeChangeSize(folder('CONTEXT.md'), folder('TODO.md')),
+                taskComplexity: estimateTaskComplexity(folder('TODO.md')),
+            };
+
+            const decision = reflectionHook.shouldReflect(task, metrics);
+            if (decision.should) {
+                const reflection = await reflectionHook.createReflection(task, {
+                    cwd,
+                });
+                if (reflection) {
+                    await reflectionHook.storeReflection(task, reflection, decision);
+                }
+            }
+        } catch (error) {
+            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+            const stateManager = ParallelStateManager.getInstance();
+            if (!stateManager || !stateManager.isUIRendererActive()) {
+                logger.warning(`[Step5] Reflection skipped: ${error.message}`);
+            }
+        }
 
         return result;
     } catch (error) {
@@ -170,7 +248,7 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
         };
 
         // Add to error history
-        if(!info.errorHistory) info.errorHistory = [];
+        if (!info.errorHistory) info.errorHistory = [];
         info.errorHistory.push({
             timestamp: new Date().toISOString(),
             attempt: info.attempts,

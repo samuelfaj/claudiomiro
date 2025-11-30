@@ -34,6 +34,7 @@ Give Claudiomiro a task and it will:
 
 - [Basic Usage Guide](./docs/basic-usage.md) - Complete guide from installation to your first task
 - [Commands Reference](./docs/commands/README.md) - All available commands and options
+- [ACE](./docs/agentic-context-engineering.md) - Agentic Context Engineering and Reflections in Claudiomiro
 
 ### Examples
 
@@ -72,6 +73,23 @@ claudiomiro --glm         # GLM
 
 - [DeepSeek Setup](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
 - [GLM Setup](./docs/HOW-TO-RUN-WITH-GLM.md)
+
+### Multi-Repository Mode
+
+Work across backend and frontend repositories simultaneously:
+
+```bash
+# Monorepo or separate repos - Claudiomiro auto-detects
+claudiomiro --backend=./api --frontend=./web --prompt="Add user authentication with JWT"
+```
+
+Features:
+- Automatic git configuration detection (monorepo vs separate repos)
+- Scope-aware task decomposition (`@scope backend|frontend|integration`)
+- Integration verification between codebases
+- Coordinated commits across repositories
+
+See [Multi-Repository Mode Guide](./docs/multi-repository-mode.md) for details.
 
 ### Local LLM Co-Pilot (Optional)
 

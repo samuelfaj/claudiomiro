@@ -112,15 +112,19 @@ const runGemini = (text, taskName = null) => {
         // Use sh to execute command with cat substitution
         const command = `gemini -p "$(cat '${tmpFile}')"`;
 
-        logger.stopSpinner();
-        logger.info('Executing Gemini CLI');
-        logger.command('gemini ...');
-        logger.separator();
-        logger.newline();
+        if (!suppressStreamingLogs) {
+            logger.stopSpinner();
+            logger.info('Executing Gemini CLI');
+            logger.command('gemini ...');
+            logger.separator();
+            logger.newline();
+        }
 
         // Start loader
-        loader.start();
-        loaderStarted = true;
+        if (!suppressStreamingLogs) {
+            loader.start();
+            loaderStarted = true;
+        }
 
         const gemini = spawn('sh', ['-c', command], {
             cwd: state.folder,
@@ -170,7 +174,7 @@ const runGemini = (text, taskName = null) => {
                 }
 
                 // Overwrite previous block if it exists
-                if (!suppressStreamingLogs && overwriteBlockLines > 0){
+                if (!suppressStreamingLogs && overwriteBlockLines > 0) {
                     overwriteBlock(overwriteBlockLines);
                 }
 
@@ -188,14 +192,14 @@ const runGemini = (text, taskName = null) => {
 
                 // Process and print text line by line
                 const lines = text.split('\n');
-                for(const line of lines){
-                    if(line.length > max){
+                for (const line of lines) {
+                    if (line.length > max) {
                         // Break long line into multiple lines
-                        for(let i = 0; i < line.length; i += max){
+                        for (let i = 0; i < line.length; i += max) {
                             console.log(line.substring(i, i + max));
                             lineCount++;
                         }
-                    }else{
+                    } else {
                         console.log(line);
                         lineCount++;
                     }
@@ -210,8 +214,10 @@ const runGemini = (text, taskName = null) => {
                 if (!line.trim()) continue;
 
                 const text = processGeminiMessage(line);
-                if(text){
-                    log(text);
+                if (text) {
+                    if (!suppressStreamingLogs) {
+                        log(text);
+                    }
                     // Update state manager with Gemini message if taskName provided
                     if (stateManager && taskName && typeof stateManager.updateClaudeMessage === 'function') {
                         try {
@@ -288,7 +294,7 @@ const runGemini = (text, taskName = null) => {
 
 const executeGemini = (text, taskName = null) => {
     // Validate input before dispatching to any executor
-    if(!text){
+    if (!text) {
         return Promise.reject(new Error('Invalid prompt text: must be a non-empty string'));
     }
 

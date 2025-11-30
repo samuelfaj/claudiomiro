@@ -4,6 +4,38 @@ const { execSync } = require('child_process');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { run: runFixBranch } = require('../../../fix-branch');
+const { verifyIntegration } = require('../../../../shared/services/integration-verifier');
+
+/**
+ * Runs integration verification for multi-repo projects
+ * @returns {Promise<void>}
+ * @throws {Error} If verification fails with mismatch details
+ */
+const runIntegrationVerification = async () => {
+    if (!state.isMultiRepo()) {
+        return; // Single-repo mode: skip verification
+    }
+
+    logger.info('Running integration verification for multi-repo project...');
+
+    const result = await verifyIntegration({
+        backendPath: state.getRepository('backend'),
+        frontendPath: state.getRepository('frontend'),
+    });
+
+    if (!result.success) {
+        const errorDetails = result.mismatches
+            .map(m => `  - ${m.type}: ${m.description}`)
+            .join('\n');
+
+        throw new Error(
+            `Integration verification failed:\n${errorDetails}\n\n` +
+            'Please fix the API mismatches before proceeding.',
+        );
+    }
+
+    logger.info('Integration verification passed');
+};
 
 /**
  * Step 7: Global Critical Bug Sweep
@@ -26,7 +58,6 @@ const step7 = async (maxIterations = 20) => {
         throw new Error('state.claudiomiroFolder is not defined. Cannot run step7.');
     }
 
-    const _bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
     const passedPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
 
     // CRITICAL: Verify this is a Claudiomiro-managed session on a NEW branch
@@ -114,6 +145,7 @@ const step7 = async (maxIterations = 20) => {
     // Delegate to fix-branch with level=2 (Blockers + Warnings) and --no-clear
     // --no-clear prevents fix-branch from deleting the existing .claudiomiro folder
     const args = [
+        '--continue',
         '--level=2',
         '--no-clear',
         state.folder,
@@ -130,6 +162,10 @@ const step7 = async (maxIterations = 20) => {
 
     try {
         await runFixBranch(args);
+
+        // After fix-branch completes, run integration verification for multi-repo
+        await runIntegrationVerification();
+
         logger.success('✅ Step 7 completed - Critical review passed!');
     } catch (error) {
         logger.error(`❌ Step 7 failed: ${error.message}`);
@@ -137,4 +173,4 @@ const step7 = async (maxIterations = 20) => {
     }
 };
 
-module.exports = { step7 };
+module.exports = { step7, runIntegrationVerification };

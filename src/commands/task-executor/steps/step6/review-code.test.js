@@ -6,18 +6,27 @@ jest.mock('fs');
 jest.mock('path');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro',
+    claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test/project',
+    isMultiRepo: jest.fn().mockReturnValue(false),
+    getRepository: jest.fn().mockReturnValue('/test/project'),
 }));
 // Mock context-cache service (token optimization)
 jest.mock('../../../../shared/services/context-cache', () => ({
     buildConsolidatedContextAsync: jest.fn().mockResolvedValue('## Environment Summary\nMocked context'),
+    buildOptimizedContextAsync: jest.fn().mockResolvedValue({
+        context: '## Environment Summary\nMocked context',
+        tokenSavings: 0,
+        method: 'consolidated',
+        filesIncluded: 0,
+    }),
     getContextFilePaths: jest.fn().mockReturnValue([]),
 }));
 
 // Import after mocking
 const { reviewCode } = require('./review-code');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const state = require('../../../../shared/config/state');
 
 describe('review-code', () => {
     const mockTask = 'TASK1';
@@ -113,8 +122,8 @@ describe('review-code', () => {
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('AI_PROMPT.md');
             expect(actualCall).toContain('INITIAL_PROMPT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/AI_PROMPT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/INITIAL_PROMPT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/AI_PROMPT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/INITIAL_PROMPT.md');
         });
 
         test('should include RESEARCH.md when it exists', async () => {
@@ -132,7 +141,7 @@ describe('review-code', () => {
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('RESEARCH.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
         });
 
         test('should include CONTEXT.md when it exists', async () => {
@@ -150,7 +159,7 @@ describe('review-code', () => {
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('CONTEXT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK1/CONTEXT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/CONTEXT.md');
         });
 
         test('should skip RESEARCH.md and CONTEXT.md from context section when they do not exist', async () => {
@@ -170,8 +179,8 @@ describe('review-code', () => {
             // Check that files are not listed in the context section (after "## 📚 CONTEXT FILES" and before "These provide:")
             const contextSectionMatch = actualCall.match(/## 📚 CONTEXT FILES[\s\S]*?These provide:/);
             if (contextSectionMatch) {
-                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/TASK1/RESEARCH.md');
-                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/TASK1/CONTEXT.md');
+                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
+                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/task-executor/TASK1/CONTEXT.md');
             }
         });
 
@@ -179,8 +188,8 @@ describe('review-code', () => {
             // Arrange - Mock context-cache to return files from other tasks
             const { getContextFilePaths } = require('../../../../shared/services/context-cache');
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK2/CONTEXT.md',
-                '/test/.claudiomiro/TASK3/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK2/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK3/CONTEXT.md',
             ]);
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -194,13 +203,13 @@ describe('review-code', () => {
 
             // Assert - files returned by context-cache should be in reference section
             const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('/test/.claudiomiro/TASK2/CONTEXT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/TASK3/CONTEXT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK2/CONTEXT.md');
+            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK3/CONTEXT.md');
         });
 
         test('should call context-cache service with current task excluded', async () => {
             // Arrange
-            const { getContextFilePaths, buildConsolidatedContextAsync } = require('../../../../shared/services/context-cache');
+            const { getContextFilePaths, buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
 
             fs.existsSync.mockReturnValue(false);
 
@@ -208,14 +217,15 @@ describe('review-code', () => {
             await reviewCode(mockTask);
 
             // Assert - context-cache service should be called with current task to be excluded
-            expect(buildConsolidatedContextAsync).toHaveBeenCalledWith(
-                '/test/.claudiomiro',
+            expect(buildOptimizedContextAsync).toHaveBeenCalledWith(
+                '/test/.claudiomiro/task-executor',
                 mockTask,
                 expect.anything(), // projectFolder (state.folder)
                 expect.any(String), // taskDescription
+                expect.anything(), // options
             );
             expect(getContextFilePaths).toHaveBeenCalledWith(
-                '/test/.claudiomiro',
+                '/test/.claudiomiro/task-executor',
                 mockTask,
                 expect.objectContaining({ onlyCompleted: true }),
             );
@@ -225,7 +235,7 @@ describe('review-code', () => {
             // Arrange - context-cache returns unique files (deduplication is handled by service)
             const { getContextFilePaths } = require('../../../../shared/services/context-cache');
             getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/TASK2/CONTEXT.md',
+                '/test/.claudiomiro/task-executor/TASK2/CONTEXT.md',
             ]);
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -396,6 +406,7 @@ describe('review-code', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
+                undefined, // cwd is undefined when projectFolder equals state.folder
             );
         });
 
@@ -460,6 +471,81 @@ describe('review-code', () => {
             const actualCall = executeClaude.mock.calls[0][0];
             expect(actualCall).toContain('## 📚 CONTEXT SUMMARY FOR REVIEW');
             expect(actualCall).toContain('Environment Summary');
+        });
+    });
+
+    describe('multi-repo mode', () => {
+        test('should throw error when scope is missing in multi-repo mode', async () => {
+            // Enable multi-repo mode
+            state.isMultiRepo.mockReturnValue(true);
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return '# Task without scope\nSome task content';
+                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
+                return '';
+            });
+
+            await expect(reviewCode(mockTask)).rejects.toThrow('@scope tag is required');
+        });
+
+        test('should use correct repository path when scope is backend', async () => {
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockReturnValue('/test/backend');
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                if (filePath.includes('INITIAL_PROMPT.md')) return true;
+                if (filePath.includes('TASK.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return '@scope backend\n# Backend task';
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
+                }
+                return 'mock file content';
+            });
+
+            await reviewCode(mockTask);
+
+            expect(state.getRepository).toHaveBeenCalledWith('backend');
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.any(String),
+                mockTask,
+                { cwd: '/test/backend' },
+            );
+        });
+
+        test('should use correct repository path when scope is frontend', async () => {
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockReturnValue('/test/frontend');
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                if (filePath.includes('INITIAL_PROMPT.md')) return true;
+                if (filePath.includes('TASK.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('TASK.md')) return '@scope frontend\n# Frontend task';
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
+                }
+                return 'mock file content';
+            });
+
+            await reviewCode(mockTask);
+
+            expect(state.getRepository).toHaveBeenCalledWith('frontend');
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.any(String),
+                mockTask,
+                { cwd: '/test/frontend' },
+            );
         });
     });
 });

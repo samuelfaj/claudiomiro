@@ -308,7 +308,7 @@ For each file in the diff:
 3. Check for critical bugs in the implementation
 4. Verify integration with other files
 
-**Where to find files**: `{{claudiomiroFolder}}/../` (parent directory of .claudiomiro/)
+**Where to find files**: `{{claudiomiroFolder}}/../../` (project root containing source files)
 
 ---
 
