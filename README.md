@@ -34,6 +34,7 @@ Give Claudiomiro a task and it will:
 
 - [Basic Usage Guide](./docs/basic-usage.md) - Complete guide from installation to your first task
 - [Commands Reference](./docs/commands/README.md) - All available commands and options
+- [ACE](./docs/agentic-context-engineering.md) - Agentic Context Engineering and Reflections in Claudiomiro
 
 ### Examples
 

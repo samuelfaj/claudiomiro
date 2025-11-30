@@ -104,48 +104,154 @@ const writeInsightsFile = (filePath, insights) => {
     return payload;
 };
 
-const categorizeInsightScope = (insight) => {
+const NORMALIZE_TAGS = (tags) => {
+    if (!Array.isArray(tags)) {
+        return [];
+    }
+    return tags
+        .map((tag) => (typeof tag === 'string' ? tag.trim().toLowerCase() : null))
+        .filter(Boolean);
+};
+
+const GLOBAL_SCOPE_TAGS = new Set(['global', 'universal', 'guideline', 'best-practice', 'best practice']);
+const PROJECT_SCOPE_TAGS = new Set(['project', 'local', 'project-specific', 'project specific', 'internal', 'repo']);
+
+const GLOBAL_KEYWORDS = [
+    'best practice',
+    'best practices',
+    'anti-pattern',
+    'anti pattern',
+    'always',
+    'never',
+    'integration test',
+    'integration tests',
+    'unit test',
+    'unit tests',
+    'testing strategy',
+    'test coverage',
+    'linting',
+    'code review',
+    'error handling',
+    'security',
+    'performance',
+    'accessibility',
+    'documentation',
+    'observability',
+    'monitoring',
+    'logging',
+    'instrumentation',
+    'resilience',
+    'scalability',
+    'availability',
+    'reliability',
+    'consistency',
+    'naming convention',
+];
+
+const PROJECT_KEYWORDS = [
+    'this project',
+    'this codebase',
+    'our codebase',
+    'our implementation',
+    'in this repo',
+    'in our repo',
+    'specific to this project',
+    'specific to our',
+    'custom to this project',
+    'custom implementation',
+    'project-specific',
+    'project specific',
+    'service-specific',
+    'module-specific',
+    'component-specific',
+    'monorepo-specific',
+    'internal only',
+    'legacy constraint',
+    'feature flag',
+    'app-specific',
+];
+
+const PROJECT_PATH_PATTERNS = [
+    /`[^`]*\/[^`]*`/,
+    /\b(?:src|lib|apps|packages|services|modules|server|client|api|config|tests?)[/\\][\w./-]+/,
+    /\b[\w-]+\.(?:js|jsx|ts|tsx|py|go|java|rb|php|cs|rs|swift|c|cpp|h|hpp)\b/,
+    /\bTASK\d+(?:\.\d+)?\b/i,
+];
+
+const hasProjectIndicators = (text, tags) => {
+    if (!text) {
+        return false;
+    }
+
+    if (PROJECT_KEYWORDS.some((keyword) => text.includes(keyword))) {
+        return true;
+    }
+
+    if (PROJECT_PATH_PATTERNS.some((pattern) => pattern.test(text))) {
+        return true;
+    }
+
+    if (tags.some((tag) => PROJECT_SCOPE_TAGS.has(tag))) {
+        return true;
+    }
+
+    return false;
+};
+
+const hasGlobalIndicators = (text, tags) => {
+    if (tags.some((tag) => GLOBAL_SCOPE_TAGS.has(tag))) {
+        return true;
+    }
+
+    if (!text) {
+        return false;
+    }
+
+    return GLOBAL_KEYWORDS.some((keyword) => text.includes(keyword));
+};
+
+const isProjectSpecificInsight = (insight) => {
     if (!insight || typeof insight !== 'object') {
-        return 'project';
+        return true;
     }
 
-    if (insight.scope === 'global' || insight.scope === 'project') {
-        return insight.scope;
+    const explicitScope = typeof insight.scope === 'string'
+        ? insight.scope.trim().toLowerCase()
+        : null;
+    if (explicitScope && explicitScope !== 'global') {
+        return true;
     }
 
+    const tags = NORMALIZE_TAGS(insight.tags);
     const description = (insight.description || insight.insight || '').toLowerCase();
 
-    const globalKeywords = [
-        'always',
-        'never',
-        'best practice',
-        'anti-pattern',
-        'testing',
-        'error handling',
-        'security',
-        'performance',
-        'accessibility',
-        'documentation',
-    ];
+    return hasProjectIndicators(description, tags);
+};
 
-    const projectKeywords = [
-        'this project',
-        'this codebase',
-        'here we',
-        'specific',
-        'our implementation',
-        'custom',
-        'in this repo',
-        'service-specific',
-    ];
-
-    const isGlobal = globalKeywords.some((keyword) => description.includes(keyword));
-    const isProject = projectKeywords.some((keyword) => description.includes(keyword));
-
-    if (isGlobal && !isProject) {
-        return 'global';
+const isGlobalInsight = (insight) => {
+    if (!insight || typeof insight !== 'object') {
+        return false;
     }
-    return 'project';
+
+    if (isProjectSpecificInsight(insight)) {
+        return false;
+    }
+
+    const explicitScope = typeof insight.scope === 'string'
+        ? insight.scope.trim().toLowerCase()
+        : null;
+    if (explicitScope === 'global') {
+        return true;
+    }
+
+    const tags = NORMALIZE_TAGS(insight.tags);
+    const description = (insight.description || insight.insight || '').toLowerCase();
+
+    return hasGlobalIndicators(description, tags);
+};
+
+const categorizeInsightScope = (insight) => {
+    return isGlobalInsight(insight) ? 'global' : 'project';
 };
 
 const prepareInsightEntry = (insight, scope) => {
@@ -226,7 +332,15 @@ const loadAllInsights = () => {
 };
 
 const addGlobalInsight = (insight) => {
-    const prepared = prepareInsightEntry(insight, 'global');
+    if (!isGlobalInsight(insight)) {
+        logger.debug('[insights] Redirecting insight to project scope because it is not global.');
+        return addProjectInsight({
+            ...insight,
+            scope: 'project',
+        });
+    }
+
+    const prepared = prepareInsightEntry({ ...insight, scope: 'global' }, 'global');
     const insightsData = loadGlobalInsights();
     upsertInsight(insightsData, prepared);
     writeInsightsFile(getGlobalInsightsPath(), insightsData);

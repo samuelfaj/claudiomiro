@@ -113,6 +113,24 @@ describe('insight-store', () => {
         expect(all.curatedInsights.projectSpecific.some((item) => item.scope === 'project')).toBe(true);
     });
 
+    it('redirects project-scoped insights away from the global store', () => {
+        const redirected = addGlobalInsight({
+            insight: 'In this project we keep session secrets under `src/config/secrets.js`.',
+            category: 'projectSpecific',
+            learnedFrom: 'TASKX',
+            confidence: 0.8,
+        });
+
+        const globalStored = loadGlobalInsights();
+        const projectStored = loadProjectInsights();
+
+        expect(redirected.scope).toBe('project');
+        expect(globalStored.curatedInsights.projectSpecific).toHaveLength(0);
+        expect(
+            projectStored.curatedInsights.projectSpecific.some((item) => item.insight.includes('session secrets')),
+        ).toBe(true);
+    });
+
     it('ranks curated insights by relevance for a task', () => {
         addProjectInsight({
             insight: 'Repository pattern is extensively used in this codebase.',

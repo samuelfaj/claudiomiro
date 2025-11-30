@@ -145,6 +145,7 @@ const step7 = async (maxIterations = 20) => {
     // Delegate to fix-branch with level=2 (Blockers + Warnings) and --no-clear
     // --no-clear prevents fix-branch from deleting the existing .claudiomiro folder
     const args = [
+        '--continue',
         '--level=2',
         '--no-clear',
         state.folder,

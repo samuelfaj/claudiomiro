@@ -128,7 +128,7 @@ const initializeFolder = (clearFolder = false) => {
  * @param {boolean} options.clearFolder - Whether to clear .claudiomiro folder before starting (default: true)
  * @returns {Promise<void>}
  */
-const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
+const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart: false }) => {
     const { clearFolder = true } = options;
 
     // Validate inputs
@@ -144,8 +144,49 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
     const overviewPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_OVERVIEW.md');
     const passedPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
 
+    if (options.freshStart) {
+        try {
+            fs.unlinkSync(bugsPath);
+        } catch (error) {
+            logger.warning(`Could not delete BUGS.md: ${error.message}`);
+        }
+
+        try {
+            fs.unlinkSync(overviewPath);
+        } catch (error) {
+            logger.warning(`Could not delete CRITICAL_REVIEW_OVERVIEW.md: ${error.message}`);
+        }
+
+        try {
+            fs.unlinkSync(passedPath);
+        } catch (error) {
+            logger.warning(`Could not delete CRITICAL_REVIEW_PASSED.md: ${error.message}`);
+        }
+    }
+
     logger.info('🔄 Starting loop-fixes...');
     logger.info(`📝 Prompt: "${userPrompt.substring(0, 100)}${userPrompt.length > 100 ? '...' : ''}"`);
+
+    // Early exit: Check if work is already complete
+    // If CRITICAL_REVIEW_PASSED.md exists AND no pending items, skip entire loop
+    if (fs.existsSync(passedPath)) {
+        logger.success('✅ Loop-fixes already completed - CRITICAL_REVIEW_PASSED.md exists with no pending issues');
+        logger.info('💡 Skipping loop - previous verification already passed');
+
+        // Log summary if available
+        if (fs.existsSync(bugsPath)) {
+            try {
+                const completedCount = countCompletedItems(bugsPath);
+                if (completedCount > 0) {
+                    logger.info(`📊 Previous summary: ${completedCount} issue(s) already fixed`);
+                }
+            } catch (error) {
+                logger.debug(`Could not read BUGS.md summary: ${error.message}`);
+            }
+        }
+
+        return; // Exit early - work is done
+    }
 
     // Show max iterations info
     if (maxIterations === Infinity) {
@@ -169,8 +210,6 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
     const verificationPromptTemplate = fs.readFileSync(verificationPromptPath, 'utf-8');
     const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
 
-    // Verification state
-    let isVerificationPhase = false;
 
     // Track progress for Local LLM analysis
     let previousPendingCount = null;
@@ -178,21 +217,15 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
 
     // Self-correction loop
     for (let iteration = 1; iteration <= maxIterations; iteration++) {
-        const iterationDisplay = maxIterations === Infinity ? `${iteration}` : `${iteration}/${maxIterations}`;
+        // Verification state
+        let isVerificationPhase = fs.existsSync(overviewPath);
 
-        // Delete CRITICAL_REVIEW_PASSED.md if exists from previous verification
-        if (fs.existsSync(passedPath)) {
-            try {
-                fs.unlinkSync(passedPath);
-            } catch (error) {
-                logger.warning(`Could not delete CRITICAL_REVIEW_PASSED.md: ${error.message}`);
-            }
-        }
+        const iterationDisplay = maxIterations === Infinity ? `${iteration}` : `${iteration}/${maxIterations}`;
 
         // Choose prompt based on mode
         let prompt;
         if (isVerificationPhase) {
-            logger.info(`\n🔍 Verification Iteration ${iterationDisplay}`);
+            logger.info(`\n🔍 Verification Iteration ${iterationDisplay} - ${isVerificationPhase ? 'Verification' : 'Fixing'}`);
 
             prompt = verificationPromptTemplate
                 .replace(/\{\{userPrompt\}\}/g, userPrompt)
@@ -269,37 +302,29 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = {}) => {
                 }
 
                 return;
-            } else {
-                // Verification found new tasks - exit verification mode, continue loop
-                logger.info('🔧 Verification found new tasks. Continuing fixes...');
-                isVerificationPhase = false;
-                // Continue to next iteration (normal fix mode)
             }
-        } else {
-            // Normal mode - check for CRITICAL_REVIEW_OVERVIEW.md
-            if (fs.existsSync(overviewPath)) {
-                logger.info('📋 CRITICAL_REVIEW_OVERVIEW.md created. Starting verification...');
 
-                // Delete CRITICAL_REVIEW_OVERVIEW.md and enter verification mode
-                try {
-                    fs.unlinkSync(overviewPath);
-                } catch (error) {
-                    logger.warning(`Could not delete CRITICAL_REVIEW_OVERVIEW.md: ${error.message}`);
-                }
+            // Verification found new tasks - exit verification mode, continue loop
+            logger.info('🔧 Verification found new tasks. Continuing fixes...');
+            isVerificationPhase = false;
+            // Continue to next iteration (normal fix mode)
 
-                isVerificationPhase = true;
-                // Continue to verification iteration
-            } else {
-                // Check BUGS.md status
-                const pendingAfter = countPendingItems(bugsPath);
-                const completedCount = countCompletedItems(bugsPath);
-
-                logger.info(`📋 Issues tracked: ${completedCount} fixed, ${pendingAfter} pending`);
-
-                // Continue to next iteration
-                logger.info('🔧 Continuing to next iteration...');
+            // Delete CRITICAL_REVIEW_OVERVIEW.md
+            try {
+                fs.unlinkSync(overviewPath);
+            } catch (error) {
+                logger.warning(`Could not delete CRITICAL_REVIEW_OVERVIEW.md: ${error.message}`);
             }
         }
+
+        // Check BUGS.md status
+        const pendingAfter = countPendingItems(bugsPath);
+        const completedCount = countCompletedItems(bugsPath);
+
+        logger.info(`📋 Issues tracked: ${completedCount} fixed, ${pendingAfter} pending`);
+
+        // Continue to next iteration
+        logger.info('🔧 Continuing to next iteration...');
     }
 
     // Max iterations reached - still have issues
