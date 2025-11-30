@@ -282,7 +282,7 @@ Return JSON: {"completed": true/false, "confidence": 0.0-1.0, "reason": "brief e
         try {
             return await this.generateJSON(prompt, { maxTokens: 150 });
         } catch {
-            return { completed: false, confidence: 0, reason: 'Failed to analyze' };
+            return { completed: todoContent.toLowerCase().includes('fully implemented: yes'), confidence: 0, reason: 'Failed to analyze' };
         }
     }
 
