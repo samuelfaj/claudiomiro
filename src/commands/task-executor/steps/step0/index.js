@@ -1,73 +1,17 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
-const { getMultilineInput, askClarificationQuestions } = require('../../../../shared/services/prompt-reader');
+const { askClarificationQuestions } = require('../../../../shared/services/prompt-reader');
 const { startFresh } = require('../../services/file-manager');
-
-/**
- * Generates a branch name from task description
- * @param {string} task - Task description
- * @returns {string} Branch name
- */
-const generateBranchName = (task) => {
-    // Extract first meaningful words from task to create branch name
-    const slug = task
-        .toLowerCase()
-        .replace(/[^a-z0-9\s-]/g, '')
-        .trim()
-        .split(/\s+/)
-        .slice(0, 5)
-        .join('-')
-        .substring(0, 50);
-    return `claudiomiro/${slug || 'task'}`;
-};
-
-/**
- * Creates git branches in appropriate repositories based on multi-repo configuration
- * @param {string} branchName - Name of the branch to create
- */
-const createBranches = (branchName) => {
-    if (!state.isMultiRepo()) {
-        // Single-repo mode: branch creation is handled by Claude prompt
-        return;
-    }
-
-    const gitMode = state.getGitMode();
-
-    const createBranchInRepo = (repoPath, repoName) => {
-        try {
-            execSync(`git checkout -b ${branchName}`, { cwd: repoPath, stdio: 'pipe' });
-            logger.info(`Created branch ${branchName} in ${repoName}`);
-        } catch (error) {
-            const errorMsg = error.stderr ? error.stderr.toString() : error.message;
-            if (errorMsg.includes('already exists')) {
-                execSync(`git checkout ${branchName}`, { cwd: repoPath, stdio: 'pipe' });
-                logger.info(`Branch ${branchName} already exists in ${repoName}, switched to it`);
-            } else {
-                throw new Error(`Failed to create branch in ${repoName}: ${errorMsg}`);
-            }
-        }
-    };
-
-    if (gitMode === 'monorepo') {
-        // Monorepo: create branch once (same git root for both)
-        createBranchInRepo(state.folder, 'monorepo');
-    } else if (gitMode === 'separate') {
-        // Separate repos: create branch in both
-        createBranchInRepo(state.getRepository('backend'), 'backend repo');
-        createBranchInRepo(state.getRepository('frontend'), 'frontend repo');
-    }
-};
 
 /**
  * Step 0: Generate clarification questions (if needed)
  * This is the FIRST step - it explores the codebase and asks clarification questions if needed
  */
 const step0 = async (sameBranch = false, promptText = null) => {
-    const task = promptText || await getMultilineInput();
+    const task = promptText;
     const folder = (file) => path.join(state.claudiomiroFolder, file);
 
     if (!task || task.trim().length < 10) {
@@ -85,17 +29,14 @@ const step0 = async (sameBranch = false, promptText = null) => {
     }
 
     // Determine branch step based on mode
+    // Determine branch step based on mode
     let branchStep = '';
+    // Branch creation is now handled in cli.js before step0 is called
+    // We just need to ensure step0 doesn't try to create it again via prompt
     if (!sameBranch) {
-        if (state.isMultiRepo()) {
-            // Multi-repo mode: create branches programmatically
-            const branchName = generateBranchName(task);
-            createBranches(branchName);
-            // branchStep remains empty - branches already created
-        } else {
-            // Single-repo mode: let Claude create the branch via prompt
-            branchStep = '## FIRST STEP: \n\nCreate a git branch for this task\n\n';
-        }
+        // In single-repo mode, we used to ask Claude to create the branch.
+        // Now we create it via shell in cli.js, so we don't need to ask Claude.
+        branchStep = '';
     }
 
     const replace = (text) => {
@@ -175,4 +116,4 @@ const step0 = async (sameBranch = false, promptText = null) => {
     }
 };
 
-module.exports = { step0, createBranches, generateBranchName };
+module.exports = { step0 };

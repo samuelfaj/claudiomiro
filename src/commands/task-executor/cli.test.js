@@ -657,5 +657,43 @@ describe('src/commands/task-executor/cli.js', () => {
             expect(state.setMultiRepo).not.toHaveBeenCalled();
             expect(logger.warning).toHaveBeenCalledWith('Invalid multi-repo.json, continuing as single-repo mode');
         });
+        describe('branch prompt handling', () => {
+            beforeEach(() => {
+                // Mock git-manager functions
+                const gitManager = require('../../shared/services/git-manager');
+                gitManager.getCurrentBranch = jest.fn();
+                gitManager.createBranches = jest.fn();
+                // Mock prompt-reader for task and branch input
+                const promptReader = require('../../shared/services/prompt-reader');
+                promptReader.getMultilineInput = jest.fn().mockResolvedValue('Test task description');
+                promptReader.getSimpleInput = jest.fn();
+            });
+
+            test('uses current branch when user leaves input empty', async () => {
+                const gitManager = require('../../shared/services/git-manager');
+                const promptReader = require('../../shared/services/prompt-reader');
+                gitManager.getCurrentBranch.mockReturnValue('feature/old-branch');
+                promptReader.getSimpleInput.mockResolvedValue(''); // user presses Enter
+
+                await cliModule.init(['.']);
+
+                expect(gitManager.getCurrentBranch).toHaveBeenCalled();
+                expect(promptReader.getSimpleInput).toHaveBeenCalled();
+                expect(gitManager.createBranches).not.toHaveBeenCalled();
+                expect(logger.info).toHaveBeenCalledWith('Using current branch: feature/old-branch');
+            });
+
+            test('creates new branch when user provides a name', async () => {
+                const gitManager = require('../../shared/services/git-manager');
+                const promptReader = require('../../shared/services/prompt-reader');
+                gitManager.getCurrentBranch.mockReturnValue('feature/old-branch');
+                promptReader.getSimpleInput.mockResolvedValue('new-feature-branch');
+
+                await cliModule.init(['.']);
+
+                expect(gitManager.createBranches).toHaveBeenCalledWith('new-feature-branch');
+                expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Using current branch'));
+            });
+        });
     });
 });

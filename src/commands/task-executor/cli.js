@@ -7,6 +7,8 @@ const { step0, step1, step2, step3, step7, step8 } = require('./steps');
 const { DAGExecutor } = require('./services/dag-executor');
 const { isFullyImplemented, hasApprovedCodeReview } = require('./utils/validation');
 const { detectGitConfiguration } = require('../../shared/services/git-detector');
+const { getMultilineInput, getSimpleInput } = require('../../shared/services/prompt-reader');
+const { createBranches, getCurrentBranch } = require('../../shared/services/git-manager');
 
 // Note: This uses the sync version (heuristic-based) for building the initial task graph.
 // The async version with Local LLM support is used in dag-executor.js for critical execution checks.
@@ -45,7 +47,7 @@ function findSubtasks(mainTask, allTasks) {
         // Check if the current task is a subtask of mainTask
         // Ex: TASK2.1 is subtask of TASK2, TASK2.1.1 is subtask of TASK2.1
         return task.startsWith(mainTask + '.') &&
-               task.slice(mainTask.length + 1).match(/^\d+(\.\d+)*$/);
+            task.slice(mainTask.length + 1).match(/^\d+(\.\d+)*$/);
     });
 }
 
@@ -87,19 +89,19 @@ const chooseAction = async (i, args) => {
 
     let executorType = 'claude';
 
-    if(codexFlag){
+    if (codexFlag) {
         executorType = 'codex';
     }
 
-    if(deepSeekFlag){
+    if (deepSeekFlag) {
         executorType = 'deep-seek';
     }
 
-    if(glmFlag){
+    if (glmFlag) {
         executorType = 'glm';
     }
 
-    if(gemini){
+    if (gemini) {
         executorType = 'gemini';
     }
 
@@ -324,12 +326,12 @@ const chooseAction = async (i, args) => {
         return { step: step0(sameBranch, null) };
     }
 
-    if(shouldStartFresh && i === 0){
-        if(fs.existsSync(state.claudiomiroFolder)){
-            if(!fs.existsSync(path.join(state.claudiomiroFolder, 'done.txt'))){
+    if (shouldStartFresh && i === 0) {
+        if (fs.existsSync(state.claudiomiroFolder)) {
+            if (!fs.existsSync(path.join(state.claudiomiroFolder, 'done.txt'))) {
                 // last execution not finished, user need to confirm
                 const confirm = await logger.confirm(`It seems the last execution in ${state.claudiomiroFolder} was not finished. Starting fresh will delete this folder and all its contents. Do you want to continue?`);
-                if(!confirm){
+                if (!confirm) {
                     logger.info('Operation cancelled by user.');
                     process.exit(0);
                 }
@@ -340,12 +342,37 @@ const chooseAction = async (i, args) => {
     }
 
     // STEP 0: Create all tasks (TASK.md + PROMPT.md)
-    if(!fs.existsSync(state.claudiomiroFolder)){
+    if (!fs.existsSync(state.claudiomiroFolder)) {
         if (!shouldRunStep(0)) {
             logger.info('Step 0 skipped (not in --steps list)');
             return { done: true };
         }
-        return { step: step0(sameBranch, promptText) };
+
+        // New Task: Ask for details here
+        const task = promptText || await getMultilineInput();
+
+        if (!task || task.trim().length < 10) {
+            logger.error('Please provide more details (at least 10 characters)');
+            process.exit(0);
+        }
+
+        if (!sameBranch) {
+            const currentBranch = getCurrentBranch();
+            const promptMessage = currentBranch
+                ? `Branch name (press Enter to use current branch "${currentBranch}"): `
+                : 'Branch name (press Enter to use current branch): ';
+
+            const userBranchName = await getSimpleInput(promptMessage);
+
+            // Only create a new branch if user entered something
+            if (userBranchName.trim()) {
+                createBranches(userBranchName.trim());
+            } else {
+                logger.info(`Using current branch: ${currentBranch || '(default)'}`);
+            }
+        }
+
+        return { step: step0(sameBranch, task) };
     }
 
     const tasks = fs
@@ -386,16 +413,40 @@ const chooseAction = async (i, args) => {
             return { done: true };
         }
 
-        return { step: step0(sameBranch, promptText) };
+        // New Task (folder exists but empty/invalid): Ask for details here
+        const task = promptText || await getMultilineInput();
+
+        if (!task || task.trim().length < 10) {
+            logger.error('Please provide more details (at least 10 characters)');
+            process.exit(0);
+        }
+
+        if (!sameBranch) {
+            const currentBranch = getCurrentBranch();
+            const promptMessage = currentBranch
+                ? `Branch name (press Enter to use current branch "${currentBranch}"): `
+                : 'Branch name (press Enter to use current branch): ';
+
+            const userBranchName = await getSimpleInput(promptMessage);
+
+            // Only create a new branch if user entered something
+            if (userBranchName.trim()) {
+                createBranches(userBranchName.trim());
+            } else {
+                logger.info(`Using current branch: ${currentBranch || '(default)'}`);
+            }
+        }
+
+        return { step: step0(sameBranch, task) };
     }
 
     // ACTIVATE DAG EXECUTOR: If we already have @dependencies defined, use parallel execution
     let taskGraph = buildTaskGraph();
 
-    if(!allHasTodo()){
+    if (!allHasTodo()) {
         const shouldRunDAG = shouldRunStep(4);
 
-        if(!shouldRunDAG){
+        if (!shouldRunDAG) {
             // Run step 7 if needed (before step 8)
             if (shouldRunStep(7) && !hasCriticalReviewPassed()) {
                 logger.newline();
@@ -586,7 +637,7 @@ const chooseAction = async (i, args) => {
             process.exit(1);
         }
 
-        if(fs.existsSync(path.join(state.claudiomiroFolder, 'done.txt'))){
+        if (fs.existsSync(path.join(state.claudiomiroFolder, 'done.txt'))) {
             logger.info(`Claudiomiro has been successfully executed. Check out: ${state.folder}`);
             process.exit(0);
         }
@@ -644,11 +695,11 @@ const allHasTodo = () => {
     }
 
     for (const task of tasks) {
-        if(!fs.existsSync(path.join(state.claudiomiroFolder, task, 'TODO.md'))){
+        if (!fs.existsSync(path.join(state.claudiomiroFolder, task, 'TODO.md'))) {
             return false;
         }
 
-        if(!fs.existsSync(path.join(state.claudiomiroFolder, task, 'split.txt'))){
+        if (!fs.existsSync(path.join(state.claudiomiroFolder, task, 'split.txt'))) {
             return false;
         }
     }
@@ -711,7 +762,7 @@ const buildTaskGraph = () => {
 
         // Allow empty: "@dependencies []" or "@dependencies" (if you want to permit it)
         const deps = raw
-            ? raw.split(',').filter( s => (s || '').toLowerCase() != 'none').map(s => s.trim()).filter(Boolean)
+            ? raw.split(',').filter(s => (s || '').toLowerCase() != 'none').map(s => s.trim()).filter(Boolean)
             : [];
 
         // Optional: dedupe and prevent self-dependency
@@ -723,7 +774,7 @@ const buildTaskGraph = () => {
             const subtasks = findSubtasks(dep, tasks);
             allDepsWithSubtasks.push(...subtasks);
 
-            if(fs.existsSync(path.join(state.claudiomiroFolder, dep))){
+            if (fs.existsSync(path.join(state.claudiomiroFolder, dep))) {
                 allDepsWithSubtasks.push(dep);
             }
         }
@@ -764,7 +815,7 @@ const init = async (args) => {
     // Step 0 -> Step 1 -> Step 2 -> Step 3 -> DAGExecutor (with maxAttempts=20 PER TASK) -> Step 7
     // Maximum ~3-4 iterations in the main loop
     let i = 0;
-    while(true){
+    while (true) {
         const result = await chooseAction(i, args || []);
 
         // If returned { done: true }, finished
