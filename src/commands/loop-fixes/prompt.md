@@ -174,20 +174,26 @@ Based on the user's request above:
 
 **File location**: `{{bugsPath}}`
 
-**Format**:
+**Format Guidelines**:
+
+Use any structure that makes sense for tracking items. The only REQUIRED rule:
+- **Pending items must use**: `- [ ]` (markdown checkbox, unchecked)
+- **Completed items must use**: `- [x]` (markdown checkbox, checked)
+
+**Example 1: Categorized by Priority**
 
 ```markdown
 # Items - Loop Execution
 
 ## Current Iteration: {{iteration}}
 
-### BLOCKERS (must be processed/fixed)
+### BLOCKERS (must be processed)
 
 - [ ] [BLOCKER] Title - File: [path:line]
   - Why: [Why it is a problem]
   - Action: [What needs to be done]
 
-### WARNINGS (should be processed/fixed soon)
+### WARNINGS (should be processed)
 
 - [ ] [WARNING] Title - File: [path:line]
   - Why: [Why it matters]
@@ -198,19 +204,49 @@ Based on the user's request above:
 - [ ] [SUGGESTION] Title - File: [path:line]
   - Recommendation: [Concrete recommendation]
 
-### Processed Items
+### Completed Items
 
 - [x] [TYPE] Title - PROCESSED in iteration X
   - Solution: [What was done]
-
-## Summary
-
-- **Total items found**: [count]
-- **Blockers**: [count] processed / [count] pending
-- **Warnings**: [count] processed / [count] pending
-- **Suggestions**: [count] processed / [count] pending
-- **Current iteration**: {{iteration}}
 ```
+
+**Example 2: Simple List (for simpler tasks)**
+
+```markdown
+# Items - Loop Execution
+
+## Pending
+
+- [ ] Item 1 - Description
+- [ ] Item 2 - Description
+
+## Completed
+
+- [x] Item 3 - DONE in iteration X
+- [x] Item 4 - DONE in iteration X
+```
+
+**Example 3: By File (for code organization tasks)**
+
+```markdown
+# Items - Loop Execution
+
+## src/utils/helpers.js
+
+- [ ] Refactor function A
+- [x] Update function B - DONE in iteration X
+
+## src/services/api.js
+
+- [ ] Add error handling
+- [x] Fix timeout issue - DONE in iteration X
+```
+
+**Key Points**:
+- Structure is flexible - use what makes sense for YOUR task
+- The ONLY requirement: pending items use `- [ ]`, completed use `- [x]`
+- Include iteration and status info in a way that fits your structure
+- Be consistent within your chosen format
 
 ### 2.2 Item Classification
 
