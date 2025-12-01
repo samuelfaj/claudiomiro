@@ -11,34 +11,13 @@ const { loopFixes } = require('../loop-fixes/executor');
  * @returns {string} The level instructions to append to prompt
  */
 const getLevelInstructions = (level) => {
-    const instructions = {
-        1: `
-============================================================
-CORRECTION LEVEL: 1 (BLOCKERS ONLY)
-============================================================
-IMPORTANT: Only fix BLOCKER issues.
-- DO NOT fix WARNINGS - report them but do not modify code for them
-- DO NOT fix SUGGESTIONS - report them but do not modify code for them
-- Focus exclusively on critical issues that must be fixed before merge
-`,
-        2: `
-============================================================
-CORRECTION LEVEL: 2 (BLOCKERS + WARNINGS)
-============================================================
-IMPORTANT: Fix BLOCKER and WARNING issues only.
-- DO NOT fix SUGGESTIONS - report them but do not modify code for them
-- Focus on issues that must be fixed or should be fixed soon
-`,
-        3: `
-============================================================
-CORRECTION LEVEL: 3 (ALL ISSUES)
-============================================================
-IMPORTANT: Fix ALL issues including BLOCKERS, WARNINGS, and SUGGESTIONS.
-- Address every identified issue with code modifications
-- Be thorough in applying improvements
-`,
-    };
-    return instructions[level];
+    const promptPath = path.join(__dirname, 'level' + level + '.md');
+
+    if (!fs.existsSync(promptPath)) {
+        throw new Error('fix-branch level' + level + '.md not found');
+    }
+
+    return promptPath;
 };
 
 /**
