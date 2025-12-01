@@ -93,21 +93,42 @@ const countCompletedItems = (bugsPath) => {
 };
 
 /**
- * Initialize the .claudiomiro folder
+ * Get the loop-fixes working folder path
+ * @returns {string} Path to .claudiomiro/loop-fixes
+ */
+const getLoopFixesFolder = () => {
+    if (!state.claudiomiroRoot) {
+        state.setFolder(process.cwd());
+    }
+    return path.join(state.claudiomiroRoot, 'loop-fixes');
+};
+
+/**
+ * Initialize the .claudiomiro/loop-fixes folder
+ * Only clears the loop-fixes subfolder, not the entire .claudiomiro folder
  */
 const initializeFolder = (clearFolder = false) => {
-    if (!state.claudiomiroFolder) {
+    if (!state.claudiomiroRoot) {
         state.setFolder(process.cwd());
     }
 
+    const loopFixesFolder = getLoopFixesFolder();
+
     if (clearFolder) {
-        if (fs.existsSync(state.claudiomiroFolder)) {
-            fs.rmSync(state.claudiomiroFolder, { recursive: true });
+        // Only clear the loop-fixes subfolder, not the entire .claudiomiro folder
+        if (fs.existsSync(loopFixesFolder)) {
+            fs.rmSync(loopFixesFolder, { recursive: true });
         }
     }
 
-    if (!fs.existsSync(state.claudiomiroFolder)) {
-        fs.mkdirSync(state.claudiomiroFolder, { recursive: true });
+    // Ensure .claudiomiro parent folder exists
+    if (!fs.existsSync(state.claudiomiroRoot)) {
+        fs.mkdirSync(state.claudiomiroRoot, { recursive: true });
+    }
+
+    // Ensure loop-fixes subfolder exists
+    if (!fs.existsSync(loopFixesFolder)) {
+        fs.mkdirSync(loopFixesFolder, { recursive: true });
     }
 };
 
@@ -139,10 +160,14 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
     // Initialize folder
     initializeFolder(clearFolder);
 
-    // Define paths
-    const bugsPath = path.join(state.claudiomiroFolder, 'BUGS.md');
-    const overviewPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_OVERVIEW.md');
-    const passedPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
+    // Get the loop-fixes working folder
+    const loopFixesFolder = getLoopFixesFolder();
+
+    // Define paths (all files go into .claudiomiro/loop-fixes/)
+    const bugsPath = path.join(loopFixesFolder, 'BUGS.md');
+    const overviewPath = path.join(loopFixesFolder, 'CRITICAL_REVIEW_OVERVIEW.md');
+    const passedPath = path.join(loopFixesFolder, 'CRITICAL_REVIEW_PASSED.md');
+    const failedPath = path.join(loopFixesFolder, 'CRITICAL_REVIEW_FAILED.md');
 
     if (options.freshStart) {
         try {
@@ -230,7 +255,8 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
                 .replace(/\{\{userPrompt\}\}/g, userPrompt)
                 .replace(/\{\{bugsPath\}\}/g, bugsPath)
                 .replace(/\{\{passedPath\}\}/g, passedPath)
-                .replace(/\{\{claudiomiroFolder\}\}/g, state.claudiomiroFolder);
+                .replace(/\{\{failedPath\}\}/g, failedPath)
+                .replace(/\{\{claudiomiroFolder\}\}/g, loopFixesFolder);
 
             logger.startSpinner('Verifying if there are new tasks...');
         } else {
@@ -256,7 +282,7 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
                 .replace(/\{\{userPrompt\}\}/g, userPrompt)
                 .replace(/\{\{bugsPath\}\}/g, bugsPath)
                 .replace(/\{\{overviewPath\}\}/g, overviewPath)
-                .replace(/\{\{claudiomiroFolder\}\}/g, state.claudiomiroFolder);
+                .replace(/\{\{claudiomiroFolder\}\}/g, loopFixesFolder);
 
             // Append analysis context if available
             if (analysisContext) {
@@ -303,16 +329,54 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
                 return;
             }
 
-            // Verification found new tasks - exit verification mode, continue loop
-            logger.info('🔧 Verification found new tasks. Continuing fixes...');
-            isVerificationPhase = false;
-            // Continue to next iteration (normal fix mode)
+            // Check if there are actually new pending items
+            const pendingAfterVerification = countPendingItems(bugsPath);
 
-            // Delete CRITICAL_REVIEW_OVERVIEW.md
-            try {
-                fs.unlinkSync(overviewPath);
-            } catch (error) {
-                logger.warning(`Could not delete CRITICAL_REVIEW_OVERVIEW.md: ${error.message}`);
+            if (pendingAfterVerification > 0) {
+                // Verification found new tasks - exit verification mode, continue loop
+                logger.info(`🔧 Verification found ${pendingAfterVerification} new task(s). Continuing fixes...`);
+                isVerificationPhase = false;
+
+                // Delete CRITICAL_REVIEW_OVERVIEW.md to exit verification mode
+                try {
+                    fs.unlinkSync(overviewPath);
+                } catch (error) {
+                    logger.warning(`Could not delete CRITICAL_REVIEW_OVERVIEW.md: ${error.message}`);
+                }
+            } else {
+                // No pending items but CRITICAL_REVIEW_PASSED.md was not created
+                // This means Claude didn't create the file - create it to finalize the loop
+                logger.warning('⚠️ No pending items found but CRITICAL_REVIEW_PASSED.md was not created.');
+                logger.info('📝 Creating CRITICAL_REVIEW_PASSED.md to finalize loop...');
+
+                const completedCount = countCompletedItems(bugsPath);
+                const passedContent = `# Critical Review Passed
+
+**Verification Date**: ${new Date().toISOString()}
+**User Request**: ${userPrompt}
+
+## Result
+
+✅ **No new tasks found.**
+
+All issues matching the user's request have been identified and addressed in previous iterations.
+
+## Verification Summary
+
+- Total issues in BUGS.md: ${completedCount}
+- Completed issues: ${completedCount}
+
+## Conclusion
+
+The codebase has been thoroughly analyzed. No additional issues matching the user's request were found.
+
+*Note: This file was auto-generated because Claude did not create it despite no pending items.*
+`;
+                fs.writeFileSync(passedPath, passedContent, 'utf-8');
+
+                logger.success('✅ Loop completed!');
+                logger.info(`📊 Summary: ${completedCount} issue(s) fixed across ${iteration} iteration(s)`);
+                return;
             }
         }
 
@@ -343,4 +407,4 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
     throw new Error(`Loop-fixes did not complete after ${maxIterDisplay} iterations. Check BUGS.md for remaining issues.`);
 };
 
-module.exports = { loopFixes, countPendingItems, countCompletedItems, initializeFolder };
+module.exports = { loopFixes, countPendingItems, countCompletedItems, initializeFolder, getLoopFixesFolder };

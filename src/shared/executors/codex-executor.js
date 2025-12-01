@@ -48,7 +48,13 @@ const executeCodex = (text, taskName = null) => {
             stdio: ['ignore', 'pipe', 'pipe'],
         });
 
-        const logFilePath = path.join(state.claudiomiroFolder, 'codex-log.txt');
+        const logFilePath = path.join(state.claudiomiroRoot, 'codex-log.txt');
+
+        // Ensure directory exists before writing log file
+        if (!fs.existsSync(state.claudiomiroRoot)) {
+            fs.mkdirSync(state.claudiomiroRoot, { recursive: true });
+        }
+
         const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
 
         const timestamp = new Date().toISOString();

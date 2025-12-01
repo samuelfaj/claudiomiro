@@ -478,7 +478,7 @@ const chooseAction = async (i, args) => {
                         logger.error('   2. There was an issue with the analysis prompt or git diff');
                         logger.error('   3. The AI could not complete the analysis within the iteration limit');
                         logger.error('');
-                        const logPath = path.join(state.claudiomiroFolder, 'log.txt');
+                        const logPath = path.join(state.claudiomiroRoot, 'log.txt');
                         if (fs.existsSync(logPath)) {
                             logger.error('Check Claude execution log for details:');
                             logger.error(`   ${logPath}`);
@@ -583,7 +583,7 @@ const chooseAction = async (i, args) => {
                         logger.error('   2. There was an issue with the analysis prompt or git diff');
                         logger.error('   3. The AI could not complete the analysis within the iteration limit');
                         logger.error('');
-                        const logPath = path.join(state.claudiomiroFolder, 'log.txt');
+                        const logPath = path.join(state.claudiomiroRoot, 'log.txt');
                         if (fs.existsSync(logPath)) {
                             logger.error('Check Claude execution log for details:');
                             logger.error(`   ${logPath}`);

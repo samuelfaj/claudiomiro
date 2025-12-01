@@ -75,9 +75,9 @@ class LocalLLMService {
     _logToFile(action, details) {
         try {
             const currentState = getState();
-            if (!currentState.claudiomiroFolder) return;
+            if (!currentState.claudiomiroRoot) return;
 
-            const logFilePath = path.join(currentState.claudiomiroFolder, 'log.txt');
+            const logFilePath = path.join(currentState.claudiomiroRoot, 'log.txt');
             const timestamp = new Date().toISOString();
 
             let logEntry = `\n[${timestamp}] [LocalLLM] ${action}\n`;

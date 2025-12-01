@@ -72,11 +72,11 @@ const executeCommand = async (command) => {
         }
 
         // Ensure the claudiomiro folder exists
-        if (!fs.existsSync(state.claudiomiroFolder)) {
-            fs.mkdirSync(state.claudiomiroFolder, { recursive: true });
+        if (!fs.existsSync(state.claudiomiroRoot)) {
+            fs.mkdirSync(state.claudiomiroRoot, { recursive: true });
         }
 
-        const logFilePath = path.join(state.claudiomiroFolder, 'log.txt');
+        const logFilePath = path.join(state.claudiomiroRoot, 'log.txt');
         const logStream = fs.createWriteStream(logFilePath, { flags: 'a' });
 
         // Log separator with timestamp

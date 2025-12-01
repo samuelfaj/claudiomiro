@@ -12,6 +12,7 @@ jest.mock('../../shared/config/state', () => ({
     setFolder: jest.fn(),
     folder: '/test/folder',
     claudiomiroFolder: '/test/folder/.claudiomiro',
+    claudiomiroRoot: '/test/folder/.claudiomiro',
 }));
 jest.mock('../../shared/executors/claude-executor', () => ({
     executeClaude: jest.fn(),
@@ -21,7 +22,7 @@ const fs = require('fs');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
 const { executeClaude } = require('../../shared/executors/claude-executor');
-const { loopFixes, countPendingItems, countCompletedItems, initializeFolder } = require('./executor');
+const { loopFixes, countPendingItems, countCompletedItems, initializeFolder, getLoopFixesFolder } = require('./executor');
 
 describe('src/commands/loop-fixes/executor.js', () => {
     beforeEach(() => {
@@ -133,16 +134,43 @@ describe('src/commands/loop-fixes/executor.js', () => {
         });
     });
 
+    describe('getLoopFixesFolder()', () => {
+        test('should return path to loop-fixes subfolder', () => {
+            const result = getLoopFixesFolder();
+
+            expect(result).toBe('/test/folder/.claudiomiro/loop-fixes');
+        });
+
+        test('should call state.setFolder if claudiomiroRoot is not defined', () => {
+            const originalFolder = state.claudiomiroRoot;
+            Object.defineProperty(state, 'claudiomiroRoot', {
+                get: jest.fn().mockReturnValueOnce(null).mockReturnValue('/test/folder/.claudiomiro'),
+                configurable: true,
+            });
+
+            getLoopFixesFolder();
+
+            expect(state.setFolder).toHaveBeenCalledWith(process.cwd());
+
+            // Restore
+            Object.defineProperty(state, 'claudiomiroRoot', {
+                value: originalFolder,
+                configurable: true,
+            });
+        });
+    });
+
     describe('initializeFolder()', () => {
-        test('should create .claudiomiro folder if it does not exist', () => {
+        test('should create both .claudiomiro and loop-fixes folders if they do not exist', () => {
             fs.existsSync.mockReturnValue(false);
 
             initializeFolder();
 
-            expect(fs.mkdirSync).toHaveBeenCalledWith(state.claudiomiroFolder, { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith(state.claudiomiroRoot, { recursive: true });
+            expect(fs.mkdirSync).toHaveBeenCalledWith('/test/folder/.claudiomiro/loop-fixes', { recursive: true });
         });
 
-        test('should not create folder if it already exists', () => {
+        test('should not recreate folders if they already exist', () => {
             fs.existsSync.mockReturnValue(true);
 
             initializeFolder();
@@ -150,9 +178,19 @@ describe('src/commands/loop-fixes/executor.js', () => {
             expect(fs.mkdirSync).not.toHaveBeenCalled();
         });
 
-        test('should call state.setFolder if claudiomiroFolder is not defined', () => {
-            const originalFolder = state.claudiomiroFolder;
-            Object.defineProperty(state, 'claudiomiroFolder', {
+        test('should only clear loop-fixes subfolder when clearFolder is true', () => {
+            fs.existsSync.mockReturnValue(true);
+
+            initializeFolder(true);
+
+            // Should only clear the loop-fixes subfolder, not the entire .claudiomiro
+            expect(fs.rmSync).toHaveBeenCalledWith('/test/folder/.claudiomiro/loop-fixes', { recursive: true });
+            expect(fs.rmSync).not.toHaveBeenCalledWith(state.claudiomiroRoot, { recursive: true });
+        });
+
+        test('should call state.setFolder if claudiomiroRoot is not defined', () => {
+            const originalFolder = state.claudiomiroRoot;
+            Object.defineProperty(state, 'claudiomiroRoot', {
                 get: jest.fn().mockReturnValueOnce(null).mockReturnValue('/test/folder/.claudiomiro'),
                 configurable: true,
             });
@@ -163,7 +201,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             expect(state.setFolder).toHaveBeenCalledWith(process.cwd());
 
             // Restore
-            Object.defineProperty(state, 'claudiomiroFolder', {
+            Object.defineProperty(state, 'claudiomiroRoot', {
                 value: originalFolder,
                 configurable: true,
             });
@@ -261,7 +299,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('Loop completed'));
         });
 
-        test('should continue loop when verification finds new tasks', async () => {
+        test('should continue loop when verification finds new pending tasks in BUGS.md', async () => {
             let iterationCount = 0;
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -290,7 +328,13 @@ describe('src/commands/loop-fixes/executor.js', () => {
                     return '# Verification {{userPrompt}}';
                 }
                 if (filePath.endsWith('BUGS.md')) {
-                    return '- [x] Fixed issue';
+                    // On iteration 2 (first verification), return pending items
+                    // This triggers "Verification found new tasks"
+                    if (iterationCount === 2) {
+                        return '- [x] Fixed issue\n- [ ] New issue found in verification';
+                    }
+                    // After iteration 3, all fixed
+                    return '- [x] Fixed issue\n- [x] New issue fixed';
                 }
                 return '';
             });
@@ -301,9 +345,9 @@ describe('src/commands/loop-fixes/executor.js', () => {
 
             await loopFixes('Test prompt', 10);
 
-            // 4 iterations: main(1) -> verify(2, fails) -> main(3) -> verify(4, pass)
+            // 4 iterations: main(1) -> verify(2, finds pending) -> main(3) -> verify(4, pass)
             expect(executeClaude).toHaveBeenCalledTimes(4);
-            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Verification found new tasks'));
+            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Verification found'));
         });
 
         test('should iterate multiple times until CRITICAL_REVIEW_OVERVIEW.md is created then verify', async () => {
@@ -718,7 +762,7 @@ describe('src/commands/loop-fixes/executor.js', () => {
             expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('1 fixed, 1 pending'));
         });
 
-        test('should delete CRITICAL_REVIEW_OVERVIEW.md when entering verification mode', async () => {
+        test('should delete CRITICAL_REVIEW_OVERVIEW.md when verification finds new pending tasks', async () => {
             let iterationCount = 0;
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
@@ -729,7 +773,10 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 }
                 if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
                     // Return true later to allow loop to exit
-                    return iterationCount >= 3;
+                    return iterationCount >= 4;
+                }
+                if (filePath.endsWith('BUGS.md')) {
+                    return iterationCount > 0;
                 }
                 return false;
             });
@@ -741,6 +788,13 @@ describe('src/commands/loop-fixes/executor.js', () => {
                 if (filePath.endsWith('verification-prompt.md')) {
                     return '# Verification';
                 }
+                if (filePath.endsWith('BUGS.md')) {
+                    // On iteration 2 (verification), there are pending items
+                    if (iterationCount === 2) {
+                        return '- [ ] New issue found';
+                    }
+                    return '- [x] All fixed';
+                }
                 return '';
             });
 
@@ -751,7 +805,104 @@ describe('src/commands/loop-fixes/executor.js', () => {
             await loopFixes('Test prompt', 10);
 
             expect(fs.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('CRITICAL_REVIEW_OVERVIEW.md'));
-            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Verification Iteration'));
+            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Verification found'));
+        });
+
+        test('should auto-create CRITICAL_REVIEW_PASSED.md when no pending items but file was not created by Claude', async () => {
+            let iterationCount = 0;
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
+                    return true;
+                }
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
+                    return iterationCount === 1;
+                }
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
+                    // Never created by Claude - but we'll create it
+                    return false;
+                }
+                if (filePath.endsWith('BUGS.md')) {
+                    return true;
+                }
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.endsWith('prompt.md')) {
+                    return '# Test';
+                }
+                if (filePath.endsWith('verification-prompt.md')) {
+                    return '# Verification';
+                }
+                if (filePath.endsWith('BUGS.md')) {
+                    // All items are completed - no pending
+                    return '- [x] Fixed 1\n- [x] Fixed 2';
+                }
+                return '';
+            });
+
+            executeClaude.mockImplementation(async () => {
+                iterationCount++;
+            });
+
+            await loopFixes('Test prompt', 10);
+
+            // Should auto-create CRITICAL_REVIEW_PASSED.md
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                expect.stringContaining('CRITICAL_REVIEW_PASSED.md'),
+                expect.stringContaining('Critical Review Passed'),
+                'utf-8',
+            );
+            expect(logger.warning).toHaveBeenCalledWith(
+                expect.stringContaining('No pending items found but CRITICAL_REVIEW_PASSED.md was not created'),
+            );
+            expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('Loop completed'));
+        });
+
+        test('should not enter infinite loop when Claude does not create CRITICAL_REVIEW_PASSED.md', async () => {
+            let iterationCount = 0;
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.endsWith('prompt.md') || filePath.endsWith('verification-prompt.md')) {
+                    return true;
+                }
+                if (filePath.endsWith('CRITICAL_REVIEW_OVERVIEW.md')) {
+                    // Created every odd iteration
+                    return iterationCount % 2 === 1;
+                }
+                if (filePath.endsWith('CRITICAL_REVIEW_PASSED.md')) {
+                    // Claude never creates this
+                    return false;
+                }
+                if (filePath.endsWith('BUGS.md')) {
+                    return true;
+                }
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.endsWith('prompt.md')) {
+                    return '# Test';
+                }
+                if (filePath.endsWith('verification-prompt.md')) {
+                    return '# Verification';
+                }
+                if (filePath.endsWith('BUGS.md')) {
+                    // No pending items - all fixed
+                    return '- [x] All done';
+                }
+                return '';
+            });
+
+            executeClaude.mockImplementation(async () => {
+                iterationCount++;
+            });
+
+            // Should complete in 2 iterations, not loop forever
+            await loopFixes('Test prompt', 10);
+
+            // 2 iterations: 1 main (creates OVERVIEW) + 1 verification (auto-creates PASSED)
+            expect(executeClaude).toHaveBeenCalledTimes(2);
+            expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('Loop completed'));
         });
     });
 });
