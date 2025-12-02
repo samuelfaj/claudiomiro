@@ -1,23 +1,16 @@
-const path = require('path');
-
-jest.mock('./generate-todo');
+jest.mock('./generate-execution');
 jest.mock('./analyze-split');
-jest.mock('./utils');
 jest.mock('../../../../shared/utils/logger', () => ({
     warning: jest.fn(),
     info: jest.fn(),
     success: jest.fn(),
     newline: jest.fn(),
 }));
-jest.mock('../../../../shared/config/state', () => ({
-    claudiomiroFolder: '/test/.claudiomiro/task-executor',
-}));
 
 // Import after mocks
 const { step4 } = require('./index');
-const { generateTodo } = require('./generate-todo');
+const { generateExecution } = require('./generate-execution');
 const { analyzeSplit } = require('./analyze-split');
-const { validateTodoQuality } = require('./utils');
 const logger = require('../../../../shared/utils/logger');
 
 describe('step4', () => {
@@ -28,227 +21,81 @@ describe('step4', () => {
     });
 
     describe('step4', () => {
-        test('should orchestrate generateTodo and analyzeSplit successfully', async () => {
+        test('should orchestrate generateExecution and analyzeSplit successfully', async () => {
             // Arrange
-            generateTodo.mockResolvedValue();
+            generateExecution.mockResolvedValue();
             analyzeSplit.mockResolvedValue({ shouldSplit: false, reason: 'Simple task' });
-            validateTodoQuality.mockReturnValue({
-                valid: true,
-                errors: [],
-                contextScore: 3,
-            });
 
             // Act
             const result = await step4(mockTask);
 
             // Assert
-            expect(generateTodo).toHaveBeenCalledWith(mockTask);
-            expect(validateTodoQuality).toHaveBeenCalledWith(path.join('/test/.claudiomiro/task-executor', mockTask, 'TODO.md'));
+            expect(generateExecution).toHaveBeenCalledWith(mockTask);
             expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
-            expect(logger.success).toHaveBeenCalledWith('TODO.md validated successfully (context reference score: 3/3)');
+            expect(logger.success).toHaveBeenCalledWith('execution.json generated successfully');
             expect(result).toEqual({ shouldSplit: false, reason: 'Simple task' });
         });
 
-        test('should handle TODO validation with errors and continue to analyzeSplit', async () => {
+        test('should propagate error when generateExecution fails', async () => {
             // Arrange
-            generateTodo.mockResolvedValue();
-            analyzeSplit.mockResolvedValue({ shouldSplit: true, subtasks: ['TASK1.1', 'TASK1.2'] });
-            validateTodoQuality.mockReturnValue({
-                valid: false,
-                errors: [
-                    'TODO.md is too short (< 500 chars) - likely missing context',
-                    'Missing required section: ## Implementation Plan',
-                ],
-                contextScore: 1,
-            });
-
-            // Act
-            const result = await step4(mockTask);
-
-            // Assert
-            expect(generateTodo).toHaveBeenCalledWith(mockTask);
-            expect(validateTodoQuality).toHaveBeenCalled();
-            expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
-            expect(logger.warning).toHaveBeenCalledWith('  - TODO.md is too short (< 500 chars) - likely missing context');
-            expect(logger.warning).toHaveBeenCalledWith('  - Missing required section: ## Implementation Plan');
-            expect(logger.info).toHaveBeenCalledWith('Context reference score: 1/3');
-            expect(logger.info).toHaveBeenCalledWith('TODO.md was created but may need manual review for completeness.');
-            expect(logger.newline).toHaveBeenCalled();
-            expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
-            expect(result).toEqual({ shouldSplit: true, subtasks: ['TASK1.1', 'TASK1.2'] });
-        });
-
-        test('should handle validation with context score of 0', async () => {
-            // Arrange
-            generateTodo.mockResolvedValue();
-            analyzeSplit.mockResolvedValue({ shouldSplit: false, reason: 'Task analysis complete' });
-            validateTodoQuality.mockReturnValue({
-                valid: false,
-                errors: ['No context references found'],
-                contextScore: 0,
-            });
-
-            // Act
-            const result = await step4(mockTask);
-
-            // Assert
-            expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
-            expect(logger.warning).toHaveBeenCalledWith('  - No context references found');
-            expect(logger.info).toHaveBeenCalledWith('Context reference score: 0/3');
-            expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
-            expect(result).toEqual({ shouldSplit: false, reason: 'Task analysis complete' });
-        });
-
-        test('should handle validation with context score of 2', async () => {
-            // Arrange
-            generateTodo.mockResolvedValue();
-            analyzeSplit.mockResolvedValue({ shouldSplit: true, reason: 'Complex task' });
-            validateTodoQuality.mockReturnValue({
-                valid: false,
-                errors: ['Missing some implementation details'],
-                contextScore: 2,
-            });
-
-            // Act
-            const result = await step4(mockTask);
-
-            // Assert
-            expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
-            expect(logger.warning).toHaveBeenCalledWith('  - Missing some implementation details');
-            expect(logger.info).toHaveBeenCalledWith('Context reference score: 2/3');
-            expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
-            expect(result).toEqual({ shouldSplit: true, reason: 'Complex task' });
-        });
-
-        test('should handle validation with multiple errors', async () => {
-            // Arrange
-            generateTodo.mockResolvedValue();
-            analyzeSplit.mockResolvedValue({ shouldSplit: false, reason: 'Proceed with task' });
-            validateTodoQuality.mockReturnValue({
-                valid: false,
-                errors: [
-                    'TODO.md was not created',
-                    'Missing required section: ## Context Reference',
-                    'Missing required section: ## Implementation Plan',
-                    'Missing required section: ## Verification',
-                ],
-                contextScore: 0,
-            });
-
-            // Act
-            const result = await step4(mockTask);
-
-            // Assert
-            expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
-            expect(logger.warning).toHaveBeenCalledWith('  - TODO.md was not created');
-            expect(logger.warning).toHaveBeenCalledWith('  - Missing required section: ## Context Reference');
-            expect(logger.warning).toHaveBeenCalledWith('  - Missing required section: ## Implementation Plan');
-            expect(logger.warning).toHaveBeenCalledWith('  - Missing required section: ## Verification');
-            expect(logger.info).toHaveBeenCalledWith('Context reference score: 0/3');
-            expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
-            expect(result).toEqual({ shouldSplit: false, reason: 'Proceed with task' });
-        });
-
-        test('should propagate error when generateTodo fails', async () => {
-            // Arrange
-            const error = new Error('Failed to generate TODO.md');
-            generateTodo.mockRejectedValue(error);
+            const error = new Error('Failed to generate execution.json');
+            generateExecution.mockRejectedValue(error);
 
             // Act & Assert
-            await expect(step4(mockTask)).rejects.toThrow('Failed to generate TODO.md');
-            expect(generateTodo).toHaveBeenCalledWith(mockTask);
-            expect(validateTodoQuality).not.toHaveBeenCalled();
+            await expect(step4(mockTask)).rejects.toThrow('Failed to generate execution.json');
+            expect(generateExecution).toHaveBeenCalledWith(mockTask);
             expect(analyzeSplit).not.toHaveBeenCalled();
         });
 
         test('should propagate error when analyzeSplit fails', async () => {
             // Arrange
-            generateTodo.mockResolvedValue();
-            validateTodoQuality.mockReturnValue({
-                valid: true,
-                errors: [],
-                contextScore: 3,
-            });
+            generateExecution.mockResolvedValue();
             const error = new Error('Failed to analyze task for splitting');
             analyzeSplit.mockRejectedValue(error);
 
             // Act & Assert
             await expect(step4(mockTask)).rejects.toThrow('Failed to analyze task for splitting');
-            expect(generateTodo).toHaveBeenCalledWith(mockTask);
-            expect(validateTodoQuality).toHaveBeenCalled();
+            expect(generateExecution).toHaveBeenCalledWith(mockTask);
             expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
-        });
-
-        test('should handle empty errors array with invalid validation', async () => {
-            // Arrange
-            generateTodo.mockResolvedValue();
-            analyzeSplit.mockResolvedValue({ shouldSplit: false, reason: 'Analysis complete' });
-            validateTodoQuality.mockReturnValue({
-                valid: false,
-                errors: [],
-                contextScore: 2,
-            });
-
-            // Act
-            const result = await step4(mockTask);
-
-            // Assert
-            expect(logger.warning).toHaveBeenCalledWith('TODO.md quality issues detected:');
-            expect(logger.info).toHaveBeenCalledWith('Context reference score: 2/3');
-            expect(analyzeSplit).toHaveBeenCalledWith(mockTask);
-            expect(result).toEqual({ shouldSplit: false, reason: 'Analysis complete' });
         });
 
         test('should work with different task identifiers', async () => {
             // Arrange
             const differentTask = 'TASK42';
-            generateTodo.mockResolvedValue();
+            generateExecution.mockResolvedValue();
             analyzeSplit.mockResolvedValue({ shouldSplit: true });
-            validateTodoQuality.mockReturnValue({
-                valid: true,
-                errors: [],
-                contextScore: 3,
-            });
 
             // Act
             await step4(differentTask);
 
             // Assert
-            expect(generateTodo).toHaveBeenCalledWith(differentTask);
-            expect(validateTodoQuality).toHaveBeenCalledWith(path.join('/test/.claudiomiro/task-executor', differentTask, 'TODO.md'));
+            expect(generateExecution).toHaveBeenCalledWith(differentTask);
             expect(analyzeSplit).toHaveBeenCalledWith(differentTask);
         });
 
-        test('should handle all valid context scores (0, 1, 2, 3)', async () => {
-            // Test each context score value
-            const testCases = [
-                { score: 0, expectedMessage: 'Context reference score: 0/3' },
-                { score: 1, expectedMessage: 'Context reference score: 1/3' },
-                { score: 2, expectedMessage: 'Context reference score: 2/3' },
-                { score: 3, expectedMessage: 'context reference score: 3/3' },
-            ];
+        test('should return split analysis result with subtasks', async () => {
+            // Arrange
+            generateExecution.mockResolvedValue();
+            analyzeSplit.mockResolvedValue({ shouldSplit: true, subtasks: ['TASK1.1', 'TASK1.2'] });
 
-            for (const testCase of testCases) {
-                // Arrange
-                jest.clearAllMocks();
-                generateTodo.mockResolvedValue();
-                analyzeSplit.mockResolvedValue({ shouldSplit: false });
-                validateTodoQuality.mockReturnValue({
-                    valid: testCase.score === 3,
-                    errors: testCase.score < 3 ? ['Some error'] : [],
-                    contextScore: testCase.score,
-                });
+            // Act
+            const result = await step4(mockTask);
 
-                // Act
-                await step4(mockTask);
+            // Assert
+            expect(result).toEqual({ shouldSplit: true, subtasks: ['TASK1.1', 'TASK1.2'] });
+        });
 
-                // Assert
-                if (testCase.score === 3) {
-                    expect(logger.success).toHaveBeenCalledWith(`TODO.md validated successfully (${testCase.expectedMessage})`);
-                } else {
-                    expect(logger.info).toHaveBeenCalledWith(testCase.expectedMessage);
-                }
-            }
+        test('should call logger.success after generating execution.json', async () => {
+            // Arrange
+            generateExecution.mockResolvedValue();
+            analyzeSplit.mockResolvedValue({ shouldSplit: false });
+
+            // Act
+            await step4(mockTask);
+
+            // Assert
+            expect(logger.success).toHaveBeenCalledTimes(1);
+            expect(logger.success).toHaveBeenCalledWith('execution.json generated successfully');
         });
     });
 });
