@@ -1,6 +1,12 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+
+// Mock local-llm to avoid Ollama connection attempts
+jest.mock('../local-llm', () => ({
+    getLocalLLMService: jest.fn(() => null),
+}));
+
 const { CodeIndex, IndexBuilder, QueryEngine } = require('./index');
 const { resetAstGrepState } = require('./index-builder');
 

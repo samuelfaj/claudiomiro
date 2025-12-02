@@ -412,4 +412,150 @@ describe('State', () => {
             });
         });
     });
+
+    describe('legacy systems support', () => {
+        describe('hasLegacySystems', () => {
+            test('should return false by default', () => {
+                expect(state.hasLegacySystems()).toBe(false);
+            });
+
+            test('should return true when any legacy system configured', () => {
+                state.setLegacySystems({ system: '/test/legacy' });
+                expect(state.hasLegacySystems()).toBe(true);
+            });
+
+            test('should return false after clearing (set empty object)', () => {
+                state.setLegacySystems({ system: '/test/legacy' });
+                state.setLegacySystems({});
+                expect(state.hasLegacySystems()).toBe(false);
+            });
+        });
+
+        describe('setLegacySystems', () => {
+            test('should set single legacy system path', () => {
+                state.setLegacySystems({ system: '/test/legacy' });
+                expect(state.getLegacySystem('system')).toBe(path.resolve('/test/legacy'));
+            });
+
+            test('should set multiple legacy system paths', () => {
+                state.setLegacySystems({
+                    system: '/test/system',
+                    backend: '/test/backend',
+                    frontend: '/test/frontend',
+                });
+                expect(state.getLegacySystem('system')).toBe(path.resolve('/test/system'));
+                expect(state.getLegacySystem('backend')).toBe(path.resolve('/test/backend'));
+                expect(state.getLegacySystem('frontend')).toBe(path.resolve('/test/frontend'));
+            });
+
+            test('should clear previous configuration when called again', () => {
+                state.setLegacySystems({ system: '/test/first' });
+                state.setLegacySystems({ backend: '/test/second' });
+                expect(state.getLegacySystem('system')).toBe(null);
+                expect(state.getLegacySystem('backend')).toBe(path.resolve('/test/second'));
+            });
+
+            test('should skip falsy values', () => {
+                state.setLegacySystems({
+                    system: '/test/system',
+                    backend: null,
+                    frontend: '',
+                });
+                expect(state.getLegacySystem('system')).toBe(path.resolve('/test/system'));
+                expect(state.getLegacySystem('backend')).toBe(null);
+                expect(state.getLegacySystem('frontend')).toBe(null);
+            });
+
+            test('should resolve relative paths', () => {
+                state.setLegacySystems({ system: './relative/path' });
+                expect(path.isAbsolute(state.getLegacySystem('system'))).toBe(true);
+            });
+
+            test('should throw error if path does not exist', () => {
+                mockFs.existsSync.mockImplementation((p) => {
+                    return !p.includes('nonexistent');
+                });
+
+                expect(() => state.setLegacySystems({ system: '/nonexistent/path' }))
+                    .toThrow('Legacy system path does not exist');
+            });
+
+            test('should NOT require paths to be git repositories', () => {
+                // Path exists but is not a git repo
+                mockFindGitRoot.mockReturnValue(null);
+
+                // Should not throw - no git validation for legacy systems
+                expect(() => state.setLegacySystems({ system: '/test/non-git-folder' }))
+                    .not.toThrow();
+            });
+        });
+
+        describe('getLegacySystem', () => {
+            test('should return path for configured type', () => {
+                state.setLegacySystems({ backend: '/test/backend' });
+                expect(state.getLegacySystem('backend')).toBe(path.resolve('/test/backend'));
+            });
+
+            test('should return null for unconfigured type', () => {
+                state.setLegacySystems({ system: '/test/system' });
+                expect(state.getLegacySystem('backend')).toBe(null);
+            });
+
+            test('should return null for unknown type', () => {
+                state.setLegacySystems({ system: '/test/system' });
+                expect(state.getLegacySystem('invalid')).toBe(null);
+            });
+        });
+
+        describe('getAllLegacySystems', () => {
+            test('should return empty Map by default', () => {
+                expect(state.getAllLegacySystems().size).toBe(0);
+            });
+
+            test('should return Map with all configured systems', () => {
+                state.setLegacySystems({
+                    system: '/test/system',
+                    backend: '/test/backend',
+                });
+
+                const allSystems = state.getAllLegacySystems();
+                expect(allSystems.size).toBe(2);
+                expect(allSystems.get('system')).toBe(path.resolve('/test/system'));
+                expect(allSystems.get('backend')).toBe(path.resolve('/test/backend'));
+            });
+
+            test('should return Map copy (not reference)', () => {
+                state.setLegacySystems({ system: '/test/system' });
+
+                const allSystems = state.getAllLegacySystems();
+                allSystems.set('hacked', '/hacked/path');
+
+                // Internal state should not be affected
+                expect(state.getLegacySystem('hacked')).toBe(null);
+            });
+        });
+
+        describe('independence from multi-repo', () => {
+            const backendPath = '/test/backend';
+            const frontendPath = '/test/frontend';
+            const gitConfig = { mode: 'monorepo', gitRoots: ['/test/root'] };
+
+            test('legacy systems work independently of multi-repo mode', () => {
+                state.setLegacySystems({ system: '/test/legacy' });
+
+                expect(state.hasLegacySystems()).toBe(true);
+                expect(state.isMultiRepo()).toBe(false);
+            });
+
+            test('both features can be used together', () => {
+                state.setMultiRepo(backendPath, frontendPath, gitConfig);
+                state.setLegacySystems({ system: '/test/legacy-system' });
+
+                expect(state.isMultiRepo()).toBe(true);
+                expect(state.hasLegacySystems()).toBe(true);
+                expect(state.getRepository('backend')).toBe(path.resolve(backendPath));
+                expect(state.getLegacySystem('system')).toBe(path.resolve('/test/legacy-system'));
+            });
+        });
+    });
 });

@@ -11,6 +11,9 @@ const COMMANDS = [
             { flag: '--skip-research', description: 'Skip the research phase' },
             { flag: '--backend=<path>', description: 'Backend repository path (enables multi-repo mode)' },
             { flag: '--frontend=<path>', description: 'Frontend repository path (enables multi-repo mode)' },
+            { flag: '--legacy-system=<path>', description: 'Reference a full legacy project for migration (READ-ONLY)' },
+            { flag: '--legacy-backend=<path>', description: 'Reference legacy backend/API code only (READ-ONLY)' },
+            { flag: '--legacy-frontend=<path>', description: 'Reference legacy frontend/UI code only (READ-ONLY)' },
         ],
     },
     {
@@ -150,6 +153,15 @@ const printExamples = () => {
     console.log();
     console.log(chalk.gray('    # Multi-repository mode (backend + frontend)'));
     console.log(chalk.white('    $ claudiomiro --backend=./api --frontend=./web --prompt="Add user authentication"'));
+    console.log();
+    console.log(chalk.gray('    # Reference legacy system during migration'));
+    console.log(chalk.white('    $ claudiomiro --legacy-system=/path/to/old-project "Migrate user auth"'));
+    console.log();
+    console.log(chalk.gray('    # Reference separate legacy backend and frontend'));
+    console.log(chalk.white('    $ claudiomiro --legacy-backend=/old-api --legacy-frontend=/old-ui "Refactor login"'));
+    console.log();
+    console.log(chalk.gray('    # Legacy flags can be combined (systems are READ-ONLY references)'));
+    console.log(chalk.white('    $ claudiomiro --legacy-system=/old --backend=./api --frontend=./web "Modernize"'));
     console.log();
 };
 

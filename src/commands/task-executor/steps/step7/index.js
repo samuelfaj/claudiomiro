@@ -163,6 +163,14 @@ const step7 = async (maxIterations = 20) => {
     try {
         await runFixBranch(args);
 
+        // After fix-branch completes, propagate CRITICAL_REVIEW_PASSED.md from loop-fixes to main folder
+        // fix-branch creates the file in .claudiomiro/loop-fixes/, but cli.js checks in .claudiomiro/
+        const loopFixesPassedPath = path.join(state._claudiomiroRoot, 'loop-fixes', 'CRITICAL_REVIEW_PASSED.md');
+        if (fs.existsSync(loopFixesPassedPath) && !fs.existsSync(passedPath)) {
+            fs.copyFileSync(loopFixesPassedPath, passedPath);
+            logger.info('📋 Propagated CRITICAL_REVIEW_PASSED.md to main folder');
+        }
+
         // After fix-branch completes, run integration verification for multi-repo
         await runIntegrationVerification();
 

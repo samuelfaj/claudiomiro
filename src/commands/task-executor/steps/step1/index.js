@@ -3,6 +3,7 @@ const path = require('path');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system');
 
 /**
  * Generates multi-repository context section for AI_PROMPT.md
@@ -76,8 +77,9 @@ const step1 = async (sameBranch = false) => {
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
     const multiRepoContext = generateMultiRepoContext();
+    const legacyContext = generateLegacySystemContext();
 
-    await executeClaude(replace(branchStep + prompt + multiRepoContext));
+    await executeClaude(replace(branchStep + prompt + multiRepoContext + legacyContext));
 
     logger.stopSpinner();
 

@@ -17,6 +17,11 @@ jest.mock('./cache-manager', () => ({
     getCodebasePatterns: jest.fn(),
 }));
 
+// Mock local-llm to avoid Ollama connection attempts
+jest.mock('../local-llm', () => ({
+    getLocalLLMService: jest.fn(() => null),
+}));
+
 const {
     getTaskOrder,
     getTaskFolders,

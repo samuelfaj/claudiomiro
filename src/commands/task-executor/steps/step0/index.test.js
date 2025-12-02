@@ -6,6 +6,9 @@ jest.mock('child_process');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/services/prompt-reader');
 jest.mock('../../services/file-manager');
+jest.mock('../../../../shared/services/legacy-system', () => ({
+    generateLegacySystemContext: jest.fn(() => ''),
+}));
 
 // Create mock state with multi-repo support
 const mockState = {
@@ -34,6 +37,7 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
 const { getMultilineInput, askClarificationQuestions } = require('../../../../shared/services/prompt-reader');
 const { startFresh } = require('../../services/file-manager');
 const logger = require('../../../../shared/utils/logger');
+const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system');
 
 describe('step0', () => {
     beforeEach(() => {
@@ -418,6 +422,114 @@ describe('step0', () => {
                 );
                 expect(promptCall[0]).not.toContain('## FIRST STEP:');
                 expect(promptCall[0]).not.toContain('Create a git branch');
+            });
+        });
+
+        describe('legacy system context integration', () => {
+            test('should include legacy context in prompt when legacy systems configured', async () => {
+                // Arrange
+                const mockTask = 'Implement feature with legacy system reference';
+                const mockLegacyContext = '\n\n## Legacy System Reference\n\n**⚠️ REFERENCE ONLY - DO NOT MODIFY**\n\nLegacy system: /path/to/legacy';
+
+                generateLegacySystemContext.mockReturnValue(mockLegacyContext);
+
+                fs.existsSync.mockImplementation((filePath) => {
+                    if (filePath.includes('CLARIFICATION_ANSWERS.json')) return false;
+                    if (filePath.includes('CLARIFICATION_QUESTIONS.json')) return false;
+                    if (filePath.includes('prompt.md')) return true;
+                    return false;
+                });
+
+                fs.readFileSync.mockImplementation((filePath) => {
+                    if (filePath.includes('prompt.md')) {
+                        return 'Generate clarification questions for {{TASK}}';
+                    }
+                    return '';
+                });
+
+                fs.writeFileSync.mockImplementation(() => { });
+                executeClaude.mockResolvedValue({ success: true });
+
+                // Act
+                await step0(false, mockTask);
+
+                // Assert
+                expect(generateLegacySystemContext).toHaveBeenCalled();
+                const promptCall = executeClaude.mock.calls.find(call =>
+                    call[0].includes('Generate clarification questions'),
+                );
+                expect(promptCall[0]).toContain('## Legacy System Reference');
+                expect(promptCall[0]).toContain('⚠️ REFERENCE ONLY - DO NOT MODIFY');
+            });
+
+            test('should not include legacy context when no legacy systems configured', async () => {
+                // Arrange
+                const mockTask = 'Implement feature without legacy system';
+
+                generateLegacySystemContext.mockReturnValue('');
+
+                fs.existsSync.mockImplementation((filePath) => {
+                    if (filePath.includes('CLARIFICATION_ANSWERS.json')) return false;
+                    if (filePath.includes('CLARIFICATION_QUESTIONS.json')) return false;
+                    if (filePath.includes('prompt.md')) return true;
+                    return false;
+                });
+
+                fs.readFileSync.mockImplementation((filePath) => {
+                    if (filePath.includes('prompt.md')) {
+                        return 'Generate clarification questions for {{TASK}}';
+                    }
+                    return '';
+                });
+
+                fs.writeFileSync.mockImplementation(() => { });
+                executeClaude.mockResolvedValue({ success: true });
+
+                // Act
+                await step0(false, mockTask);
+
+                // Assert
+                expect(generateLegacySystemContext).toHaveBeenCalled();
+                const promptCall = executeClaude.mock.calls.find(call =>
+                    call[0].includes('Generate clarification questions'),
+                );
+                expect(promptCall[0]).not.toContain('## Legacy System Reference');
+            });
+
+            test('should append legacy context after base prompt', async () => {
+                // Arrange
+                const mockTask = 'Implement feature with legacy context order test';
+                const mockLegacyContext = '\n\n## Legacy System Reference\n\nLegacy content here';
+
+                generateLegacySystemContext.mockReturnValue(mockLegacyContext);
+
+                fs.existsSync.mockImplementation((filePath) => {
+                    if (filePath.includes('CLARIFICATION_ANSWERS.json')) return false;
+                    if (filePath.includes('CLARIFICATION_QUESTIONS.json')) return false;
+                    if (filePath.includes('prompt.md')) return true;
+                    return false;
+                });
+
+                fs.readFileSync.mockImplementation((filePath) => {
+                    if (filePath.includes('prompt.md')) {
+                        return 'BASE_PROMPT_MARKER for {{TASK}}';
+                    }
+                    return '';
+                });
+
+                fs.writeFileSync.mockImplementation(() => { });
+                executeClaude.mockResolvedValue({ success: true });
+
+                // Act
+                await step0(false, mockTask);
+
+                // Assert - legacy context appears AFTER base prompt
+                const promptCall = executeClaude.mock.calls.find(call =>
+                    call[0].includes('BASE_PROMPT_MARKER'),
+                );
+                const basePromptIndex = promptCall[0].indexOf('BASE_PROMPT_MARKER');
+                const legacyContextIndex = promptCall[0].indexOf('## Legacy System Reference');
+                expect(legacyContextIndex).toBeGreaterThan(basePromptIndex);
             });
         });
     });

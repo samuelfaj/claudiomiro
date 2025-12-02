@@ -5,6 +5,7 @@ const logger = require('../../../../shared/utils/logger');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { askClarificationQuestions } = require('../../../../shared/services/prompt-reader');
 const { startFresh } = require('../../services/file-manager');
+const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system');
 
 /**
  * Step 0: Generate clarification questions (if needed)
@@ -70,7 +71,8 @@ const step0 = async (sameBranch = false, promptText = null) => {
     );
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
-    await executeClaude(replace(branchStep + prompt));
+    const legacyContext = generateLegacySystemContext();
+    await executeClaude(replace(branchStep + prompt + legacyContext));
 
     logger.stopSpinner();
 
