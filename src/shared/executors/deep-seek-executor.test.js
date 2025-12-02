@@ -391,8 +391,15 @@ describe('deep-seek-executor', () => {
         });
 
         test('should handle cleanup error gracefully', async () => {
+            // Track call count to throw error only on cleanup (second call)
+            let existsSyncCallCount = 0;
             fs.existsSync.mockImplementation(() => {
-                throw new Error('Cleanup failed');
+                existsSyncCallCount++;
+                // First call is for directory check, second is for temp file cleanup
+                if (existsSyncCallCount > 1) {
+                    throw new Error('Cleanup failed');
+                }
+                return true; // Directory exists
             });
 
             return new Promise((resolve) => {
@@ -409,7 +416,7 @@ describe('deep-seek-executor', () => {
             });
         });
 
-        test('should implement timeout mechanism', (done) => {
+        test('should implement timeout mechanism', async () => {
             jest.useFakeTimers();
 
             mockChildProcess.stdout.on.mockImplementation((event, _handler) => {
@@ -418,15 +425,26 @@ describe('deep-seek-executor', () => {
                 }
             });
 
-            executeDeepSeek('test prompt').catch((error) => {
-                expect(error.message).toContain('DeepSeek stuck - timeout after 10 minutes of inactivity');
-                expect(mockChildProcess.kill).toHaveBeenCalledWith('SIGKILL');
-                jest.useRealTimers();
-                done();
+            const executePromise = executeDeepSeek('test prompt');
+
+            // Attach catch handler BEFORE advancing timers to prevent unhandled rejection
+            let caughtError = null;
+            executePromise.catch((error) => {
+                caughtError = error;
             });
 
             // Fast-forward time by 15 minutes to trigger timeout
             jest.advanceTimersByTime(15 * 60 * 1000);
+
+            // Allow promise rejection to propagate
+            await Promise.resolve();
+            await Promise.resolve();
+
+            expect(caughtError).not.toBeNull();
+            expect(caughtError.message).toContain('DeepSeek stuck - timeout after 10 minutes of inactivity');
+            expect(mockChildProcess.kill).toHaveBeenCalledWith('SIGKILL');
+
+            jest.useRealTimers();
         });
 
         test('should reset timeout on data received', () => {

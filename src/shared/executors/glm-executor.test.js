@@ -383,8 +383,15 @@ describe('GLM Executor', () => {
         });
 
         test('should handle cleanup error gracefully', async () => {
+            // Track call count to throw error only on cleanup (second call)
+            let existsSyncCallCount = 0;
             fs.existsSync.mockImplementation(() => {
-                throw new Error('Cleanup failed');
+                existsSyncCallCount++;
+                // First call is for directory check, second is for temp file cleanup
+                if (existsSyncCallCount > 1) {
+                    throw new Error('Cleanup failed');
+                }
+                return true; // Directory exists
             });
 
             return new Promise((resolve) => {
