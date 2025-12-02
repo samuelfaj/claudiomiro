@@ -55,12 +55,19 @@ describe('reflection-hook', () => {
     });
 
     it('builds trajectory content from task artifacts', () => {
-        fs.writeFileSync(path.join(taskFolder, 'TODO.md'), '# Plan\n- Step 1');
-        fs.writeFileSync(path.join(taskFolder, 'CONTEXT.md'), 'Summary of changes');
+        fs.writeFileSync(path.join(taskFolder, 'BLUEPRINT.md'), '# BLUEPRINT: TASK1\n## Implementation Strategy');
+        fs.writeFileSync(path.join(taskFolder, 'execution.json'), JSON.stringify({
+            status: 'in_progress',
+            currentPhase: { id: 1, name: 'Phase 1' },
+            phases: [{ id: 1, name: 'Phase 1', status: 'in_progress' }],
+            artifacts: [],
+            uncertainties: [],
+        }));
 
         const trajectory = buildReflectionTrajectory('TASK1', 'Additional context');
 
-        expect(trajectory).toContain('Implementation Plan');
+        expect(trajectory).toContain('Task Blueprint');
+        expect(trajectory).toContain('Execution State');
         expect(trajectory).toContain('Additional context');
     });
 

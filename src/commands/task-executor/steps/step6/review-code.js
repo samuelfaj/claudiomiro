@@ -3,11 +3,6 @@ const path = require('path');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
-const {
-    buildConsolidatedContextAsync,
-    buildOptimizedContextAsync,
-    getContextFilePaths,
-} = require('../../../../shared/services/context-cache');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 
 /**
@@ -93,107 +88,6 @@ const buildReviewContext = (blueprint, execution) => {
 };
 
 /**
- * Performs code review using the old flow (backward compatibility)
- * Uses buildOptimizedContextAsync for context building
- *
- * @param {string} task - Task identifier
- * @param {function} folder - Helper function to build file paths
- * @param {string} projectFolder - Working directory
- * @param {string} taskDescription - Task description text
- * @returns {Promise} Result of Claude execution
- */
-const reviewWithOldFlow = async (task, folder, projectFolder, taskDescription) => {
-    logger.debug('[Step6] Using legacy flow (backward compatibility)');
-
-    // Try optimized context with Local LLM (40-60% token reduction)
-    let consolidatedContext;
-    try {
-        const optimizedResult = await buildOptimizedContextAsync(
-            state.claudiomiroFolder,
-            task,
-            projectFolder,
-            taskDescription,
-            { maxFiles: 8, minRelevance: 0.4, summarize: true },
-        );
-        consolidatedContext = optimizedResult.context;
-
-        if (optimizedResult.method === 'llm-optimized' && optimizedResult.tokenSavings > 0) {
-            logger.debug(`[Step6] Context optimized: ~${optimizedResult.tokenSavings} tokens saved`);
-        }
-    } catch {
-        // Fallback to standard consolidated context
-        consolidatedContext = await buildConsolidatedContextAsync(
-            state.claudiomiroFolder,
-            task,
-            projectFolder,
-            taskDescription,
-        );
-    }
-
-    // Get minimal reference file paths (for detailed reading if needed)
-    const contextFilePaths = [
-        path.join(state.claudiomiroFolder, 'AI_PROMPT.md'),
-        path.join(state.claudiomiroFolder, 'INITIAL_PROMPT.md'),
-    ].filter(f => fs.existsSync(f));
-
-    // Add current task's files
-    if (fs.existsSync(folder('RESEARCH.md'))) {
-        contextFilePaths.push(folder('RESEARCH.md'));
-    }
-    if (fs.existsSync(folder('CONTEXT.md'))) {
-        contextFilePaths.push(folder('CONTEXT.md'));
-    }
-
-    // Add context files from other tasks (minimal list)
-    const otherContextPaths = getContextFilePaths(state.claudiomiroFolder, task, {
-        includeContext: true,
-        includeResearch: false,
-        includeTodo: false,
-        onlyCompleted: true,
-    });
-    contextFilePaths.push(...otherContextPaths);
-
-    // Build optimized context section with summary + reference paths
-    const contextSection = `\n\n## 📚 CONTEXT SUMMARY FOR REVIEW
-${consolidatedContext}
-
-## REFERENCE FILES (read if more detail needed):
-${contextFilePaths.map(f => `- ${f}`).join('\n')}
-
-These provide:
-- Original requirements and user intent
-- Architectural decisions from previous tasks
-- Code patterns and conventions used
-- Integration points and contracts
-\n`;
-
-    // Load prompt template
-    let promptTemplate = fs.readFileSync(path.join(__dirname, 'prompt-review.md'), 'utf-8');
-
-    // Build research section
-    const researchSection = fs.existsSync(folder('RESEARCH.md'))
-        ? `4. **${folder('RESEARCH.md')}** → Pre-implementation analysis and execution strategy`
-        : '';
-
-    // Replace placeholders
-    promptTemplate = promptTemplate
-        .replace(/\{\{contextSection\}\}/g, contextSection)
-        .replace(/\{\{promptMdPath\}\}/g, folder('PROMPT.md'))
-        .replace(/\{\{taskMdPath\}\}/g, folder('TASK.md'))
-        .replace(/\{\{todoMdPath\}\}/g, folder('TODO.md'))
-        .replace(/\{\{codeReviewMdPath\}\}/g, folder('CODE_REVIEW.md'))
-        .replace(/\{\{researchMdPath\}\}/g, folder('RESEARCH.md'))
-        .replace(/\{\{researchSection\}\}/g, researchSection);
-
-    const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
-    return await executeClaude(
-        promptTemplate + '\n\n' + shellCommandRule,
-        task,
-        projectFolder !== state.folder ? { cwd: projectFolder } : undefined,
-    );
-};
-
-/**
  * Performs code review using the new BLUEPRINT flow
  * Uses BLUEPRINT.md + execution.json without buildOptimizedContextAsync
  *
@@ -251,20 +145,12 @@ These provide:
     // Load prompt template
     let promptTemplate = fs.readFileSync(path.join(__dirname, 'prompt-review.md'), 'utf-8');
 
-    // Build research section (BLUEPRINT may still have research info)
-    const researchSection = fs.existsSync(folder('RESEARCH.md'))
-        ? `4. **${folder('RESEARCH.md')}** → Pre-implementation analysis and execution strategy`
-        : '';
-
-    // Replace placeholders
+    // Replace placeholders with new BLUEPRINT + execution.json flow
     promptTemplate = promptTemplate
         .replace(/\{\{contextSection\}\}/g, contextSection)
-        .replace(/\{\{promptMdPath\}\}/g, folder('PROMPT.md'))
-        .replace(/\{\{taskMdPath\}\}/g, folder('TASK.md'))
-        .replace(/\{\{todoMdPath\}\}/g, folder('TODO.md'))
-        .replace(/\{\{codeReviewMdPath\}\}/g, folder('CODE_REVIEW.md'))
-        .replace(/\{\{researchMdPath\}\}/g, folder('RESEARCH.md'))
-        .replace(/\{\{researchSection\}\}/g, researchSection);
+        .replace(/\{\{blueprintPath\}\}/g, folder('BLUEPRINT.md'))
+        .replace(/\{\{executionJsonPath\}\}/g, folder('execution.json'))
+        .replace(/\{\{codeReviewMdPath\}\}/g, folder('CODE_REVIEW.md'));
 
     const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
     return await executeClaude(
@@ -278,8 +164,7 @@ These provide:
  * Performs systematic code review of implemented task
  * Verifies completeness, correctness, testing, and adherence to requirements
  *
- * Token-optimized: Uses consolidated context for efficient token usage
- * Supports both new BLUEPRINT flow and legacy backward compatibility
+ * Uses BLUEPRINT.md + execution.json flow
  *
  * @param {string} task - Task identifier (e.g., 'TASK1')
  * @returns {Promise} Result of Claude execution
@@ -295,27 +180,23 @@ const reviewCode = async (task) => {
         fs.rmSync(folder('GITHUB_PR.md'));
     }
 
-    // Read task content and extract scope for multi-repo support
-    const taskMdPath = folder('TASK.md');
-    const taskMdContent = fs.existsSync(taskMdPath)
-        ? fs.readFileSync(taskMdPath, 'utf-8')
-        : '';
-    const taskDescription = taskMdContent.substring(0, 500) || task;
+    // Require BLUEPRINT.md to exist
+    const blueprintPath = folder('BLUEPRINT.md');
+    if (!fs.existsSync(blueprintPath)) {
+        throw new Error(`BLUEPRINT.md not found for task ${task}. Cannot perform code review.`);
+    }
+
+    // Read BLUEPRINT.md and extract scope for multi-repo support
+    const blueprintContent = fs.readFileSync(blueprintPath, 'utf-8');
 
     // Determine working directory based on scope (multi-repo support)
-    const scope = parseTaskScope(taskMdContent);
+    const scope = parseTaskScope(blueprintContent);
     validateScope(scope, state.isMultiRepo()); // Throws if scope missing in multi-repo mode
     const projectFolder = state.isMultiRepo() && scope
         ? state.getRepository(scope)
         : state.folder;
 
-    // Check for BLUEPRINT.md to determine flow
-    if (fs.existsSync(folder('BLUEPRINT.md'))) {
-        return await reviewWithBlueprintFlow(task, folder, projectFolder);
-    }
-
-    // Backward compatibility: use old flow if BLUEPRINT.md doesn't exist
-    return await reviewWithOldFlow(task, folder, projectFolder, taskDescription);
+    return await reviewWithBlueprintFlow(task, folder, projectFolder);
 };
 
 module.exports = {

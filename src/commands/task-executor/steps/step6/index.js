@@ -1,9 +1,9 @@
 const fs = require('fs');
 const path = require('path');
 const { reviewCode } = require('./review-code');
-const { reanalyzeFailed } = require('./reanalyze-failed');
+const { reanalyzeBlocked } = require('./reanalyze-blocked');
 const { smartCommit } = require('../../../../shared/services/git-commit');
-const { isFullyImplementedAsync } = require('../../utils/validation');
+const { isCompletedFromExecution } = require('../../utils/validation');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
@@ -84,8 +84,10 @@ const commitForScope = async (task, scope, commitMessage, shouldPush) => {
  *
  * Performs comprehensive code review of implemented tasks:
  * 1. Reviews code for completeness, correctness, and quality
- * 2. If review fails multiple times, performs deep re-analysis
+ * 2. If task is blocked multiple times, performs deep re-analysis
  * 3. Commits approved changes to version control
+ *
+ * Uses BLUEPRINT.md + execution.json flow
  *
  * @param {string} task - Task identifier (e.g., 'TASK1')
  * @param {boolean} shouldPush - Whether to push changes to remote
@@ -94,17 +96,23 @@ const commitForScope = async (task, scope, commitMessage, shouldPush) => {
 const step6 = async (task, shouldPush = true) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
 
-    // Perform main code review
-    const execution = await reviewCode(task);
+    // Require execution.json to exist
+    const executionPath = folder('execution.json');
+    if (!fs.existsSync(executionPath)) {
+        throw new Error(`execution.json not found for task ${task}. Step 4 must generate execution.json.`);
+    }
 
-    // Check if implementation is complete and approved (using Local LLM when available)
-    const completionResult = await isFullyImplementedAsync(folder('TODO.md'));
+    // Perform main code review
+    const reviewResult = await reviewCode(task);
+
+    // Check if implementation is complete from execution.json
+    const completionResult = isCompletedFromExecution(executionPath);
     if (completionResult.completed) {
         try {
-            // Parse scope for multi-repo commit routing
-            const taskMdPath = folder('TASK.md');
-            const taskMd = fs.existsSync(taskMdPath) ? fs.readFileSync(taskMdPath, 'utf-8') : '';
-            const scope = parseTaskScope(taskMd);
+            // Parse scope for multi-repo commit routing from BLUEPRINT.md
+            const blueprintPath = folder('BLUEPRINT.md');
+            const blueprintContent = fs.existsSync(blueprintPath) ? fs.readFileSync(blueprintPath, 'utf-8') : '';
+            const scope = parseTaskScope(blueprintContent);
 
             // Validate scope in multi-repo mode
             if (state.isMultiRepo()) {
@@ -123,8 +131,8 @@ const step6 = async (task, shouldPush = true) => {
             }
             try {
                 await curateInsights(task, {
-                    todoPath: folder('TODO.md'),
-                    contextPath: folder('CONTEXT.md'),
+                    executionPath: executionPath,
+                    blueprintPath: folder('BLUEPRINT.md'),
                     codeReviewPath: folder('CODE_REVIEW.md'),
                     reflectionPath: folder('REFLECTION.md'),
                 });
@@ -142,17 +150,16 @@ const step6 = async (task, shouldPush = true) => {
             }
         }
     } else {
-        // If review failed, check if we need deep re-analysis
-        if (fs.existsSync(folder('info.json'))) {
-            const json = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
-            // Every 3 attempts, rewrite TODO from scratch
-            if (json.attempts % 3 === 0) {
-                await reanalyzeFailed(task);
-            }
+        // If task is blocked, check if we need deep re-analysis
+        const execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
+        const attempts = execution.attempts || 0;
+        // Every 3 attempts, perform re-analysis
+        if (attempts > 0 && attempts % 3 === 0) {
+            await reanalyzeBlocked(task);
         }
     }
 
-    return execution;
+    return reviewResult;
 };
 
 module.exports = { step6 };

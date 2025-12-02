@@ -4,11 +4,7 @@ const { promisify } = require('util');
 const { exec: execCallback } = require('child_process');
 const state = require('../../../../shared/config/state');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
-const {
-    buildConsolidatedContextAsync,
-    markTaskCompleted,
-    getContextFilePaths,
-} = require('../../../../shared/services/context-cache');
+const { markTaskCompleted } = require('../../../../shared/services/context-cache');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 const reflectionHook = require('./reflection-hook');
 
@@ -32,52 +28,25 @@ const DANGEROUS_PATTERNS = [
 /**
  * Step 5: Task Execution
  *
- * New 2-File Flow (BLUEPRINT.md + execution.json):
- * 1. Checks for BLUEPRINT.md existence (new flow) or falls back to old flow
+ * 2-File Flow (BLUEPRINT.md + execution.json):
+ * 1. Requires BLUEPRINT.md to exist
  * 2. Verifies pre-conditions with HARD STOP behavior
  * 3. Enforces phase gates (Phase N requires Phase N-1 completed)
  * 4. Executes task using BLUEPRINT.md as context
  * 5. Updates execution.json with progress, artifacts, completion
  *
- * Old Flow Fallback (TASK.md + TODO.md):
- * - Generates RESEARCH.md with codebase analysis
- * - Builds context from previous tasks
- * - Executes task using TODO.md as guide
- * - Generates CONTEXT.md post-completion
- *
  * This is the core implementation step where actual code changes happen.
  */
 
-const _listFolders = (dir) => {
-    return fs.readdirSync(dir).filter(f => fs.statSync(path.join(dir, f)).isDirectory());
-};
-
-const estimateCodeChangeSize = (contextPath, todoPath) => {
-    const readContent = (filePath) => (fs.existsSync(filePath) ? fs.readFileSync(filePath, 'utf8') : '');
-    const context = readContent(contextPath);
-    const todo = readContent(todoPath);
-    return context.split('\n').length + Math.floor(todo.split('\n').length / 2);
-};
-
-const estimateTaskComplexity = (todoPath) => {
-    if (!fs.existsSync(todoPath)) {
-        return 'medium';
-    }
-    const content = fs.readFileSync(todoPath, 'utf8');
-    if (/complexity:\s*high/i.test(content)) {
-        return 'high';
-    }
-    if (/complexity:\s*low/i.test(content)) {
-        return 'low';
-    }
-    const checklist = (content.match(/- \[ \]/g) || []).length;
-    if (checklist >= 8) {
-        return 'high';
-    }
-    if (checklist <= 3) {
-        return 'low';
-    }
-    return 'medium';
+/**
+ * Estimates the code change size from BLUEPRINT.md content
+ * @param {string} blueprintPath - Path to BLUEPRINT.md
+ * @returns {number} Estimated line count
+ */
+const estimateCodeChangeSize = (blueprintPath) => {
+    if (!fs.existsSync(blueprintPath)) return 0;
+    const content = fs.readFileSync(blueprintPath, 'utf8');
+    return content.split('\n').length;
 };
 
 /**
@@ -402,137 +371,20 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
     return result;
 };
 
-/**
- * Execute old flow (TASK.md + TODO.md) - backward compatibility
- * @param {string} task - Task identifier
- * @param {string} taskFolder - Path function
- * @param {string} cwd - Working directory
- * @param {boolean} needsReResearch - Whether re-research is needed
- * @returns {Promise<any>} Execution result
- */
-const executeOldFlow = async (task, folder, cwd, needsReResearch) => {
-    const logger = require('../../../../shared/utils/logger');
-
-    logger.info('Falling back to old flow (TASK.md + TODO.md)');
-
-    if (fs.existsSync(folder('CODE_REVIEW.md'))) {
-        fs.rmSync(folder('CODE_REVIEW.md'));
-    }
-
-    // Read task description for code-index symbol search
-    const taskMdContent = fs.existsSync(folder('TASK.md'))
-        ? fs.readFileSync(folder('TASK.md'), 'utf8')
-        : '';
-    const taskDescription = taskMdContent.length > 0
-        ? taskMdContent.substring(0, 500)
-        : task;
-
-    // Build consolidated context
-    const consolidatedContext = await buildConsolidatedContextAsync(
-        state.claudiomiroFolder,
-        task,
-        cwd,
-        taskDescription,
-    );
-
-    // Get context file paths
-    const contextFilePaths = getContextFilePaths(state.claudiomiroFolder, task, {
-        includeContext: true,
-        includeResearch: false,
-        includeTodo: false,
-        onlyCompleted: true,
-    });
-
-    // Add current task's RESEARCH.md if exists
-    if (fs.existsSync(folder('RESEARCH.md'))) {
-        contextFilePaths.push(folder('RESEARCH.md'));
-    }
-
-    // Update TODO.md with consolidated context
-    if (fs.existsSync(folder('TODO.md'))) {
-        let todo = fs.readFileSync(folder('TODO.md'), 'utf8');
-
-        if (!todo.includes('## CONSOLIDATED CONTEXT:')) {
-            const contextSection = `\n\n## CONSOLIDATED CONTEXT:
-${consolidatedContext}
-
-## REFERENCE FILES (read if more detail needed):
-${contextFilePaths.map(f => `- ${f}`).join('\n')}
-\n`;
-            todo += contextSection;
-            fs.writeFileSync(folder('TODO.md'), todo, 'utf8');
-        }
-    }
-
-    // Update info.json
-    if (fs.existsSync(folder('info.json'))) {
-        let info = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
-        info.attempts += 1;
-        info.lastError = null;
-        info.lastRun = new Date().toISOString();
-        info.reResearched = needsReResearch || info.reResearched || false;
-
-        if (!info.history) info.history = [];
-        info.history.push({
-            timestamp: new Date().toISOString(),
-            attempt: info.attempts,
-            reResearched: needsReResearch,
-        });
-
-        fs.writeFileSync(folder('info.json'), JSON.stringify(info, null, 2), 'utf8');
-    } else {
-        let info = {
-            firstRun: new Date().toISOString(),
-            lastRun: new Date().toISOString(),
-            attempts: 1,
-            lastError: null,
-            reResearched: false,
-            history: [{
-                timestamp: new Date().toISOString(),
-                attempt: 1,
-                reResearched: false,
-            }],
-        };
-        fs.writeFileSync(folder('info.json'), JSON.stringify(info, null, 2), 'utf8');
-    }
-
-    // Build execution context
-    const researchSection = fs.existsSync(folder('RESEARCH.md'))
-        ? `\n## RESEARCH CONTEXT:\nBEFORE starting, read ${folder('RESEARCH.md')} completely. It contains:\n- Files you need to read/modify\n- Code patterns to follow\n- Integration points\n- Test strategy\n- Potential challenges\n- Execution strategy\n\nThis research was done specifically for this task. Follow the execution strategy outlined there.\n\n---\n`
-        : '';
-
-    // Load prompt template
-    let promptTemplate = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
-
-    // Replace placeholders
-    promptTemplate = promptTemplate
-        .replace(/\{\{todoPath\}\}/g, folder('TODO.md'))
-        .replace(/\{\{researchSection\}\}/g, researchSection);
-
-    const shellCommandRule = fs.readFileSync(
-        path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'),
-        'utf-8',
-    );
-
-    const result = await executeClaude(promptTemplate + '\n\n' + shellCommandRule, task, { cwd });
-
-    // Mark task as completed in cache
-    markTaskCompleted(state.claudiomiroFolder, task);
-
-    return result;
-};
-
 const step5 = async (task) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
     const taskFolder = path.join(state.claudiomiroFolder, task);
     const logger = require('../../../../shared/utils/logger');
 
-    // Read and parse scope from TASK.md for multi-repo support
-    const taskMdPath = folder('TASK.md');
-    const taskMdContent = fs.existsSync(taskMdPath)
-        ? fs.readFileSync(taskMdPath, 'utf-8')
-        : '';
-    const scope = parseTaskScope(taskMdContent);
+    // Require BLUEPRINT.md to exist
+    const blueprintPath = folder('BLUEPRINT.md');
+    if (!fs.existsSync(blueprintPath)) {
+        throw new Error(`BLUEPRINT.md not found for task ${task}. Step 3 must generate BLUEPRINT.md before execution.`);
+    }
+
+    // Read and parse scope from BLUEPRINT.md for multi-repo support
+    const blueprintContent = fs.readFileSync(blueprintPath, 'utf-8');
+    const scope = parseTaskScope(blueprintContent);
 
     // Validate scope in multi-repo mode (throws if missing)
     validateScope(scope, state.isMultiRepo());
@@ -542,99 +394,21 @@ const step5 = async (task) => {
         ? state.getRepository(scope)
         : state.folder;
 
-    // Check for new 2-file flow (BLUEPRINT.md + execution.json)
-    const blueprintPath = folder('BLUEPRINT.md');
-    if (fs.existsSync(blueprintPath)) {
-        // New flow: use BLUEPRINT.md + execution.json
-        try {
-            const result = await executeNewFlow(task, taskFolder, cwd);
-
-            // Reflection hook for new flow
-            try {
-                const executionPath = folder('execution.json');
-                const execution = fs.existsSync(executionPath)
-                    ? JSON.parse(fs.readFileSync(executionPath, 'utf8'))
-                    : null;
-
-                const metrics = {
-                    attempts: execution?.attempts || 1,
-                    hasErrors: Boolean(execution?.uncertainties?.length > 0),
-                    codeChangeSize: estimateCodeChangeSize(folder('BLUEPRINT.md'), executionPath),
-                    taskComplexity: 'medium', // New flow doesn't use TODO.md
-                };
-
-                const decision = reflectionHook.shouldReflect(task, metrics);
-                if (decision.should) {
-                    const reflection = await reflectionHook.createReflection(task, { cwd });
-                    if (reflection) {
-                        await reflectionHook.storeReflection(task, reflection, decision);
-                    }
-                }
-            } catch (reflectionError) {
-                const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
-                const stateManager = ParallelStateManager.getInstance();
-                if (!stateManager || !stateManager.isUIRendererActive()) {
-                    logger.warning(`[Step5] Reflection skipped: ${reflectionError.message}`);
-                }
-            }
-
-            return result;
-        } catch (error) {
-            // Update execution.json with error if it exists
-            const executionPath = folder('execution.json');
-            if (fs.existsSync(executionPath)) {
-                try {
-                    const execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
-                    if (!execution.errorHistory) execution.errorHistory = [];
-                    execution.errorHistory.push({
-                        timestamp: new Date().toISOString(),
-                        message: error.message,
-                        stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : null,
-                    });
-                    fs.writeFileSync(executionPath, JSON.stringify(execution, null, 2), 'utf8');
-                } catch (_saveErr) {
-                    // Ignore save errors
-                }
-            }
-            throw error;
-        }
-    }
-
-    // OLD FLOW: TASK.md + TODO.md (backward compatibility)
-
-    // Check if we need to re-research due to multiple failures
-    let needsReResearch = false;
-    if (fs.existsSync(folder('info.json'))) {
-        const info = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
-        // Re-research if: 3+ attempts AND last attempt failed
-        if (info.attempts >= 3 && info.lastError) {
-            needsReResearch = true;
-            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
-            const stateManager = ParallelStateManager.getInstance();
-            if (!stateManager || !stateManager.isUIRendererActive()) {
-                logger.warning(`Task has failed ${info.attempts} times. Re-analyzing approach...`);
-            }
-            // Remove old RESEARCH.md to force new analysis
-            if (fs.existsSync(folder('RESEARCH.md'))) {
-                fs.renameSync(folder('RESEARCH.md'), folder('RESEARCH.old.md'));
-            }
-        }
-    }
-
     try {
-        const result = await executeOldFlow(task, folder, cwd, needsReResearch);
+        const result = await executeNewFlow(task, taskFolder, cwd);
 
-        // Reflection hook for old flow
+        // Reflection hook
         try {
-            const info = fs.existsSync(folder('info.json'))
-                ? JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'))
+            const executionPath = folder('execution.json');
+            const execution = fs.existsSync(executionPath)
+                ? JSON.parse(fs.readFileSync(executionPath, 'utf8'))
                 : null;
 
             const metrics = {
-                attempts: info?.attempts || 1,
-                hasErrors: Boolean(info?.errorHistory && info.errorHistory.length > 0),
-                codeChangeSize: estimateCodeChangeSize(folder('CONTEXT.md'), folder('TODO.md')),
-                taskComplexity: estimateTaskComplexity(folder('TODO.md')),
+                attempts: execution?.attempts || 1,
+                hasErrors: Boolean(execution?.uncertainties?.length > 0),
+                codeChangeSize: estimateCodeChangeSize(blueprintPath),
+                taskComplexity: 'medium',
             };
 
             const decision = reflectionHook.shouldReflect(task, metrics);
@@ -654,38 +428,22 @@ const step5 = async (task) => {
 
         return result;
     } catch (error) {
-        let info = JSON.parse(fs.readFileSync(folder('info.json'), 'utf8'));
-        info.lastError = {
-            message: error.message,
-            timestamp: new Date().toISOString(),
-            attempt: info.attempts,
-        };
-
-        // Add to error history
-        if (!info.errorHistory) info.errorHistory = [];
-        info.errorHistory.push({
-            timestamp: new Date().toISOString(),
-            attempt: info.attempts,
-            message: error.message,
-            stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : null,
-        });
-
-        fs.writeFileSync(folder('info.json'), JSON.stringify(info, null, 2), 'utf8');
-
-        // If executeClaude fails, ensure TODO.md is marked as not fully implemented
-        if (fs.existsSync(folder('TODO.md'))) {
-            let todo = fs.readFileSync(folder('TODO.md'), 'utf8');
-            const lines = todo.split('\n');
-
-            // Update the first line to be "Fully implemented: NO" if it exists
-            if (lines.length > 0) {
-                lines[0] = 'Fully implemented: NO';
-                todo = lines.join('\n');
-                fs.writeFileSync(folder('TODO.md'), todo, 'utf8');
+        // Update execution.json with error if it exists
+        const executionPath = folder('execution.json');
+        if (fs.existsSync(executionPath)) {
+            try {
+                const execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
+                if (!execution.errorHistory) execution.errorHistory = [];
+                execution.errorHistory.push({
+                    timestamp: new Date().toISOString(),
+                    message: error.message,
+                    stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : null,
+                });
+                fs.writeFileSync(executionPath, JSON.stringify(execution, null, 2), 'utf8');
+            } catch (_saveErr) {
+                // Ignore save errors
             }
         }
-
-        // Re-throw the error so the dag-executor can handle it
         throw error;
     }
 };
@@ -702,8 +460,8 @@ module.exports = {
     trackUncertainty,
     validateCompletion,
     executeNewFlow,
-    executeOldFlow,
     isDangerousCommand,
+    estimateCodeChangeSize,
     VALID_STATUSES,
     REQUIRED_FIELDS,
 };

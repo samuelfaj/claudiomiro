@@ -204,7 +204,7 @@ Detail how the agent should think, plan, and execute:
 
 **Coverage Target:**
 - 100% of changed lines (if feasible)
-- If impossible, document why in TODO.md
+- If impossible, document why in execution.json (uncertainties or completion.notes)
 
 **Summary Rule:**
 > When in doubt, create a minimal test. Efficiency and relevance over total coverage.

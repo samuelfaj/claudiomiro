@@ -37,7 +37,7 @@ const analyzeSplit = async (task) => {
     const execution = await executeClaude(promptTemplate + '\n\n' + shellCommandRule, task);
 
     // Only write split.txt if the original folder still exists (task was not split)
-    if (fs.existsSync(folder('TASK.md'))) {
+    if (fs.existsSync(folder('BLUEPRINT.md'))) {
         fs.writeFileSync(folder('split.txt'), '1');
     }
 

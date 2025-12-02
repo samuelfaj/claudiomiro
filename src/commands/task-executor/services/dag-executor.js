@@ -4,7 +4,7 @@ const os = require('os');
 const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
 const { step4, step5, step6, step7 } = require('../steps');
-const { isFullyImplementedAsync, hasApprovedCodeReview } = require('../utils/validation');
+const { isCompletedFromExecution, hasApprovedCodeReview } = require('../utils/validation');
 const ParallelStateManager = require('../../../shared/executors/parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
@@ -284,24 +284,14 @@ class DAGExecutor {
 
             const taskPath = path.join(state.claudiomiroFolder, taskName);
             const codeReviewPath = path.join(taskPath, 'CODE_REVIEW.md');
-            const todoPath = path.join(taskPath, 'TODO.md');
-            const todoOldPath = path.join(taskPath, 'TODO.old.md');
+            const executionPath = path.join(taskPath, 'execution.json');
 
-            if (
-                fs.existsSync(codeReviewPath) &&
-                !fs.existsSync(todoPath) &&
-                fs.existsSync(todoOldPath)
-            ) {
-                fs.cpSync(todoOldPath, todoPath);
-                fs.rmSync(todoOldPath, { force: true });
-            }
-
-            const isTaskApproved = async () => {
-                if (!fs.existsSync(todoPath)) {
+            const isTaskApproved = () => {
+                if (!fs.existsSync(executionPath)) {
                     return false;
                 }
 
-                const completionResult = await isFullyImplementedAsync(todoPath);
+                const completionResult = isCompletedFromExecution(executionPath);
                 return completionResult.completed && hasApprovedCodeReview(codeReviewPath);
             };
 
@@ -312,10 +302,10 @@ class DAGExecutor {
                 return;
             }
 
-            // PROMPT.md já foi criado pelos steps 0-3, então começamos direto no step4
+            // BLUEPRINT.md was created by steps 0-3, step 4 generates execution.json
 
-            // Step 4: Planejamento (PROMPT.md → TODO.md)
-            if (!fs.existsSync(todoPath)) {
+            // Step 4: Planning (BLUEPRINT.md → execution.json)
+            if (!fs.existsSync(executionPath)) {
                 if (!this.shouldRunStep(4)) {
                     this.stateManager.updateTaskStatus(taskName, 'completed');
                     this.markComplete(taskName, 'completed');
@@ -333,24 +323,24 @@ class DAGExecutor {
                 }
             }
 
-            // Se step 4 foi executado e não devemos executar step 5, para aqui
+            // If step 4 ran and we shouldn't run step 5, stop here
             if (!this.shouldRunStep(5)) {
                 this.stateManager.updateTaskStatus(taskName, 'completed');
                 this.markComplete(taskName, 'completed');
                 return;
             }
 
-            // Loop até implementação completa
-            let maxAttempts = this.noLimit ? Infinity : this.maxAttemptsPerTask; // Limite de segurança (customizável via --limit, infinito com --no-limit)
+            // Loop until implementation complete
+            let maxAttempts = this.noLimit ? Infinity : this.maxAttemptsPerTask; // Safety limit (customizable via --limit, infinite with --no-limit)
             let attempts = 0;
             let lastStep5Error = null;
 
             while (attempts < maxAttempts) {
                 attempts++;
 
-                // Step 5: Implementação
-                const completionCheck = await isFullyImplementedAsync(todoPath);
-                if (!fs.existsSync(todoPath) || !completionCheck.completed) {
+                // Step 5: Implementation
+                const completionCheck = isCompletedFromExecution(executionPath);
+                if (!fs.existsSync(executionPath) || !completionCheck.completed) {
                     try {
                         this.stateManager.updateTaskStep(taskName, `Step 5 - Implementing tasks (attempt ${attempts})`);
                         await step5(taskName);
@@ -759,16 +749,16 @@ class DAGExecutor {
             this.stateManager.updateTaskStatus(_taskName, 'running');
 
             const taskPath = path.join(state.claudiomiroFolder, _taskName);
-            const todoPath = path.join(taskPath, 'TODO.md');
+            const executionPath = path.join(taskPath, 'execution.json');
 
-            // Verifica se já tem TODO.md
-            if (fs.existsSync(todoPath)) {
+            // Check if already has execution.json
+            if (fs.existsSync(executionPath)) {
                 this.stateManager.updateTaskStatus(_taskName, 'completed');
                 this.markComplete(_taskName, 'completed');
                 return;
             }
 
-            // Step 4: Planejamento (PROMPT.md → TODO.md)
+            // Step 4: Planning (BLUEPRINT.md → execution.json)
             if (!this.shouldRunStep(4)) {
                 this.stateManager.updateTaskStatus(_taskName, 'completed');
                 this.markComplete(_taskName, 'completed');

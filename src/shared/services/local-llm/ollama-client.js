@@ -257,7 +257,34 @@ Return JSON: {"explicit": ["TASK1"], "implicit": ["TASK2"], "reasoning": "brief 
     }
 
     /**
-   * Check if a task is fully completed
+   * Check if execution.json indicates task completion
+   * @param {string|object} executionData - execution.json content or parsed object
+   * @returns {{completed: boolean, confidence: number, reason: string}}
+   */
+    checkCompletionFromExecution(executionData) {
+        try {
+            const execution = typeof executionData === 'string'
+                ? JSON.parse(executionData)
+                : executionData;
+
+            if (execution.status === 'completed') {
+                return { completed: true, confidence: 1.0, reason: 'Status is completed' };
+            }
+            if (execution.completion?.status === 'completed') {
+                return { completed: true, confidence: 1.0, reason: 'Completion status is completed' };
+            }
+            if (execution.status === 'blocked') {
+                return { completed: false, confidence: 1.0, reason: 'Task is blocked' };
+            }
+            return { completed: false, confidence: 0.8, reason: 'Task not marked as completed' };
+        } catch {
+            return { completed: false, confidence: 0, reason: 'Invalid execution.json format' };
+        }
+    }
+
+    /**
+   * @deprecated Use checkCompletionFromExecution instead
+   * Check if a task is fully completed from legacy TODO.md content
    * @param {string} todoContent - TODO.md content
    * @returns {Promise<{completed: boolean, confidence: number, reason: string}>}
    */
@@ -266,15 +293,14 @@ Return JSON: {"explicit": ["TASK1"], "implicit": ["TASK2"], "reasoning": "brief 
             return { completed: true, confidence: 1, reason: 'Fully implemented' };
         }
 
-        const prompt = `Analyze this TODO.md and determine if the task is FULLY implemented.
+        const prompt = `Analyze this content and determine if the task is FULLY implemented.
 
 Check for:
-1. "Fully implemented: YES" or similar declaration
-2. All checklist items (that matters) are marked as done
+1. "status": "completed" in JSON
+2. "Fully implemented: YES" or similar declaration
+3. All checklist items marked as done
 
-If it has any of the above, return true.
-
-TODO.md:
+Content:
 ${todoContent.slice(0, 2000)}
 
 Return JSON: {"completed": true/false, "confidence": 0.0-1.0, "reason": "brief explanation"}`;

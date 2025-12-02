@@ -5,7 +5,7 @@ const path = require('path');
 jest.mock('fs');
 jest.mock('path');
 jest.mock('./review-code');
-jest.mock('./reanalyze-failed');
+jest.mock('./reanalyze-blocked');
 jest.mock('./curate-insights', () => ({
     curateInsights: jest.fn().mockResolvedValue({}),
 }));
@@ -27,10 +27,10 @@ jest.mock('../../../../shared/utils/logger', () => ({
 // Import after mocking
 const { step6 } = require('./index');
 const { reviewCode } = require('./review-code');
-const { reanalyzeFailed } = require('./reanalyze-failed');
+const { reanalyzeBlocked } = require('./reanalyze-blocked');
 const { curateInsights } = require('./curate-insights');
 const { smartCommit } = require('../../../../shared/services/git-commit');
-const { isFullyImplementedAsync } = require('../../utils/validation');
+const { isCompletedFromExecution } = require('../../utils/validation');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
@@ -42,10 +42,18 @@ describe('step6', () => {
         jest.clearAllMocks();
         // Reset path.join mock to return the path arguments
         path.join.mockImplementation((...paths) => paths.join('/'));
-        // Reset fs mocks
-        fs.existsSync.mockReturnValue(false);
-        fs.readFileSync.mockReturnValue('{}');
-        // Default to single-repo mode (backward compatible)
+        // Reset fs mocks - execution.json must exist
+        fs.existsSync.mockImplementation((filePath) => {
+            if (filePath.includes('execution.json')) return true;
+            return false;
+        });
+        fs.readFileSync.mockReturnValue(JSON.stringify({
+            status: 'in_progress',
+            attempts: 1,
+            phases: [],
+            completion: { status: 'pending_validation' },
+        }));
+        // Default to single-repo mode
         state.isMultiRepo.mockReturnValue(false);
         state.getGitMode.mockReturnValue(null);
         state.getRepository.mockReturnValue('/test');
@@ -54,27 +62,38 @@ describe('step6', () => {
         validateScope.mockReturnValue(true);
     });
 
+    describe('requires execution.json', () => {
+        test('should throw error when execution.json does not exist', async () => {
+            // Arrange
+            fs.existsSync.mockReturnValue(false);
+
+            // Act & Assert
+            await expect(step6(mockTask)).rejects.toThrow(
+                'execution.json not found for task TASK1. Step 4 must generate execution.json.',
+            );
+        });
+    });
+
     describe('orchestration flow', () => {
         test('should call reviewCode and return result', async () => {
             // Arrange
-            const mockExecution = { success: true };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockReturnValue(false);
+            const mockResult = { success: true };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.8 });
 
             // Act
             const result = await step6(mockTask);
 
             // Assert
             expect(reviewCode).toHaveBeenCalledWith(mockTask);
-            expect(result).toBe(mockExecution);
+            expect(result).toBe(mockResult);
         });
 
-        test('should call smartCommit when TODO is fully implemented', async () => {
+        test('should call smartCommit when task is completed', async () => {
             // Arrange
-            const mockExecution = { success: true };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: true, confidence: 0.8 });
+            const mockResult = { success: true };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
             smartCommit.mockResolvedValue({ success: true, method: 'shell' });
 
             // Act
@@ -87,8 +106,8 @@ describe('step6', () => {
                 createPR: false,
             });
             expect(curateInsights).toHaveBeenCalledWith(mockTask, expect.objectContaining({
-                todoPath: expect.stringContaining('TODO.md'),
-                contextPath: expect.stringContaining('CONTEXT.md'),
+                executionPath: expect.stringContaining('execution.json'),
+                blueprintPath: expect.stringContaining('BLUEPRINT.md'),
                 codeReviewPath: expect.stringContaining('CODE_REVIEW.md'),
                 reflectionPath: expect.stringContaining('REFLECTION.md'),
             }));
@@ -96,9 +115,9 @@ describe('step6', () => {
 
         test('should call smartCommit without push when shouldPush is false', async () => {
             // Arrange
-            const mockExecution = { success: true };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: true, confidence: 0.8 });
+            const mockResult = { success: true };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
             smartCommit.mockResolvedValue({ success: true, method: 'shell' });
 
             // Act
@@ -113,12 +132,11 @@ describe('step6', () => {
             expect(curateInsights).toHaveBeenCalled();
         });
 
-        test('should not call smartCommit when TODO is not fully implemented', async () => {
+        test('should not call smartCommit when task is not completed', async () => {
             // Arrange
-            const mockExecution = { success: true };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockReturnValue(false);
+            const mockResult = { success: true };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.8 });
 
             // Act
             await step6(mockTask);
@@ -132,17 +150,17 @@ describe('step6', () => {
     describe('commit error handling', () => {
         test('should continue execution when commit fails', async () => {
             // Arrange
-            const mockExecution = { success: true };
+            const mockResult = { success: true };
             const mockError = new Error('Git commit failed');
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: true, confidence: 0.8 });
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
             smartCommit.mockRejectedValue(mockError);
 
             // Act
             const result = await step6(mockTask);
 
             // Assert
-            expect(result).toBe(mockExecution);
+            expect(result).toBe(mockResult);
             expect(logger.warning).toHaveBeenCalledWith(
                 '⚠️  Commit failed in step6, continuing anyway:',
                 mockError.message,
@@ -152,9 +170,9 @@ describe('step6', () => {
 
         test('should not warn when commit succeeds', async () => {
             // Arrange
-            const mockExecution = { success: true };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: true, confidence: 0.8 });
+            const mockResult = { success: true };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
             smartCommit.mockResolvedValue({ success: true, method: 'shell' });
 
             // Act
@@ -167,193 +185,124 @@ describe('step6', () => {
     });
 
     describe('re-analysis logic', () => {
-        test('should call reanalyzeFailed on 3rd attempt when TODO not implemented', async () => {
+        test('should call reanalyzeBlocked on 3rd attempt when task not completed', async () => {
             // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 3 }));
-            reanalyzeFailed.mockResolvedValue();
+            const mockResult = { success: false };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.8 });
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 3, status: 'blocked' }));
+            reanalyzeBlocked.mockResolvedValue();
 
             // Act
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeFailed).toHaveBeenCalledWith(mockTask);
+            expect(reanalyzeBlocked).toHaveBeenCalledWith(mockTask);
         });
 
-        test('should call reanalyzeFailed on 6th attempt when TODO not implemented', async () => {
+        test('should call reanalyzeBlocked on 6th attempt when task not completed', async () => {
             // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 6 }));
-            reanalyzeFailed.mockResolvedValue();
+            const mockResult = { success: false };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.8 });
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 6, status: 'blocked' }));
+            reanalyzeBlocked.mockResolvedValue();
 
             // Act
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeFailed).toHaveBeenCalledWith(mockTask);
+            expect(reanalyzeBlocked).toHaveBeenCalledWith(mockTask);
         });
 
-        test('should not call reanalyzeFailed on 1st attempt when TODO not implemented', async () => {
+        test('should not call reanalyzeBlocked on 1st attempt when task not completed', async () => {
             // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 1 }));
+            const mockResult = { success: false };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.8 });
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 1, status: 'in_progress' }));
 
             // Act
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeFailed).not.toHaveBeenCalled();
+            expect(reanalyzeBlocked).not.toHaveBeenCalled();
         });
 
-        test('should not call reanalyzeFailed on 2nd attempt when TODO not implemented', async () => {
+        test('should not call reanalyzeBlocked on 2nd attempt when task not completed', async () => {
             // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 2 }));
+            const mockResult = { success: false };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.8 });
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 2, status: 'in_progress' }));
 
             // Act
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeFailed).not.toHaveBeenCalled();
+            expect(reanalyzeBlocked).not.toHaveBeenCalled();
         });
 
-        test('should not call reanalyzeFailed on 4th attempt when TODO not implemented', async () => {
+        test('should not call reanalyzeBlocked on 4th attempt when task not completed', async () => {
             // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 4 }));
+            const mockResult = { success: false };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.8 });
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 4, status: 'in_progress' }));
 
             // Act
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeFailed).not.toHaveBeenCalled();
+            expect(reanalyzeBlocked).not.toHaveBeenCalled();
         });
 
-        test('should not call reanalyzeFailed when TODO is implemented regardless of attempts', async () => {
+        test('should not call reanalyzeBlocked when task is completed regardless of attempts', async () => {
             // Arrange
-            const mockExecution = { success: true };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: true, confidence: 0.8 });
+            const mockResult = { success: true };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
             smartCommit.mockResolvedValue({ success: true, method: 'shell' });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 3 }));
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 3, status: 'completed' }));
 
             // Act
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeFailed).not.toHaveBeenCalled();
+            expect(reanalyzeBlocked).not.toHaveBeenCalled();
             expect(smartCommit).toHaveBeenCalled();
-        });
-
-        test('should not call reanalyzeFailed when info.json does not exist', async () => {
-            // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockReturnValue(false); // info.json doesn't exist
-
-            // Act
-            await step6(mockTask);
-
-            // Assert
-            expect(reanalyzeFailed).not.toHaveBeenCalled();
-            expect(fs.readFileSync).not.toHaveBeenCalled();
-        });
-
-        test('should handle JSON parsing error gracefully', async () => {
-            // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue('invalid json');
-
-            // Act & Assert
-            await expect(step6(mockTask)).rejects.toThrow();
         });
     });
 
     describe('edge cases', () => {
-        test('should handle zero attempt count', async () => {
+        test('should not call reanalyzeBlocked for zero attempts', async () => {
             // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 0 }));
+            const mockResult = { success: false };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.8 });
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: 0, status: 'pending' }));
 
             // Act
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeFailed).toHaveBeenCalledWith(mockTask);
-        });
-
-        test('should handle negative attempt count', async () => {
-            // Arrange
-            const mockExecution = { success: false };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: false, confidence: 0.8 });
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('info.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockReturnValue(JSON.stringify({ attempts: -3 }));
-
-            // Act
-            await step6(mockTask);
-
-            // Assert
-            expect(reanalyzeFailed).toHaveBeenCalledWith(mockTask);
+            expect(reanalyzeBlocked).not.toHaveBeenCalled();
         });
     });
 
     describe('default parameters', () => {
         test('should use shouldPush=true by default', async () => {
             // Arrange
-            const mockExecution = { success: true };
-            reviewCode.mockResolvedValue(mockExecution);
-            isFullyImplementedAsync.mockResolvedValue({ completed: true, confidence: 0.8 });
+            const mockResult = { success: true };
+            reviewCode.mockResolvedValue(mockResult);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
             smartCommit.mockResolvedValue({ success: true, method: 'shell' });
 
             // Act
@@ -372,16 +321,17 @@ describe('step6', () => {
         beforeEach(() => {
             // Common setup for multi-repo tests
             reviewCode.mockResolvedValue({ success: true });
-            isFullyImplementedAsync.mockResolvedValue({ completed: true, confidence: 0.8 });
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
             smartCommit.mockResolvedValue({ success: true, method: 'shell' });
             fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
                 return false;
             });
             fs.readFileSync.mockReturnValue('@scope backend');
         });
 
-        test('should commit normally in single-repo mode (backward compatible)', async () => {
+        test('should commit normally in single-repo mode', async () => {
             // Arrange
             state.isMultiRepo.mockReturnValue(false);
             parseTaskScope.mockReturnValue(null);

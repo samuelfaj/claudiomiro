@@ -268,7 +268,18 @@ class LocalLLMService {
     }
 
     /**
-   * Check if task is completed
+   * Check if task is completed from execution.json
+   * @param {string|object} executionData - execution.json content or parsed object
+   * @returns {{completed: boolean, confidence: number, reason: string}}
+   */
+    checkCompletionFromExecution(executionData) {
+        const { isCompletedFromExecution } = this._loadFallbacks().completionDetector;
+        return isCompletedFromExecution(executionData);
+    }
+
+    /**
+   * @deprecated Use checkCompletionFromExecution instead
+   * Check if task is completed from legacy TODO.md content
    * @param {string} todoContent - TODO.md content
    * @returns {Promise<{completed: boolean, confidence: number}>}
    */

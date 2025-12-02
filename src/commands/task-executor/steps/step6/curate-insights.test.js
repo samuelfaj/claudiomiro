@@ -12,6 +12,7 @@ const insightsStore = require('../../../../shared/services/insights');
 const {
     curateInsights,
     extractImplementationPatterns,
+    extractExecutionInsights,
     categorizeInsights,
 } = require('./curate-insights');
 
@@ -85,21 +86,77 @@ describe('curate-insights', () => {
         }));
     });
 
-    it('curates insights from TODO content when reflection absent', async () => {
+    it('curates insights from BLUEPRINT.md content when reflection absent', async () => {
         insightsStore.getTaskReflection.mockReturnValue(null);
 
-        const todoPath = path.join(claudiomiroDir, task, 'TODO.md');
-        fs.writeFileSync(todoPath, `
+        const blueprintPath = path.join(claudiomiroDir, task, 'BLUEPRINT.md');
+        fs.writeFileSync(blueprintPath, `
+# BLUEPRINT: TASK1
+
 ## Implementation Plan
 - Ensure cache invalidation happens after user role updates.
 - Add monitoring for background job failures.
         `);
 
-        await curateInsights(task, { todoPath });
+        await curateInsights(task, { blueprintPath });
 
         expect(insightsStore.addCuratedInsight).toHaveBeenCalledWith(expect.objectContaining({
             insight: expect.stringContaining('Ensure cache invalidation'),
             learnedFrom: task,
         }));
+    });
+
+    it('curates insights from execution.json forFutureTasks', async () => {
+        insightsStore.getTaskReflection.mockReturnValue(null);
+
+        const executionPath = path.join(claudiomiroDir, task, 'execution.json');
+        fs.writeFileSync(executionPath, JSON.stringify({
+            status: 'completed',
+            completion: {
+                forFutureTasks: [
+                    'Always validate input before database operations',
+                    'Use transactions for multi-step operations',
+                ],
+            },
+        }));
+
+        await curateInsights(task, { executionPath });
+
+        expect(insightsStore.addCuratedInsight).toHaveBeenCalledWith(expect.objectContaining({
+            insight: 'Always validate input before database operations',
+            learnedFrom: task,
+        }));
+    });
+
+    it('extracts insights from execution.json resolved uncertainties', () => {
+        const execution = {
+            uncertainties: [
+                {
+                    id: 'U1',
+                    topic: 'API versioning',
+                    assumption: 'Use v2 API',
+                    confidence: 0.6,
+                    resolution: 'Confirmed v2 API is correct',
+                },
+                {
+                    id: 'U2',
+                    topic: 'Cache TTL',
+                    assumption: '5 minutes',
+                    confidence: 0.7,
+                    // No resolution - should be skipped
+                },
+            ],
+        };
+
+        const insights = extractExecutionInsights(execution);
+
+        expect(insights).toHaveLength(1);
+        expect(insights[0].insight).toContain('API versioning');
+        expect(insights[0].insight).toContain('Confirmed v2 API is correct');
+    });
+
+    it('returns empty array for null execution', () => {
+        const insights = extractExecutionInsights(null);
+        expect(insights).toEqual([]);
     });
 });

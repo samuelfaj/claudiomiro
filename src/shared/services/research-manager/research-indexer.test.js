@@ -212,7 +212,7 @@ describe('research-indexer', () => {
                 taskResearch: {
                     TASK1: {
                         topics: ['authentication', 'api', 'validation'],
-                        researchPath: '/test/.claudiomiro/TASK1/RESEARCH.md',
+                        researchPath: '/test/.claudiomiro/TASK1/BLUEPRINT.md',
                     },
                 },
                 patterns: { authentication: ['TASK1'], api: ['TASK1'], validation: ['TASK1'] },
@@ -238,7 +238,7 @@ describe('research-indexer', () => {
                 taskResearch: {
                     TASK1: {
                         topics: ['authentication'],
-                        researchPath: '/test/.claudiomiro/TASK1/RESEARCH.md',
+                        researchPath: '/test/.claudiomiro/TASK1/BLUEPRINT.md',
                     },
                 },
                 patterns: { authentication: ['TASK1'] },
@@ -266,13 +266,13 @@ describe('research-indexer', () => {
             expect(result).toBeNull();
         });
 
-        test('should return research with adaptation note if highly similar', () => {
+        test('should return blueprint with adaptation note if highly similar', () => {
             const existingIndex = {
                 version: '1.0.0',
                 taskResearch: {
                     TASK1: {
                         topics: ['auth', 'api', 'validation', 'middleware'],
-                        researchPath: '/test/.claudiomiro/TASK1/RESEARCH.md',
+                        researchPath: '/test/.claudiomiro/TASK1/BLUEPRINT.md',
                     },
                 },
                 patterns: {},
@@ -283,7 +283,7 @@ describe('research-indexer', () => {
                 if (p.includes('research-index')) {
                     return JSON.stringify(existingIndex);
                 }
-                return '# Research Content\nAuth patterns found...';
+                return '# Blueprint Content\nAuth patterns found...';
             });
 
             const result = getReusableResearch(
@@ -291,9 +291,9 @@ describe('research-indexer', () => {
                 'Implement authentication API with validation and middleware',
             );
 
-            // Should return null if similarity < 0.8 (4 matching out of 4 = 1.0)
+            // Should return null if similarity < 0.7 (4 matching out of 4 = 1.0)
             if (result) {
-                expect(result.content).toContain('Research Content');
+                expect(result.content).toContain('Blueprint Content');
                 expect(result.sourceTask).toBe('TASK1');
                 expect(result.adaptationNote).toContain('TASK1');
             }

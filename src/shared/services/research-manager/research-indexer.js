@@ -80,7 +80,7 @@ const createEmptyIndex = () => ({
 
 /**
  * Extracts topics/patterns from task content using Local LLM or fallback heuristics
- * @param {string} taskContent - Content of TASK.md or TODO.md
+ * @param {string} taskContent - Content of BLUEPRINT.md or task description
  * @returns {Promise<string[]>} Array of detected topics
  */
 const extractTopicsAsync = async (taskContent) => {
@@ -106,7 +106,7 @@ const extractTopicsAsync = async (taskContent) => {
 
 /**
  * Extracts topics/patterns from task content (sync version - heuristic only)
- * @param {string} taskContent - Content of TASK.md or TODO.md
+ * @param {string} taskContent - Content of BLUEPRINT.md or task description
  * @returns {string[]} Array of detected topics
  */
 const extractTopics = (taskContent) => {
@@ -115,7 +115,7 @@ const extractTopics = (taskContent) => {
 
 /**
  * Heuristic topic extraction (keyword-based)
- * @param {string} taskContent - Content of TASK.md or TODO.md
+ * @param {string} taskContent - Content of BLUEPRINT.md or task description
  * @returns {string[]} Array of detected topics
  */
 const extractTopicsHeuristic = (taskContent) => {
@@ -175,20 +175,20 @@ const calculateSimilarity = (topics1, topics2) => {
 };
 
 /**
- * Indexes a task's research for future reuse
+ * Indexes a task's blueprint for future reuse
  * @param {string} claudiomiroFolder - Path to .claudiomiro folder
  * @param {string} taskId - Task identifier
- * @param {string} taskContent - Content of TASK.md
- * @param {string} researchContent - Content of RESEARCH.md
+ * @param {string} taskContent - Content of BLUEPRINT.md
+ * @param {string} additionalContent - Additional content to index (optional)
  */
-const indexResearch = (claudiomiroFolder, taskId, taskContent, researchContent) => {
+const indexResearch = (claudiomiroFolder, taskId, taskContent, additionalContent = '') => {
     const index = loadResearchIndex(claudiomiroFolder);
-    const topics = extractTopics(taskContent + ' ' + researchContent);
+    const topics = extractTopics(taskContent + ' ' + additionalContent);
 
     // Add to task research
     index.taskResearch[taskId] = {
         topics,
-        researchPath: path.join(claudiomiroFolder, taskId, 'RESEARCH.md'),
+        researchPath: path.join(claudiomiroFolder, taskId, 'BLUEPRINT.md'),
         indexedAt: new Date().toISOString(),
     };
 
@@ -206,11 +206,11 @@ const indexResearch = (claudiomiroFolder, taskId, taskContent, researchContent) 
 };
 
 /**
- * Finds similar research for a new task
+ * Finds similar blueprint for a new task
  * @param {string} claudiomiroFolder - Path to .claudiomiro folder
- * @param {string} taskContent - Content of new task's TASK.md
+ * @param {string} taskContent - Content of new task's BLUEPRINT.md
  * @param {number} minSimilarity - Minimum similarity threshold (0-1), default 0.5
- * @returns {object|null} Similar research info or null
+ * @returns {object|null} Similar blueprint info or null
  */
 const findSimilarResearch = (claudiomiroFolder, taskContent, minSimilarity = 0.5) => {
     const index = loadResearchIndex(claudiomiroFolder);
@@ -245,10 +245,10 @@ const findSimilarResearch = (claudiomiroFolder, taskContent, minSimilarity = 0.5
 };
 
 /**
- * Gets research content for reuse, with adaptation note
+ * Gets blueprint content for reuse, with adaptation note
  * @param {string} claudiomiroFolder - Path to .claudiomiro folder
  * @param {string} taskContent - Content of new task
- * @returns {object|null} Object with research content and metadata
+ * @returns {object|null} Object with blueprint content and metadata
  */
 const getReusableResearch = (claudiomiroFolder, taskContent) => {
     const similar = findSimilarResearch(claudiomiroFolder, taskContent);
@@ -262,14 +262,18 @@ const getReusableResearch = (claudiomiroFolder, taskContent) => {
         return null;
     }
 
-    const researchContent = fs.readFileSync(similar.researchPath, 'utf8');
+    if (!fs.existsSync(similar.researchPath)) {
+        return null;
+    }
+
+    const blueprintContent = fs.readFileSync(similar.researchPath, 'utf8');
 
     return {
-        content: researchContent,
+        content: blueprintContent,
         sourceTask: similar.taskId,
         similarity: similar.similarity,
         matchingTopics: similar.matchingTopics,
-        adaptationNote: `This research was adapted from ${similar.taskId} (${Math.round(similar.similarity * 100)}% similar). Matching topics: ${similar.matchingTopics.join(', ')}.`,
+        adaptationNote: `This blueprint was adapted from ${similar.taskId} (${Math.round(similar.similarity * 100)}% similar). Matching topics: ${similar.matchingTopics.join(', ')}.`,
     };
 };
 

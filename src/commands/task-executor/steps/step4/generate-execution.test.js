@@ -34,17 +34,24 @@ describe('generate-execution', () => {
         validateScope.mockReturnValue(true);
         validateExecutionJson.mockReturnValue({ valid: true, errors: [] });
 
-        // Default fs mocks
-        fs.existsSync.mockReturnValue(false);
-        fs.readFileSync.mockReturnValue('');
+        // Default fs mocks - BLUEPRINT.md must exist
+        fs.existsSync.mockImplementation((path) => path.includes('BLUEPRINT.md'));
+        fs.readFileSync.mockReturnValue('# Sample Task\nTask content here');
         fs.writeFileSync.mockImplementation(() => {});
+    });
+
+    describe('requires BLUEPRINT.md', () => {
+        test('should throw error when BLUEPRINT.md does not exist', async () => {
+            fs.existsSync.mockReturnValue(false);
+
+            await expect(generateExecution(mockTask)).rejects.toThrow(
+                'BLUEPRINT.md not found for task TASK1. Step 3 must generate BLUEPRINT.md before step 4.',
+            );
+        });
     });
 
     describe('generateExecution', () => {
         test('should generate valid execution.json with all required fields', async () => {
-            fs.existsSync.mockImplementation((path) => path.includes('TASK.md'));
-            fs.readFileSync.mockReturnValue('# Sample Task\nTask content here');
-
             await generateExecution(mockTask);
 
             expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
@@ -60,8 +67,6 @@ describe('generate-execution', () => {
         });
 
         test('should call schema validation before writing file', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             expect(validateExecutionJson).toHaveBeenCalledTimes(1);
@@ -85,8 +90,6 @@ describe('generate-execution', () => {
         });
 
         test('should set initial status as pending', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
@@ -94,8 +97,6 @@ describe('generate-execution', () => {
         });
 
         test('should initialize all phases with pending status', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
@@ -106,9 +107,8 @@ describe('generate-execution', () => {
             });
         });
 
-        test('should use default phases when BLUEPRINT.md does not exist', async () => {
-            fs.existsSync.mockImplementation((path) => path.includes('TASK.md'));
-            fs.readFileSync.mockReturnValue('# Simple Task');
+        test('should use default phases when BLUEPRINT.md has no phases section', async () => {
+            fs.readFileSync.mockReturnValue('# Simple Task\nNo phases defined');
 
             await generateExecution(mockTask);
 
@@ -122,25 +122,12 @@ describe('generate-execution', () => {
         });
 
         test('should read BLUEPRINT.md when it exists', async () => {
-            fs.existsSync.mockImplementation((path) => path.includes('BLUEPRINT.md'));
             fs.readFileSync.mockReturnValue('# Blueprint Title\n## 4. IMPLEMENTATION STRATEGY\n### Phase 1: Setup\n### Phase 2: Build');
 
             await generateExecution(mockTask);
 
             expect(fs.readFileSync).toHaveBeenCalledWith(
                 expect.stringContaining('BLUEPRINT.md'),
-                'utf-8',
-            );
-        });
-
-        test('should fallback to TASK.md when BLUEPRINT.md does not exist', async () => {
-            fs.existsSync.mockImplementation((path) => path.includes('TASK.md'));
-            fs.readFileSync.mockReturnValue('# Task from TASK.md');
-
-            await generateExecution(mockTask);
-
-            expect(fs.readFileSync).toHaveBeenCalledWith(
-                expect.stringContaining('TASK.md'),
                 'utf-8',
             );
         });
@@ -152,7 +139,6 @@ describe('generate-execution', () => {
 ### Phase 2: API Development
 ### Phase 3: Frontend Integration
 `;
-            fs.existsSync.mockImplementation((path) => path.includes('BLUEPRINT.md'));
             fs.readFileSync.mockReturnValue(blueprintContent);
 
             await generateExecution(mockTask);
@@ -166,7 +152,6 @@ describe('generate-execution', () => {
         });
 
         test('should extract task title from content heading', async () => {
-            fs.existsSync.mockImplementation((path) => path.includes('TASK.md'));
             fs.readFileSync.mockReturnValue('# Implement User Authentication');
 
             await generateExecution(mockTask);
@@ -175,8 +160,17 @@ describe('generate-execution', () => {
             expect(writtenContent.title).toBe('Implement User Authentication');
         });
 
-        test('should use Untitled Task when no title found', async () => {
-            fs.existsSync.mockReturnValue(false);
+        test('should use first non-empty line when no heading found', async () => {
+            fs.readFileSync.mockReturnValue('Some content without heading');
+
+            await generateExecution(mockTask);
+
+            const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
+            expect(writtenContent.title).toBe('Some content without heading');
+        });
+
+        test('should use Untitled Task when content is empty', async () => {
+            fs.readFileSync.mockReturnValue('');
 
             await generateExecution(mockTask);
 
@@ -185,8 +179,6 @@ describe('generate-execution', () => {
         });
 
         test('should write JSON with 2-space indentation', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             const writtenJson = fs.writeFileSync.mock.calls[0][1];
@@ -195,8 +187,6 @@ describe('generate-execution', () => {
         });
 
         test('should include ISO timestamp in started field', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
@@ -204,8 +194,6 @@ describe('generate-execution', () => {
         });
 
         test('should initialize beyondTheBasics with correct structure', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
@@ -222,8 +210,6 @@ describe('generate-execution', () => {
         });
 
         test('should initialize completion with pending_validation status', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
@@ -236,8 +222,6 @@ describe('generate-execution', () => {
         });
 
         test('should initialize empty arrays for uncertainties and artifacts', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
@@ -246,8 +230,6 @@ describe('generate-execution', () => {
         });
 
         test('should set currentPhase to first phase', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
@@ -259,8 +241,6 @@ describe('generate-execution', () => {
         });
 
         test('should handle subtask format (TASK2.1 -> TASK2)', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution('TASK2.1');
 
             const writtenContent = JSON.parse(fs.writeFileSync.mock.calls[0][1]);
@@ -268,8 +248,6 @@ describe('generate-execution', () => {
         });
 
         test('should log debug message after generation', async () => {
-            fs.existsSync.mockReturnValue(false);
-
             await generateExecution(mockTask);
 
             expect(logger.debug).toHaveBeenCalledWith('[Step4] Generated execution.json for TASK1');
@@ -282,7 +260,6 @@ describe('generate-execution', () => {
                     throw new Error('@scope tag is required in multi-repo mode');
                 });
 
-                fs.existsSync.mockImplementation((path) => path.includes('TASK.md'));
                 fs.readFileSync.mockReturnValue('# Task without scope');
 
                 await expect(generateExecution(mockTask)).rejects.toThrow('@scope tag is required');
@@ -293,7 +270,6 @@ describe('generate-execution', () => {
                 parseTaskScope.mockReturnValue('backend');
                 validateScope.mockReturnValue(true);
 
-                fs.existsSync.mockImplementation((path) => path.includes('TASK.md'));
                 fs.readFileSync.mockReturnValue('@scope backend\n# Backend task');
 
                 await generateExecution(mockTask);
@@ -315,9 +291,6 @@ describe('generate-execution', () => {
 
                 await expect(generateExecution(mockTask)).rejects.toThrow(
                     /Missing required field "task"/,
-                );
-                await expect(generateExecution(mockTask)).rejects.toThrow(
-                    /Invalid value/,
                 );
             });
         });

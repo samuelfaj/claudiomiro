@@ -23,7 +23,7 @@ const ParallelStateManager = require('./parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
-const { isFullyImplemented, hasApprovedCodeReview } = require('../utils/validation');
+const { isCompletedFromExecution, hasApprovedCodeReview } = require('../utils/validation');
 const { parseTaskScope } = require('../utils/scope-parser');
 const { DAGExecutor } = require('./dag-executor');
 
@@ -695,11 +695,11 @@ describe('DAGExecutor', () => {
 
         test('should mark task as completed if already approved', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return false;
             });
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
             hasApprovedCodeReview.mockReturnValue(true);
 
             await executor.executeTask('testTask');
@@ -710,9 +710,9 @@ describe('DAGExecutor', () => {
             expect(executor.running.has('testTask')).toBe(false);
         });
 
-        test('should execute step4 if TODO.md does not exist', async () => {
+        test('should execute step4 if execution.json does not exist', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 if (filePath.includes('CODE_REVIEW.md')) return false;
                 return true;
             });
@@ -726,7 +726,7 @@ describe('DAGExecutor', () => {
         test('should skip step4 if not in allowedSteps', async () => {
             executor.allowedSteps = [5, 6]; // Step 4 not allowed
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 return true;
             });
 
@@ -739,7 +739,7 @@ describe('DAGExecutor', () => {
         test('should handle task splitting (folder no longer exists)', async () => {
             fs.existsSync.mockImplementation(filePath => {
                 if (filePath.includes('/testTask')) return false; // Task folder gone
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 return true;
             });
 
@@ -753,14 +753,14 @@ describe('DAGExecutor', () => {
         test('should stop after step4 if step5 not allowed', async () => {
             executor.allowedSteps = [4]; // Only step 4 allowed
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false; // Will be created by step4
+                if (filePath.includes('execution.json')) return false; // Will be created by step4
                 return true;
             });
 
-            // Mock step4 creates TODO.md
+            // Mock step4 creates execution.json
             mockStep4.mockImplementation(() => {
                 fs.existsSync.mockImplementation(filePath => {
-                    if (filePath.includes('TODO.md')) return true;
+                    if (filePath.includes('execution.json')) return true;
                     return true;
                 });
             });
@@ -773,13 +773,13 @@ describe('DAGExecutor', () => {
 
         test('should implement step5 with retry logic', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true; // TODO.md exists
+                if (filePath.includes('execution.json')) return true; // execution.json exists
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
 
             // First attempt fails, second succeeds
-            isFullyImplemented
+            isCompletedFromExecution
                 .mockReturnValueOnce(false)
                 .mockReturnValueOnce(true);
 
@@ -796,11 +796,11 @@ describe('DAGExecutor', () => {
         test('should stop after step5 if step6 not allowed', async () => {
             executor.allowedSteps = [4, 5]; // Steps 4 and 5 allowed
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
 
             await executor.executeTask('testTask');
 
@@ -810,11 +810,11 @@ describe('DAGExecutor', () => {
 
         test('should execute step6 for code review', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
             hasApprovedCodeReview
                 .mockReturnValueOnce(false)
                 .mockReturnValueOnce(true);
@@ -829,11 +829,11 @@ describe('DAGExecutor', () => {
             process.argv.push('--push=false');
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
             hasApprovedCodeReview.mockReturnValue(false);
 
             await executor.executeTask('testTask');
@@ -844,10 +844,10 @@ describe('DAGExecutor', () => {
         test('should handle maximum attempts limit', async () => {
             executor.maxAttemptsPerTask = 2;
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return true;
             });
-            isFullyImplemented.mockReturnValue(false); // Never fully implemented
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 1.0, reason: 'test' }); // Never fully implemented
 
             await expect(executor.executeTask('testTask')).rejects.toThrow('Maximum attempts (2) reached');
 
@@ -860,15 +860,15 @@ describe('DAGExecutor', () => {
             executor.maxAttemptsPerTask = 1; // Low limit, but noLimit overrides
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
 
             let callCount = 0;
-            isFullyImplemented.mockImplementation(() => {
+            isCompletedFromExecution.mockImplementation(() => {
                 callCount++;
-                return callCount > 3; // Succeeds after 3 attempts
+                return { completed: callCount > 3, confidence: 1.0, reason: 'test' }; // Succeeds after 3 attempts
             });
 
             // Also mock hasApprovedCodeReview to prevent infinite loop
@@ -885,7 +885,7 @@ describe('DAGExecutor', () => {
 
         test('should handle TODO.old.md restoration', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 if (filePath.includes('TODO.old.md')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
@@ -900,7 +900,7 @@ describe('DAGExecutor', () => {
 
             expect(mockCpSync).toHaveBeenCalledWith(
                 expect.stringContaining('TODO.old.md'),
-                expect.stringContaining('TODO.md'),
+                expect.stringContaining('execution.json'),
             );
             expect(mockRmSync).toHaveBeenCalledWith(
                 expect.stringContaining('TODO.old.md'),
@@ -913,7 +913,7 @@ describe('DAGExecutor', () => {
             mockStep4.mockRejectedValue(error);
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 return true;
             });
 
@@ -929,7 +929,7 @@ describe('DAGExecutor', () => {
         test('should handle step5 retry with progressive delays', async () => {
             executor.maxAttemptsPerTask = 3;
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
@@ -942,7 +942,7 @@ describe('DAGExecutor', () => {
             });
 
             // Step5 fails twice, then succeeds
-            isFullyImplemented
+            isCompletedFromExecution
                 .mockReturnValueOnce(false)
                 .mockReturnValueOnce(false)
                 .mockReturnValueOnce(true);
@@ -967,7 +967,7 @@ describe('DAGExecutor', () => {
 
             // Mock step4 succeeds, step5 fails
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true; // TODO exists after step4
+                if (filePath.includes('execution.json')) return true; // TODO exists after step4
                 if (filePath.includes('CODE_REVIEW.md')) return false;
                 return true;
             });
@@ -1030,7 +1030,7 @@ describe('DAGExecutor', () => {
             const taskName = 'interruptedTask';
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return true;
             });
 
@@ -1062,7 +1062,7 @@ describe('DAGExecutor', () => {
             executor.maxAttemptsPerTask = 2;
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return true;
             });
 
@@ -1086,7 +1086,7 @@ describe('DAGExecutor', () => {
             executor.maxAttemptsPerTask = 3;
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return true;
             });
 
@@ -1366,7 +1366,7 @@ describe('DAGExecutor', () => {
 
         test('should update StateManager with correct parameters during task execution', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
@@ -1463,12 +1463,12 @@ describe('DAGExecutor', () => {
 
         test('should handle StateManager updates for different step transitions', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return false;
                 return true;
             });
 
-            isFullyImplemented.mockReturnValue(false);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 1.0, reason: 'test' });
             // Note: step5 is mocked via jest.mock at file level
 
             await executor.executeTask('testTask');
@@ -1482,12 +1482,12 @@ describe('DAGExecutor', () => {
 
             // Simulate task that completes successfully
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
 
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
             hasApprovedCodeReview.mockReturnValue(true);
 
             await executor.executeTask(taskName);
@@ -1521,7 +1521,7 @@ describe('DAGExecutor', () => {
             });
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 return true;
             });
 

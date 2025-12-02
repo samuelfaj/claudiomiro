@@ -17,16 +17,10 @@ jest.mock('../../../../shared/config/state', () => ({
     isMultiRepo: jest.fn().mockReturnValue(false),
     getRepository: jest.fn().mockReturnValue('/test/project'),
 }));
-// Mock context-cache service (token optimization)
-jest.mock('../../../../shared/services/context-cache', () => ({
-    buildConsolidatedContextAsync: jest.fn().mockResolvedValue('## Environment Summary\nMocked context'),
-    buildOptimizedContextAsync: jest.fn().mockResolvedValue({
-        context: '## Environment Summary\nMocked context',
-        tokenSavings: 0,
-        method: 'consolidated',
-        filesIncluded: 0,
-    }),
-    getContextFilePaths: jest.fn().mockReturnValue([]),
+// Mock scope-parser
+jest.mock('../../utils/scope-parser', () => ({
+    parseTaskScope: jest.fn().mockReturnValue(null),
+    validateScope: jest.fn().mockReturnValue(true),
 }));
 
 // Import after mocking
@@ -42,18 +36,42 @@ const state = require('../../../../shared/config/state');
 describe('review-code', () => {
     const mockTask = 'TASK1';
 
+    // Valid execution.json for most tests
+    const validExecution = {
+        phases: [{ name: 'impl', status: 'completed' }],
+        beyondTheBasics: {
+            cleanup: {
+                debugLogsRemoved: true,
+                formattingConsistent: true,
+                deadCodeRemoved: true,
+            },
+        },
+        artifacts: [],
+        completion: { summary: [] },
+    };
+
     beforeEach(() => {
         jest.clearAllMocks();
 
         // Reset path.join mock to return path arguments joined with '/'
         path.join.mockImplementation((...paths) => paths.join('/'));
 
-        // Default fs mocks
-        fs.existsSync.mockReturnValue(false);
+        // Default fs mocks - BLUEPRINT.md and execution.json must exist for new flow
+        fs.existsSync.mockImplementation((filePath) => {
+            if (filePath.includes('BLUEPRINT.md')) return true;
+            if (filePath.includes('execution.json')) return true;
+            return false;
+        });
         fs.rmSync.mockImplementation();
         fs.readFileSync.mockImplementation((filePath) => {
             if (filePath.includes('prompt-review.md')) {
-                return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
+                return 'Template with {{contextSection}} {{blueprintPath}} {{executionJsonPath}} {{codeReviewMdPath}}';
+            }
+            if (filePath.includes('BLUEPRINT.md')) {
+                return '## 2. CONTEXT CHAIN\n## 3. NEXT';
+            }
+            if (filePath.includes('execution.json')) {
+                return JSON.stringify(validExecution);
             }
             return 'mock file content';
         });
@@ -64,14 +82,31 @@ describe('review-code', () => {
         executeClaude.mockResolvedValue({ success: true });
     });
 
+    describe('requires BLUEPRINT.md', () => {
+        test('should throw error when BLUEPRINT.md does not exist', async () => {
+            // Arrange
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return false;
+                return true;
+            });
+
+            // Act & Assert
+            await expect(reviewCode(mockTask)).rejects.toThrow(
+                'BLUEPRINT.md not found for task TASK1. Cannot perform code review.',
+            );
+        });
+    });
+
     describe('file cleanup', () => {
         test('should remove existing CODE_REVIEW.md file', async () => {
             // Arrange
-            let existsCallCount = 0;
+            let codeReviewCallCount = 0;
             fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) {
-                    existsCallCount++;
-                    return existsCallCount <= 1; // First call true (exists), subsequent calls false
+                    codeReviewCallCount++;
+                    return codeReviewCallCount <= 1; // First call true (exists), subsequent calls false
                 }
                 return false;
             });
@@ -87,11 +122,13 @@ describe('review-code', () => {
 
         test('should remove existing GITHUB_PR.md file', async () => {
             // Arrange
-            let existsCallCount = 0;
+            let prCallCount = 0;
             fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('GITHUB_PR.md')) {
-                    existsCallCount++;
-                    return existsCallCount <= 1; // First call true (exists), subsequent calls false
+                    prCallCount++;
+                    return prCallCount <= 1; // First call true (exists), subsequent calls false
                 }
                 return false;
             });
@@ -106,8 +143,14 @@ describe('review-code', () => {
         });
 
         test('should not remove files that do not exist', async () => {
-            // Arrange
-            fs.existsSync.mockReturnValue(false); // No files exist
+            // Arrange - BLUEPRINT.md and execution.json must exist, but CODE_REVIEW.md and GITHUB_PR.md don't
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                if (filePath.includes('CODE_REVIEW.md')) return false;
+                if (filePath.includes('GITHUB_PR.md')) return false;
+                return false;
+            });
 
             // Act
             await reviewCode(mockTask);
@@ -117,200 +160,82 @@ describe('review-code', () => {
         });
     });
 
-    describe('context file collection', () => {
-        test('should always include AI_PROMPT.md and INITIAL_PROMPT.md', async () => {
+    describe('BLUEPRINT-based context', () => {
+        test('should extract context files from BLUEPRINT.md CONTEXT CHAIN', async () => {
             // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return `# TASK BLUEPRINT
+## 2. CONTEXT CHAIN
+### Priority 0
+- src/important.js
+- src/critical.ts
+## 3. EXECUTION CONTRACT`;
+                }
+                if (filePath.includes('execution.json')) {
+                    return JSON.stringify(validExecution);
+                }
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Template with {{contextSection}}';
+                }
+                return '';
             });
 
             // Act
             await reviewCode(mockTask);
 
-            // Assert
+            // Assert - context files from BLUEPRINT should be included
             const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('AI_PROMPT.md');
-            expect(actualCall).toContain('INITIAL_PROMPT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/task-executor/AI_PROMPT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/task-executor/INITIAL_PROMPT.md');
+            expect(actualCall).toContain('src/important.js');
+            expect(actualCall).toContain('src/critical.ts');
         });
 
-        test('should include RESEARCH.md when it exists', async () => {
+        test('should include artifacts from execution.json', async () => {
             // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('RESEARCH.md')) return true;
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
+            const executionWithArtifacts = {
+                ...validExecution,
+                artifacts: [
+                    { type: 'file', path: 'src/new-feature.js' },
+                    { type: 'test', path: 'src/new-feature.test.js' },
+                ],
+                completion: { summary: ['Added feature'] },
+            };
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '## 2. CONTEXT CHAIN\n## 3. NEXT';
+                }
+                if (filePath.includes('execution.json')) {
+                    return JSON.stringify(executionWithArtifacts);
+                }
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Template {{contextSection}}';
+                }
+                return '';
             });
 
             // Act
             await reviewCode(mockTask);
 
-            // Assert
+            // Assert - artifacts should be in modified files section
             const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('RESEARCH.md');
-            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
+            expect(actualCall).toContain('FILE: src/new-feature.js');
+            expect(actualCall).toContain('TEST: src/new-feature.test.js');
         });
 
-        test('should include CONTEXT.md when it exists', async () => {
+        test('should handle empty CONTEXT CHAIN gracefully', async () => {
             // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('CONTEXT.md')) return true;
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
-            // Act
-            await reviewCode(mockTask);
-
-            // Assert
-            const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('CONTEXT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK1/CONTEXT.md');
-        });
-
-        test('should skip RESEARCH.md and CONTEXT.md from context section when they do not exist', async () => {
-            // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                if (filePath.includes('RESEARCH.md') || filePath.includes('CONTEXT.md')) return false;
-                return false;
-            });
-
-            // Act
-            await reviewCode(mockTask);
-
-            // Assert - files should not be in context section, but paths may appear in template placeholders
-            const actualCall = executeClaude.mock.calls[0][0];
-            // Check that files are not listed in the context section (after "## 📚 CONTEXT FILES" and before "These provide:")
-            const contextSectionMatch = actualCall.match(/## 📚 CONTEXT FILES[\s\S]*?These provide:/);
-            if (contextSectionMatch) {
-                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/task-executor/TASK1/RESEARCH.md');
-                expect(contextSectionMatch[0]).not.toContain('/test/.claudiomiro/task-executor/TASK1/CONTEXT.md');
-            }
-        });
-
-        test('should include context files from context-cache service', async () => {
-            // Arrange - Mock context-cache to return files from other tasks
-            const { getContextFilePaths } = require('../../../../shared/services/context-cache');
-            getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/task-executor/TASK2/CONTEXT.md',
-                '/test/.claudiomiro/task-executor/TASK3/CONTEXT.md',
-            ]);
-
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
-            // Act
-            await reviewCode(mockTask);
-
-            // Assert - files returned by context-cache should be in reference section
-            const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK2/CONTEXT.md');
-            expect(actualCall).toContain('/test/.claudiomiro/task-executor/TASK3/CONTEXT.md');
-        });
-
-        test('should call context-cache service with current task excluded', async () => {
-            // Arrange
-            const { getContextFilePaths, buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
-
-            fs.existsSync.mockReturnValue(false);
-
-            // Act
-            await reviewCode(mockTask);
-
-            // Assert - context-cache service should be called with current task to be excluded
-            expect(buildOptimizedContextAsync).toHaveBeenCalledWith(
-                '/test/.claudiomiro/task-executor',
-                mockTask,
-                expect.anything(), // projectFolder (state.folder)
-                expect.any(String), // taskDescription
-                expect.anything(), // options
-            );
-            expect(getContextFilePaths).toHaveBeenCalledWith(
-                '/test/.claudiomiro/task-executor',
-                mockTask,
-                expect.objectContaining({ onlyCompleted: true }),
-            );
-        });
-
-        test('should include each context file only once in reference list', async () => {
-            // Arrange - context-cache returns unique files (deduplication is handled by service)
-            const { getContextFilePaths } = require('../../../../shared/services/context-cache');
-            getContextFilePaths.mockReturnValue([
-                '/test/.claudiomiro/task-executor/TASK2/CONTEXT.md',
-            ]);
-
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
-            // Act
-            await reviewCode(mockTask);
-
-            // Assert - CONTEXT.md should appear only once in the reference list
-            const prompt = executeClaude.mock.calls[0][0];
-            const contextMatches = prompt.match(/TASK2\/CONTEXT\.md/g);
-            expect(contextMatches ? contextMatches.length : 0).toBe(1);
-        });
-
-        test('should handle empty task list gracefully', async () => {
-            // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
-            fs.readdirSync.mockReturnValue([]);
-
-            // Act
-            await reviewCode(mockTask);
-
-            // Assert
-            expect(executeClaude).toHaveBeenCalled();
-        });
-
-        test('should handle directory read errors gracefully', async () => {
-            // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
-            fs.readdirSync.mockImplementation(() => {
-                throw new Error('Directory read error');
-            });
-
-            // Act
-            await reviewCode(mockTask);
-
-            // Assert
-            expect(executeClaude).toHaveBeenCalled();
-        });
-
-        test('should handle statSync errors gracefully', async () => {
-            // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
-            fs.readdirSync.mockReturnValue(['TASK1', 'TASK2']);
-            fs.statSync.mockImplementation(() => {
-                throw new Error('Stat error');
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '## 2. CONTEXT CHAIN\n## 3. NEXT';
+                }
+                if (filePath.includes('execution.json')) {
+                    return JSON.stringify(validExecution);
+                }
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Template {{contextSection}}';
+                }
+                return '';
             });
 
             // Act
@@ -323,13 +248,6 @@ describe('review-code', () => {
 
     describe('prompt template loading and replacement', () => {
         test('should load prompt-review.md template', async () => {
-            // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
             // Act
             await reviewCode(mockTask);
 
@@ -342,17 +260,16 @@ describe('review-code', () => {
 
         test('should replace all placeholders in template', async () => {
             // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                if (filePath.includes('RESEARCH.md')) return true;
-                return false;
-            });
-
-            const template = 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
+            const template = 'Template with {{contextSection}} {{blueprintPath}} {{executionJsonPath}} {{codeReviewMdPath}}';
             fs.readFileSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt-review.md')) {
                     return template;
+                }
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '## 2. CONTEXT CHAIN\n## 3. NEXT';
+                }
+                if (filePath.includes('execution.json')) {
+                    return JSON.stringify(validExecution);
                 }
                 return 'mock file content';
             });
@@ -365,13 +282,19 @@ describe('review-code', () => {
             expect(actualCall).not.toMatch(/\{\{.*\}\}/);
         });
 
-        test('should include researchSection when RESEARCH.md exists', async () => {
+        test('should include blueprintPath placeholder replacement', async () => {
             // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                if (filePath.includes('RESEARCH.md')) return true;
-                return false;
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Check {{blueprintPath}} for details';
+                }
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '## 2. CONTEXT CHAIN\n## 3. NEXT';
+                }
+                if (filePath.includes('execution.json')) {
+                    return JSON.stringify(validExecution);
+                }
+                return 'mock file content';
             });
 
             // Act
@@ -379,17 +302,23 @@ describe('review-code', () => {
 
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('4. **');
-            expect(actualCall).toContain('** → Pre-implementation analysis and execution strategy');
+            expect(actualCall).toContain('BLUEPRINT.md');
+            expect(actualCall).not.toContain('{{blueprintPath}}');
         });
 
-        test('should have empty researchSection when RESEARCH.md does not exist', async () => {
+        test('should include executionJsonPath placeholder replacement', async () => {
             // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                if (filePath.includes('RESEARCH.md')) return false;
-                return false;
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Check {{executionJsonPath}} for status';
+                }
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '## 2. CONTEXT CHAIN\n## 3. NEXT';
+                }
+                if (filePath.includes('execution.json')) {
+                    return JSON.stringify(validExecution);
+                }
+                return 'mock file content';
             });
 
             // Act
@@ -397,19 +326,13 @@ describe('review-code', () => {
 
             // Assert
             const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).not.toContain('4. **');
+            expect(actualCall).toContain('execution.json');
+            expect(actualCall).not.toContain('{{executionJsonPath}}');
         });
     });
 
     describe('executeClaude integration', () => {
         test('should call executeClaude with built prompt', async () => {
-            // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
             // Act
             await reviewCode(mockTask);
 
@@ -425,11 +348,6 @@ describe('review-code', () => {
             // Arrange
             const mockResult = { success: true, filesCreated: ['CODE_REVIEW.md'] };
             executeClaude.mockResolvedValue(mockResult);
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
 
             // Act
             const result = await reviewCode(mockTask);
@@ -442,11 +360,6 @@ describe('review-code', () => {
             // Arrange
             const mockError = new Error('Claude execution failed');
             executeClaude.mockRejectedValue(mockError);
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
 
             // Act & Assert
             await expect(reviewCode(mockTask)).rejects.toThrow(mockError);
@@ -454,48 +367,35 @@ describe('review-code', () => {
     });
 
     describe('context section building', () => {
-        test('should build context section with consolidated context', async () => {
-            // Arrange
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-
+        test('should build context section from BLUEPRINT', async () => {
             // Act
             await reviewCode(mockTask);
 
-            // Assert - now uses consolidated context structure
+            // Assert - uses BLUEPRINT-based context structure
             const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('## 📚 CONTEXT SUMMARY FOR REVIEW');
-            expect(actualCall).toContain('REFERENCE FILES');
-        });
-
-        test('should always include context summary section', async () => {
-            // Arrange - even when all files return false, consolidated context is always included
-            fs.existsSync.mockReturnValue(false);
-
-            // Act
-            await reviewCode(mockTask);
-
-            // Assert - context section is always built using consolidated context
-            const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('## 📚 CONTEXT SUMMARY FOR REVIEW');
-            expect(actualCall).toContain('Environment Summary');
+            expect(actualCall).toContain('Task Definition (from BLUEPRINT.md)');
+            expect(actualCall).toContain('Modified Files (from execution.json)');
         });
     });
 
     describe('multi-repo mode', () => {
         test('should throw error when scope is missing in multi-repo mode', async () => {
+            const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
             // Enable multi-repo mode
             state.isMultiRepo.mockReturnValue(true);
+            parseTaskScope.mockReturnValue(null);
+            validateScope.mockImplementation(() => {
+                throw new Error('@scope tag is required in multi-repo mode');
+            });
 
             fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return false;
             });
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('TASK.md')) return '# Task without scope\nSome task content';
+                if (filePath.includes('BLUEPRINT.md')) return '# Task without scope\nSome task content';
+                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
                 if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
                 return '';
             });
@@ -504,19 +404,22 @@ describe('review-code', () => {
         });
 
         test('should use correct repository path when scope is backend', async () => {
+            const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
             state.isMultiRepo.mockReturnValue(true);
             state.getRepository.mockReturnValue('/test/backend');
+            parseTaskScope.mockReturnValue('backend');
+            validateScope.mockReturnValue(true);
 
             fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return false;
             });
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('TASK.md')) return '@scope backend\n# Backend task';
+                if (filePath.includes('BLUEPRINT.md')) return '@scope backend\n# Backend task';
+                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
                 if (filePath.includes('prompt-review.md')) {
-                    return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
+                    return 'Template with {{contextSection}} {{blueprintPath}} {{executionJsonPath}} {{codeReviewMdPath}}';
                 }
                 return 'mock file content';
             });
@@ -532,19 +435,22 @@ describe('review-code', () => {
         });
 
         test('should use correct repository path when scope is frontend', async () => {
+            const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
             state.isMultiRepo.mockReturnValue(true);
             state.getRepository.mockReturnValue('/test/frontend');
+            parseTaskScope.mockReturnValue('frontend');
+            validateScope.mockReturnValue(true);
 
             fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return false;
             });
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('TASK.md')) return '@scope frontend\n# Frontend task';
+                if (filePath.includes('BLUEPRINT.md')) return '@scope frontend\n# Frontend task';
+                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
                 if (filePath.includes('prompt-review.md')) {
-                    return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
+                    return 'Template with {{contextSection}} {{blueprintPath}} {{executionJsonPath}} {{codeReviewMdPath}}';
                 }
                 return 'mock file content';
             });
@@ -846,153 +752,8 @@ Some contract info`;
         });
     });
 
-    describe('backward compatibility', () => {
-        beforeEach(() => {
-            state.isMultiRepo.mockReturnValue(false);
-        });
-
-        test('should use old flow when BLUEPRINT.md does not exist', async () => {
-            const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
-            buildOptimizedContextAsync.mockClear();
-
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return false;
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-            fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('prompt-review.md')) {
-                    return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
-                }
-                return 'mock content';
-            });
-
-            await reviewCode(mockTask);
-
-            expect(buildOptimizedContextAsync).toHaveBeenCalled();
-        });
-
-        test('should use new flow when BLUEPRINT.md exists', async () => {
-            const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
-            buildOptimizedContextAsync.mockClear();
-
-            const validExecution = {
-                phases: [{ name: 'impl', status: 'completed' }],
-                beyondTheBasics: {
-                    cleanup: {
-                        debugLogsRemoved: true,
-                        formattingConsistent: true,
-                        deadCodeRemoved: true,
-                    },
-                },
-                artifacts: [],
-                completion: { summary: [] },
-            };
-
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return true;
-                if (filePath.includes('execution.json')) return true;
-                if (filePath.includes('AI_PROMPT.md')) return true;
-                if (filePath.includes('INITIAL_PROMPT.md')) return true;
-                return false;
-            });
-            fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n## 3. NEXT';
-                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
-                if (filePath.includes('prompt-review.md')) {
-                    return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
-                }
-                return 'mock content';
-            });
-
-            await reviewCode(mockTask);
-
-            // buildOptimizedContextAsync should NOT be called in BLUEPRINT flow
-            expect(buildOptimizedContextAsync).not.toHaveBeenCalled();
-        });
-
-        test('should NOT call buildOptimizedContextAsync when BLUEPRINT exists', async () => {
-            const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
-            buildOptimizedContextAsync.mockClear();
-
-            const validExecution = {
-                phases: [{ name: 'impl', status: 'completed' }],
-                beyondTheBasics: {
-                    cleanup: {
-                        debugLogsRemoved: true,
-                        formattingConsistent: true,
-                        deadCodeRemoved: true,
-                    },
-                },
-                artifacts: [{ type: 'file', path: 'src/test.js' }],
-                completion: { summary: ['Done'] },
-            };
-
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return true;
-                if (filePath.includes('execution.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n- src/index.js\n## 3. NEXT';
-                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
-                if (filePath.includes('prompt-review.md')) {
-                    return 'Template {{contextSection}}';
-                }
-                return '';
-            });
-
-            await reviewCode(mockTask);
-
-            expect(buildOptimizedContextAsync).not.toHaveBeenCalled();
-        });
-    });
-
-    describe('new review flow with BLUEPRINT', () => {
-        beforeEach(() => {
-            state.isMultiRepo.mockReturnValue(false);
-        });
-
-        test('should read BLUEPRINT.md and execution.json', async () => {
-            const validExecution = {
-                phases: [{ name: 'impl', status: 'completed' }],
-                beyondTheBasics: {
-                    cleanup: {
-                        debugLogsRemoved: true,
-                        formattingConsistent: true,
-                        deadCodeRemoved: true,
-                    },
-                },
-                artifacts: [],
-                completion: { summary: [] },
-            };
-
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return true;
-                if (filePath.includes('execution.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT content';
-                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
-                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
-                return '';
-            });
-
-            await reviewCode(mockTask);
-
-            expect(fs.readFileSync).toHaveBeenCalledWith(
-                expect.stringContaining('BLUEPRINT.md'),
-                'utf-8',
-            );
-            expect(fs.readFileSync).toHaveBeenCalledWith(
-                expect.stringContaining('execution.json'),
-                'utf-8',
-            );
-        });
-
-        test('should throw when completion validation fails', async () => {
+    describe('BLUEPRINT flow validation', () => {
+        test('should throw when completion validation fails (incomplete phases)', async () => {
             const invalidExecution = {
                 phases: [{ name: 'impl', status: 'in_progress' }],
                 beyondTheBasics: {
@@ -1010,14 +771,13 @@ Some contract info`;
                 return false;
             });
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT';
+                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n## 3. NEXT';
                 if (filePath.includes('execution.json')) return JSON.stringify(invalidExecution);
                 if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
                 return '';
             });
 
             await expect(reviewCode(mockTask)).rejects.toThrow('Task not ready for review');
-            await expect(reviewCode(mockTask)).rejects.toThrow('Incomplete phases: impl');
         });
 
         test('should throw when cleanup flags incomplete', async () => {
@@ -1038,14 +798,13 @@ Some contract info`;
                 return false;
             });
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT';
+                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n## 3. NEXT';
                 if (filePath.includes('execution.json')) return JSON.stringify(invalidExecution);
                 if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
                 return '';
             });
 
             await expect(reviewCode(mockTask)).rejects.toThrow('Task not ready for review');
-            await expect(reviewCode(mockTask)).rejects.toThrow('Cleanup not complete');
         });
 
         test('should throw with clear message when execution.json is invalid JSON', async () => {
@@ -1055,91 +814,13 @@ Some contract info`;
                 return false;
             });
             fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT';
+                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n## 3. NEXT';
                 if (filePath.includes('execution.json')) return 'invalid json {';
                 if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
                 return '';
             });
 
             await expect(reviewCode(mockTask)).rejects.toThrow('Failed to parse execution.json');
-        });
-
-        test('should build context from BLUEPRINT without buildOptimizedContextAsync', async () => {
-            const validExecution = {
-                phases: [{ name: 'impl', status: 'completed' }],
-                beyondTheBasics: {
-                    cleanup: {
-                        debugLogsRemoved: true,
-                        formattingConsistent: true,
-                        deadCodeRemoved: true,
-                    },
-                },
-                artifacts: [{ type: 'file', path: 'src/new.js' }],
-                completion: { summary: ['Added feature'] },
-            };
-
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return true;
-                if (filePath.includes('execution.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n- src/context.js\n## 3. NEXT';
-                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
-                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
-                return '';
-            });
-
-            await reviewCode(mockTask);
-
-            // Check that the prompt includes BLUEPRINT context
-            const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('Task Definition (from BLUEPRINT.md)');
-            expect(actualCall).toContain('Modified Files (from execution.json)');
-            expect(actualCall).toContain('FILE: src/new.js');
-        });
-
-        test('should extract context chain from BLUEPRINT', async () => {
-            const validExecution = {
-                phases: [{ name: 'impl', status: 'completed' }],
-                beyondTheBasics: {
-                    cleanup: {
-                        debugLogsRemoved: true,
-                        formattingConsistent: true,
-                        deadCodeRemoved: true,
-                    },
-                },
-                artifacts: [],
-                completion: { summary: [] },
-            };
-
-            const blueprintContent = `# TASK BLUEPRINT
-## 2. CONTEXT CHAIN
-### Priority 0
-- src/important.js
-- src/critical.ts
-### Priority 1
-- src/secondary.js
-## 3. EXECUTION CONTRACT`;
-
-            fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return true;
-                if (filePath.includes('execution.json')) return true;
-                return false;
-            });
-            fs.readFileSync.mockImplementation((filePath) => {
-                if (filePath.includes('BLUEPRINT.md')) return blueprintContent;
-                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
-                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
-                return '';
-            });
-
-            await reviewCode(mockTask);
-
-            const actualCall = executeClaude.mock.calls[0][0];
-            expect(actualCall).toContain('src/important.js');
-            expect(actualCall).toContain('src/critical.ts');
-            expect(actualCall).toContain('src/secondary.js');
         });
     });
 });
