@@ -53,7 +53,7 @@ module.exports = {
     verbose: true,
 
     // Test timeout (30 seconds for all tests to prevent hanging)
-    testTimeout: 30000,
+    testTimeout: 5000,
 
     // Limit worker threads to prevent memory issues
     maxWorkers: 2,
