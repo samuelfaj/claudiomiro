@@ -19,14 +19,30 @@ jest.mock('../../../../shared/utils/logger', () => ({
     success: jest.fn(),
     error: jest.fn(),
     warn: jest.fn(),
+    warning: jest.fn(),
+    info: jest.fn(),
+    debug: jest.fn(),
+}));
+jest.mock('./state-manager', () => ({
+    getStatePaths: jest.fn(() => ({
+        todoPath: '/test/.claudiomiro/task-executor/PROMPT_REFINEMENT_TODO.md',
+        overviewPath: '/test/.claudiomiro/task-executor/PROMPT_REFINEMENT_OVERVIEW.md',
+        passedPath: '/test/.claudiomiro/task-executor/PROMPT_REFINEMENT_PASSED.md',
+    })),
+    countPendingItems: jest.fn(() => 0),
+    countCompletedItems: jest.fn(() => 0),
+    isVerificationPassed: jest.fn(() => true), // Default: skip refinement loop
+    deleteOverview: jest.fn(),
+    createPassedFile: jest.fn(),
 }));
 
 // Import after mocks
-const { step1, generateMultiRepoContext } = require('./index');
+const { step1, generateMultiRepoContext, runRefinementLoop } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
 const state = require('../../../../shared/config/state');
 const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system');
+const stateManager = require('./state-manager');
 
 describe('step1', () => {
     beforeEach(() => {
@@ -495,6 +511,309 @@ describe('step1', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('/legacy'),
             );
+        });
+    });
+
+    describe('runRefinementLoop', () => {
+        beforeEach(() => {
+            // Reset state manager mocks to non-skipping behavior
+            stateManager.isVerificationPassed.mockReturnValue(false);
+        });
+
+        test('should skip if already verified (PASSED file exists)', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(true);
+
+            // Act
+            await runRefinementLoop(10);
+
+            // Assert
+            expect(executeClaude).not.toHaveBeenCalled();
+            expect(logger.success).toHaveBeenCalledWith(
+                'AI_PROMPT.md already verified, skipping refinement',
+            );
+        });
+
+        test('should throw error if refinement-prompt.md not found', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('refinement-prompt.md')) return false;
+                return true;
+            });
+
+            // Act & Assert
+            await expect(runRefinementLoop(10)).rejects.toThrow('refinement-prompt.md not found');
+        });
+
+        test('should throw error if verification-prompt.md not found', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('verification-prompt.md')) return false;
+                if (filePath.includes('refinement-prompt.md')) return true;
+                return true;
+            });
+            fs.readFileSync.mockReturnValue('prompt content');
+
+            // Act & Assert
+            await expect(runRefinementLoop(10)).rejects.toThrow('verification-prompt.md not found');
+        });
+
+        test('should complete when PASSED file is created during verification', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+            let passedCreated = false;
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('PROMPT_REFINEMENT_PASSED.md')) return passedCreated;
+                if (filePath.includes('PROMPT_REFINEMENT_OVERVIEW.md')) return true; // In verification phase
+                if (filePath.includes('refinement-prompt.md')) return true;
+                if (filePath.includes('verification-prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockReturnValue('prompt content {{todoPath}} {{passedPath}} {{claudiomiroFolder}}');
+
+            executeClaude.mockImplementation(async () => {
+                passedCreated = true; // Simulate Claude creating PASSED file
+            });
+
+            stateManager.countCompletedItems.mockReturnValue(3);
+
+            // Act
+            await runRefinementLoop(10);
+
+            // Assert
+            expect(executeClaude).toHaveBeenCalled();
+            expect(logger.success).toHaveBeenCalledWith(
+                'Verification passed! AI_PROMPT.md is ready for decomposition.',
+            );
+        });
+
+        test('should run multiple iterations for refinement and verification phases', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+            let callCount = 0;
+
+            // Simulate: refinement -> verification -> passed
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('PROMPT_REFINEMENT_PASSED.md')) {
+                    return callCount >= 2; // PASSED created after 2nd call
+                }
+                if (filePath.includes('PROMPT_REFINEMENT_OVERVIEW.md')) {
+                    // Overview created after 1st call (enters verification on 2nd)
+                    return callCount >= 1;
+                }
+                if (filePath.includes('refinement-prompt.md')) return true;
+                if (filePath.includes('verification-prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockReturnValue('prompt content');
+
+            stateManager.countPendingItems.mockReturnValue(0);
+            stateManager.countCompletedItems.mockReturnValue(2);
+
+            executeClaude.mockImplementation(async () => {
+                callCount++;
+            });
+
+            // Act
+            await runRefinementLoop(10);
+
+            // Assert
+            // Should have run at least 2 iterations: refinement + verification
+            expect(executeClaude).toHaveBeenCalledTimes(2);
+            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Refinement iteration'));
+            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('Verification iteration'));
+        });
+
+        test('should throw error when max iterations reached', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('PROMPT_REFINEMENT_PASSED.md')) return false;
+                if (filePath.includes('PROMPT_REFINEMENT_OVERVIEW.md')) return false;
+                if (filePath.includes('PROMPT_REFINEMENT_TODO.md')) return true;
+                if (filePath.includes('refinement-prompt.md')) return true;
+                if (filePath.includes('verification-prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockReturnValue('prompt {{iteration}} {{maxIterations}}');
+
+            stateManager.countPendingItems.mockReturnValue(5); // Always pending
+            stateManager.countCompletedItems.mockReturnValue(2);
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act & Assert
+            await expect(runRefinementLoop(3)).rejects.toThrow(
+                'AI_PROMPT.md refinement did not complete after 3 iterations',
+            );
+            expect(executeClaude).toHaveBeenCalledTimes(3);
+            expect(logger.error).toHaveBeenCalledWith('Max iterations (3) reached');
+        });
+
+        test('should auto-create PASSED file when no pending items but Claude did not create it', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('PROMPT_REFINEMENT_PASSED.md')) return false;
+                if (filePath.includes('PROMPT_REFINEMENT_OVERVIEW.md')) return true; // Verification phase
+                if (filePath.includes('PROMPT_REFINEMENT_TODO.md')) return true;
+                if (filePath.includes('refinement-prompt.md')) return true;
+                if (filePath.includes('verification-prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockReturnValue('verification prompt');
+
+            stateManager.countPendingItems.mockReturnValue(0); // No pending items
+            stateManager.countCompletedItems.mockReturnValue(5);
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await runRefinementLoop(10);
+
+            // Assert
+            expect(stateManager.createPassedFile).toHaveBeenCalledWith(5, 1);
+            expect(logger.warning).toHaveBeenCalledWith(
+                'No pending items but PASSED file not created. Auto-creating...',
+            );
+            expect(logger.success).toHaveBeenCalledWith('AI_PROMPT.md refinement complete!');
+        });
+
+        test('should handle unlimited iterations', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+            let iterationCount = 0;
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('PROMPT_REFINEMENT_PASSED.md')) return iterationCount >= 5;
+                if (filePath.includes('PROMPT_REFINEMENT_OVERVIEW.md')) return iterationCount >= 4;
+                if (filePath.includes('refinement-prompt.md')) return true;
+                if (filePath.includes('verification-prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockReturnValue('prompt {{maxIterations}}');
+
+            stateManager.countPendingItems.mockReturnValue(0);
+
+            executeClaude.mockImplementation(async () => {
+                iterationCount++;
+            });
+
+            // Act
+            await runRefinementLoop(Infinity);
+
+            // Assert
+            expect(logger.info).toHaveBeenCalledWith('Max iterations: unlimited (--no-limit)');
+        });
+
+        test('should throw error if Claude execution fails', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('refinement-prompt.md')) return true;
+                if (filePath.includes('verification-prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockReturnValue('prompt content');
+
+            executeClaude.mockRejectedValue(new Error('Claude API error'));
+
+            // Act & Assert
+            await expect(runRefinementLoop(10)).rejects.toThrow('AI_PROMPT.md refinement failed: Claude API error');
+            expect(logger.stopSpinner).toHaveBeenCalled();
+            expect(logger.error).toHaveBeenCalledWith(
+                expect.stringContaining('Refinement failed on iteration 1'),
+            );
+        });
+
+        test('should log progress during refinement phase', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+            let iteration = 0;
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('PROMPT_REFINEMENT_PASSED.md')) return iteration >= 2;
+                if (filePath.includes('PROMPT_REFINEMENT_OVERVIEW.md')) return iteration >= 1;
+                if (filePath.includes('refinement-prompt.md')) return true;
+                if (filePath.includes('verification-prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockReturnValue('prompt');
+
+            stateManager.countPendingItems.mockReturnValue(3);
+            stateManager.countCompletedItems.mockReturnValue(2);
+
+            executeClaude.mockImplementation(async () => {
+                iteration++;
+            });
+
+            // Act
+            await runRefinementLoop(10);
+
+            // Assert
+            expect(logger.info).toHaveBeenCalledWith('Progress: 2 completed, 3 pending');
+        });
+    });
+
+    describe('step1 with refinement loop integration', () => {
+        test('should run refinement loop after generating AI_PROMPT.md', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(true); // Skip actual loop
+            let existsCallCount = 0;
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('AI_PROMPT.md')) {
+                    existsCallCount++;
+                    return existsCallCount > 1;
+                }
+                if (filePath.includes('INITIAL_PROMPT.md')) return true;
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('INITIAL_PROMPT.md')) return 'Task';
+                if (filePath.includes('prompt.md')) return 'Generate {{TASK}}';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step1(true, 10);
+
+            // Assert
+            expect(executeClaude).toHaveBeenCalled();
+            expect(logger.success).toHaveBeenCalledWith('AI_PROMPT.md created successfully');
+            expect(stateManager.isVerificationPassed).toHaveBeenCalled();
+        });
+
+        test('should pass maxIterations parameter to refinement loop', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+
+            // Make it fail after checking loop starts
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('AI_PROMPT.md')) return true; // Skip generation
+                if (filePath.includes('refinement-prompt.md')) return false; // Fail early
+                return false;
+            });
+
+            // Act & Assert
+            await expect(step1(true, 15)).rejects.toThrow('refinement-prompt.md not found');
         });
     });
 });

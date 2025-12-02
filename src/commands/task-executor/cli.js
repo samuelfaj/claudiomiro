@@ -432,7 +432,8 @@ const chooseAction = async (i, args) => {
                 logger.info('Step 1 skipped (not in --steps list)');
                 return { done: true };
             }
-            return { step: step1(sameBranch) };
+            const maxRefinementIterations = noLimit ? Infinity : maxAttemptsPerTask;
+            return { step: step1(sameBranch, maxRefinementIterations) };
         }
 
         // If AI_PROMPT.md exists but no tasks yet, run step2

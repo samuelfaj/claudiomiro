@@ -7,6 +7,9 @@ jest.mock('../../utils/scope-parser', () => ({
     parseTaskScope: jest.fn().mockReturnValue(null),
     validateScope: jest.fn().mockReturnValue(true),
 }));
+jest.mock('../../utils/schema-validator', () => ({
+    validateExecutionJson: jest.fn().mockReturnValue({ valid: true, errors: [] }),
+}));
 jest.mock('./reflection-hook', () => ({
     shouldReflect: jest.fn().mockReturnValue({ should: false }),
     createReflection: jest.fn(),
@@ -58,10 +61,10 @@ const {
     validateCompletion,
     isDangerousCommand,
     VALID_STATUSES,
-    REQUIRED_FIELDS,
 } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const { validateExecutionJson } = require('../../utils/schema-validator');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const reflectionHook = require('./reflection-hook');
@@ -365,10 +368,12 @@ describe('step5', () => {
 
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(JSON.stringify(validExecution));
+            validateExecutionJson.mockReturnValue({ valid: true, errors: [] });
 
             const result = loadExecution('/test/execution.json');
 
             expect(result).toEqual(validExecution);
+            expect(validateExecutionJson).toHaveBeenCalledWith(validExecution);
         });
 
         test('should throw error when file not found', () => {
@@ -386,15 +391,19 @@ describe('step5', () => {
                 .toThrow('Failed to parse execution.json');
         });
 
-        test('should throw error when required field missing', () => {
+        test('should throw error when schema validation fails', () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(JSON.stringify({ status: 'pending' }));
+            validateExecutionJson.mockReturnValue({
+                valid: false,
+                errors: ['Missing required field "phases"', 'Missing required field "$schema"'],
+            });
 
             expect(() => loadExecution('/test/execution.json'))
-                .toThrow('missing required field: phases');
+                .toThrow('Invalid execution.json: Missing required field "phases"; Missing required field "$schema"');
         });
 
-        test('should throw error when status is invalid', () => {
+        test('should throw error when status is invalid according to schema', () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(JSON.stringify({
                 status: 'invalid_status',
@@ -402,9 +411,13 @@ describe('step5', () => {
                 artifacts: [],
                 completion: {},
             }));
+            validateExecutionJson.mockReturnValue({
+                valid: false,
+                errors: ['status: Invalid value. Allowed values: pending, in_progress, completed, blocked'],
+            });
 
             expect(() => loadExecution('/test/execution.json'))
-                .toThrow('Invalid execution status');
+                .toThrow('Invalid execution.json');
         });
     });
 
@@ -418,9 +431,11 @@ describe('step5', () => {
             };
 
             fs.writeFileSync.mockImplementation(() => {});
+            validateExecutionJson.mockReturnValue({ valid: true, errors: [] });
 
             saveExecution('/test/execution.json', validExecution);
 
+            expect(validateExecutionJson).toHaveBeenCalledWith(validExecution);
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 '/test/execution.json',
                 JSON.stringify(validExecution, null, 2),
@@ -428,18 +443,28 @@ describe('step5', () => {
             );
         });
 
-        test('should throw error when required field missing', () => {
+        test('should throw error when schema validation fails', () => {
+            validateExecutionJson.mockReturnValue({
+                valid: false,
+                errors: ['Missing required field "phases"'],
+            });
+
             expect(() => saveExecution('/test/execution.json', { status: 'pending' }))
-                .toThrow('Cannot save execution.json: missing required field');
+                .toThrow('Cannot save execution.json: Missing required field "phases"');
         });
 
-        test('should throw error when status is invalid', () => {
+        test('should throw error when status is invalid according to schema', () => {
+            validateExecutionJson.mockReturnValue({
+                valid: false,
+                errors: ['status: Invalid value. Allowed values: pending, in_progress, completed, blocked'],
+            });
+
             expect(() => saveExecution('/test/execution.json', {
                 status: 'bad_status',
                 phases: [],
                 artifacts: [],
                 completion: {},
-            })).toThrow('Cannot save execution.json: invalid status');
+            })).toThrow('Cannot save execution.json');
         });
     });
 
@@ -809,13 +834,9 @@ describe('step5', () => {
         });
     });
 
-    describe('VALID_STATUSES and REQUIRED_FIELDS', () => {
+    describe('VALID_STATUSES', () => {
         test('should export valid statuses', () => {
             expect(VALID_STATUSES).toEqual(['pending', 'in_progress', 'completed', 'blocked']);
-        });
-
-        test('should export required fields', () => {
-            expect(REQUIRED_FIELDS).toEqual(['status', 'phases', 'artifacts', 'completion']);
         });
     });
 });

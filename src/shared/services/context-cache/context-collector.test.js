@@ -29,8 +29,10 @@ const {
     hasValidTaskStructure,
     extractContextSummary,
     extractContextSummaryAsync,
+    extractContextSummaryFromContent,
     extractResearchPatterns,
     extractResearchPatternsAsync,
+    extractResearchPatternsFromContent,
     extractCodebasePatterns,
     createAiPromptSummary,
     getIncrementalContext,
@@ -283,18 +285,65 @@ describe('context-collector', () => {
     });
 
     describe('extractResearchPatterns (deprecated)', () => {
-        test('should return null (deprecated function)', () => {
+        test('should return null and log deprecation warning', () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
             const patterns = extractResearchPatterns('/test/RESEARCH.md');
 
             expect(patterns).toBeNull();
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('[DEPRECATED] extractResearchPatterns'),
+            );
+
+            consoleSpy.mockRestore();
         });
     });
 
     describe('extractResearchPatternsAsync (deprecated)', () => {
-        test('should return null (deprecated function)', async () => {
+        test('should return null and log deprecation warning', async () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
             const patterns = await extractResearchPatternsAsync('/test/RESEARCH.md');
 
             expect(patterns).toBeNull();
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('[DEPRECATED] extractResearchPatternsAsync'),
+            );
+
+            consoleSpy.mockRestore();
+        });
+    });
+
+    describe('extractResearchPatternsFromContent (deprecated)', () => {
+        test('should return null and log deprecation warning', () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            const patterns = extractResearchPatternsFromContent('some content', '/test/RESEARCH.md');
+
+            expect(patterns).toBeNull();
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('[DEPRECATED] extractResearchPatternsFromContent'),
+            );
+
+            consoleSpy.mockRestore();
+        });
+    });
+
+    describe('extractContextSummaryFromContent (deprecated)', () => {
+        test('should log deprecation warning but still return parsed content', () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
+
+            const content = '## Files Modified\n- file1.js\n- file2.js\n\n## Key Decisions\n- Decision 1';
+            const summary = extractContextSummaryFromContent(content, '/test/CONTEXT.md');
+
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('[DEPRECATED] extractContextSummaryFromContent'),
+            );
+            expect(summary.filesModified).toContain('file1.js');
+            expect(summary.decisions).toContain('Decision 1');
+            expect(summary.fullPath).toBe('/test/CONTEXT.md');
+
+            consoleSpy.mockRestore();
         });
     });
 

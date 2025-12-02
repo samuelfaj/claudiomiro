@@ -148,12 +148,16 @@ const extractContextSummary = (taskFolder) => {
 };
 
 /**
+ * @deprecated CONTEXT.md is no longer used. Use execution.json instead.
  * Extracts summary from CONTEXT.md content (sync, heuristic version)
+ * Kept for backward compatibility with legacy code.
  * @param {string} content - CONTEXT.md content
  * @param {string} contextPath - Path for reference
  * @returns {object} Summary object
  */
 const extractContextSummaryFromContent = (content, contextPath = '') => {
+    console.warn('[DEPRECATED] extractContextSummaryFromContent is deprecated. CONTEXT.md is no longer used. Use execution.json instead.');
+
     // Extract key sections with regex
     const filesModifiedMatch = content.match(/## Files Modified\s*\n([\s\S]*?)(?=\n##|$)/);
     const decisionsMatch = content.match(/## (?:Key )?Decisions?\s*\n([\s\S]*?)(?=\n##|$)/);
@@ -182,6 +186,7 @@ const extractContextSummaryAsync = async (taskFolder, _taskDescription = null) =
  * Kept for backward compatibility with legacy code.
  */
 const extractResearchPatterns = (_researchPath) => {
+    console.warn('[DEPRECATED] extractResearchPatterns is deprecated. RESEARCH.md is no longer used. Use execution.json instead.');
     return null;
 };
 
@@ -190,6 +195,7 @@ const extractResearchPatterns = (_researchPath) => {
  * Kept for backward compatibility with legacy code.
  */
 const extractResearchPatternsFromContent = (_content, _researchPath = '') => {
+    console.warn('[DEPRECATED] extractResearchPatternsFromContent is deprecated. RESEARCH.md is no longer used. Use execution.json instead.');
     return null;
 };
 
@@ -198,6 +204,7 @@ const extractResearchPatternsFromContent = (_content, _researchPath = '') => {
  * Kept for backward compatibility with legacy code.
  */
 const extractResearchPatternsAsync = async (_researchPath) => {
+    console.warn('[DEPRECATED] extractResearchPatternsAsync is deprecated. RESEARCH.md is no longer used. Use execution.json instead.');
     return null;
 };
 

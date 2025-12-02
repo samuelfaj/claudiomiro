@@ -108,6 +108,11 @@ const generateExecution = async (task) => {
     const title = extractTaskTitle(content);
     const phases = extractPhasesFromBlueprint(content);
 
+    // Validate phases - ensure we always have at least one phase
+    if (!phases || phases.length === 0) {
+        throw new Error('Failed to extract phases from BLUEPRINT.md and default phases were not generated. This should never happen.');
+    }
+
     // Build execution.json structure
     const executionData = {
         $schema: 'execution-schema-v1',
