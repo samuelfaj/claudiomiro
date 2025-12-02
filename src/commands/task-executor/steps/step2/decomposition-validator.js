@@ -53,7 +53,12 @@ const hasPhase = (content, phaseName) => {
  * @returns {boolean}
  */
 const hasPhaseContent = (content, phaseName) => {
-    const pattern = new RegExp(`##\\s*${phaseName}[^#]*`, 'i');
+    // Match from ## PhaseName until the next ## at line start or end of string
+    // Using ^## to match ## only at line start (prevents matching middle of ###)
+    // Using [\s\S]*? to match any character including newlines (non-greedy)
+    // Using (?=\n##\s|$) lookahead to stop at newline + ## followed by space, or end of string
+    // Note: In multiline mode, $ matches end of string (when used in lookahead)
+    const pattern = new RegExp(`^##\\s*${phaseName}[\\s\\S]*?(?=\\n##\\s|$)`, 'im');
     const match = content.match(pattern);
     if (!match) return false;
 

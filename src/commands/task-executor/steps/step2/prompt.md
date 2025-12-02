@@ -195,39 +195,93 @@ This is the **mandatory system-level validation** step.
 
 **CRITICAL:** You MUST complete this analysis BEFORE creating ANY BLUEPRINT.md files.
 
-Create `{{claudiomiroFolder}}/DECOMPOSITION_ANALYSIS.md` to document your reasoning.
+Create `{{claudiomiroFolder}}/DECOMPOSITION_ANALYSIS.json` to document your reasoning in JSON format.
 
 This file captures your thought process and ensures decomposition is deliberate, not arbitrary.
+
+**IMPORTANT:** The output MUST be valid JSON that can be parsed programmatically. Follow the JSON schema structure exactly.
+
+### JSON Structure Overview
+
+The DECOMPOSITION_ANALYSIS.json file MUST contain the following top-level keys:
+```json
+{
+  "phaseA": { /* Requirements Extraction */ },
+  "phaseB": { /* Complexity Analysis */ },
+  "phaseC": { /* Dependency Analysis */ },
+  "phaseD": { /* Decomposition Strategy */ },
+  "phaseE": { /* Self-Critique */ },
+  "phaseF": { /* Tree of Thought */ },
+  "preBlueprintAnalysis": { /* Per-task analysis */ }
+}
+```
+
+Each phase is detailed below with its expected structure.
 
 ---
 
 ### PHASE A: Requirements Extraction
 
-From `AI_PROMPT.md`, extract ALL requirements:
+From `AI_PROMPT.md`, extract ALL requirements in JSON format:
 
-```markdown
-## Phase A: Requirements Extraction
-
-### Explicit Requirements (From AI_PROMPT.md)
-
-| Req ID | Exact Quote | Section | Line | Intent |
-|--------|-------------|---------|------|--------|
-| R1 | "[verbatim text from AI_PROMPT.md]" | § Acceptance Criteria | 45 | [What this requirement means] |
-| R2 | "[verbatim text]" | § Acceptance Criteria | 47 | [True intent] |
-| R3 | "[verbatim text]" | § Implementation Guidance | 62 | [Intent] |
-
-**Checkpoint:** Every bullet in AI_PROMPT.md must appear above.
-
-### Implicit Requirements
-
-- [ ] Testing required? Evidence: [YES/NO + quote from AI_PROMPT.md]
-- [ ] Documentation required? Evidence: [YES/NO + quote]
-- [ ] Integration validation? Evidence: [YES/NO + quote]
-- [ ] Error handling? Evidence: [YES/NO + quote]
-- [ ] Edge cases? Evidence: [YES/NO + quote]
-
-**Total Requirements:** [N] explicit + [M] implicit = [Total]
+```json
+{
+  "phaseA": {
+    "explicitRequirements": [
+      {
+        "id": "R1",
+        "quote": "[verbatim text from AI_PROMPT.md]",
+        "section": "§ Acceptance Criteria",
+        "line": 45,
+        "intent": "[What this requirement means]"
+      },
+      {
+        "id": "R2",
+        "quote": "[verbatim text]",
+        "section": "§ Acceptance Criteria",
+        "line": 47,
+        "intent": "[True intent]"
+      },
+      {
+        "id": "R3",
+        "quote": "[verbatim text]",
+        "section": "§ Implementation Guidance",
+        "line": 62,
+        "intent": "[Intent]"
+      }
+    ],
+    "implicitRequirements": {
+      "testing": {
+        "required": true,
+        "evidence": "[YES/NO + quote from AI_PROMPT.md]"
+      },
+      "documentation": {
+        "required": false,
+        "evidence": "[YES/NO + quote]"
+      },
+      "integration": {
+        "required": true,
+        "evidence": "[YES/NO + quote]"
+      },
+      "errorHandling": {
+        "required": true,
+        "evidence": "[YES/NO + quote]"
+      },
+      "edgeCases": {
+        "required": true,
+        "evidence": "[YES/NO + quote]"
+      }
+    },
+    "totalRequirements": {
+      "explicit": 3,
+      "implicit": 4,
+      "total": 7
+    }
+  }
+}
 ```
+
+**Checkpoint:** Every bullet in AI_PROMPT.md must appear in explicitRequirements array.
 
 ---
 

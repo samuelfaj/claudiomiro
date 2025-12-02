@@ -6,7 +6,7 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
 const { getLocalLLMService } = require('../../../../shared/services/local-llm');
 const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
 const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system/context-generator');
-const { runValidation } = require('./decomposition-validator');
+const { runValidation } = require('./decomposition-json-validator');
 
 /**
  * Step 2: Task Decomposition
@@ -15,7 +15,7 @@ const { runValidation } = require('./decomposition-validator');
  */
 const step2 = async () => {
     const folder = (file) => path.join(state.claudiomiroFolder, file);
-    const analysisPath = folder('DECOMPOSITION_ANALYSIS.md');
+    const analysisPath = folder('DECOMPOSITION_ANALYSIS.json');
 
     logger.newline();
     logger.startSpinner('Creating tasks...');
@@ -79,15 +79,15 @@ const step2 = async () => {
         decompositionSuccess = false;
         throw error;
     } finally {
-        // Cleanup DECOMPOSITION_ANALYSIS.md based on success/failure
+        // Cleanup DECOMPOSITION_ANALYSIS.json based on success/failure
         if (fs.existsSync(analysisPath)) {
             if (decompositionSuccess) {
                 // Delete on success - reasoning artifacts no longer needed
                 fs.unlinkSync(analysisPath);
-                logger.debug('DECOMPOSITION_ANALYSIS.md deleted (success)');
+                logger.debug('DECOMPOSITION_ANALYSIS.json deleted (success)');
             } else {
                 // Preserve on failure for debugging
-                logger.info('DECOMPOSITION_ANALYSIS.md preserved for debugging');
+                logger.info('DECOMPOSITION_ANALYSIS.json preserved for debugging');
             }
         }
     }
@@ -169,15 +169,15 @@ const validateDecompositionWithLLM = async () => {
 /**
  * Cleanup decomposition analysis artifacts after step2 completion
  * Called externally if step2 needs to be re-run
- * @param {boolean} preserveOnError - Whether to keep DECOMPOSITION_ANALYSIS.md on error
+ * @param {boolean} preserveOnError - Whether to keep DECOMPOSITION_ANALYSIS.json on error
  */
 const cleanupDecompositionArtifacts = (preserveOnError = true) => {
-    const analysisPath = path.join(state.claudiomiroFolder, 'DECOMPOSITION_ANALYSIS.md');
+    const analysisPath = path.join(state.claudiomiroFolder, 'DECOMPOSITION_ANALYSIS.json');
 
     if (fs.existsSync(analysisPath)) {
         if (!preserveOnError) {
             fs.unlinkSync(analysisPath);
-            logger.debug('DECOMPOSITION_ANALYSIS.md cleaned up');
+            logger.debug('DECOMPOSITION_ANALYSIS.json cleaned up');
         }
     }
 };
