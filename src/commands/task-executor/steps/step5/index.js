@@ -320,6 +320,10 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
     // Load and validate execution.json
     const execution = loadExecution(executionPath);
 
+    // Track attempts for diagnostics
+    execution.attempts = (execution.attempts || 0) + 1;
+    const attemptsBeforeClaude = execution.attempts;
+
     logger.info(`Loaded execution.json: status=${execution.status}, phase=${execution.currentPhase?.id || 1}`);
 
     // Phase 1: Pre-condition verification (HARD STOP)
@@ -348,13 +352,23 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
     // Mark task as completed in cache
     markTaskCompleted(state.claudiomiroFolder, task);
 
+    // Reload execution.json to include Claude's updates before persisting
+    const latestExecution = loadExecution(executionPath);
+
+    // Preserve incremented attempt count if Claude rewrites execution.json
+    const latestAttempts = Number.isInteger(latestExecution.attempts)
+        ? latestExecution.attempts
+        : 0;
+    latestExecution.attempts = Math.max(latestAttempts, attemptsBeforeClaude);
+
     // Validate completion
-    if (validateCompletion(execution)) {
-        execution.completion.status = 'completed';
+    if (validateCompletion(latestExecution)) {
+        latestExecution.completion.status = 'completed';
+        latestExecution.status = 'completed';
     }
 
-    logger.info(`Saved execution.json: status=${execution.status}`);
-    saveExecution(executionPath, execution);
+    logger.info(`Saved execution.json: status=${latestExecution.status}`);
+    saveExecution(executionPath, latestExecution);
 
     return result;
 };

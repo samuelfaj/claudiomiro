@@ -32,6 +32,11 @@ jest.mock('../../../../shared/services/context-cache', () => ({
     getContextFilePaths: jest.fn().mockReturnValue([]),
     markTaskCompleted: jest.fn(),
 }));
+jest.mock('./generate-review-checklist', () => ({
+    generateReviewChecklist: jest.fn().mockResolvedValue({ success: true, checklistPath: null, itemCount: 0 }),
+    loadArtifactsFromExecution: jest.fn(),
+    buildChecklistPrompt: jest.fn(),
+}));
 // Mock child_process
 jest.mock('child_process', () => {
     const { EventEmitter } = require('events');
@@ -177,6 +182,178 @@ describe('step5', () => {
 
             // Act & Assert
             await expect(step5(mockTask)).rejects.toThrow('Claude execution failed');
+        });
+
+        test('should increment attempts on each execution attempt', async () => {
+            executeClaude.mockResolvedValue({ success: true });
+
+            const executionBefore = {
+                status: 'pending',
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Phase 1',
+                        status: 'pending',
+                        preConditions: [
+                            { check: 'Check 1', command: 'echo success', expected: 'success' },
+                        ],
+                    },
+                ],
+                artifacts: [],
+                completion: { status: 'pending_validation' },
+                currentPhase: { id: 1, name: 'Phase 1' },
+            };
+
+            let executionReadCount = 0;
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT: TASK1\n\nTask content';
+                if (filePath.includes('execution.json')) {
+                    executionReadCount += 1;
+                    if (executionReadCount === 1) {
+                        return JSON.stringify(executionBefore);
+                    }
+                    return JSON.stringify({
+                        ...executionBefore,
+                        attempts: 1,
+                        status: 'in_progress',
+                    });
+                }
+                if (filePath.includes('SHELL-COMMAND-RULE.md')) return 'Shell rules';
+                return '';
+            });
+
+            await step5(mockTask);
+
+            const executionWrites = fs.writeFileSync.mock.calls
+                .filter(([filePath]) => filePath.includes('execution.json'));
+
+            expect(executionWrites.length).toBeGreaterThan(0);
+
+            const firstWrite = JSON.parse(executionWrites[0][1]);
+            expect(firstWrite.attempts).toBe(1);
+        });
+
+        test('should retain incremented attempts even if Claude resets counter', async () => {
+            executeClaude.mockResolvedValue({ success: true });
+
+            const executionBefore = {
+                status: 'pending',
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Phase 1',
+                        status: 'pending',
+                        preConditions: [
+                            { check: 'Check 1', command: 'echo success', expected: 'success' },
+                        ],
+                    },
+                ],
+                artifacts: [],
+                completion: { status: 'pending_validation' },
+                currentPhase: { id: 1, name: 'Phase 1' },
+            };
+
+            const claudeUpdatedExecution = {
+                ...executionBefore,
+                attempts: 0,
+                status: 'in_progress',
+            };
+
+            let executionReadCount = 0;
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT: TASK1\n\nTask content';
+                if (filePath.includes('execution.json')) {
+                    executionReadCount += 1;
+                    if (executionReadCount === 1) {
+                        return JSON.stringify(executionBefore);
+                    }
+                    return JSON.stringify(claudeUpdatedExecution);
+                }
+                if (filePath.includes('SHELL-COMMAND-RULE.md')) return 'Shell rules';
+                return '';
+            });
+
+            await step5(mockTask);
+
+            const executionWrites = fs.writeFileSync.mock.calls
+                .filter(([filePath]) => filePath.includes('execution.json'));
+
+            const finalWrite = JSON.parse(executionWrites[executionWrites.length - 1][1]);
+            expect(finalWrite.attempts).toBe(1);
+        });
+
+        test('should preserve Claude updates when saving execution.json', async () => {
+            executeClaude.mockResolvedValue({ success: true });
+
+            const executionBefore = {
+                status: 'pending',
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Phase 1',
+                        status: 'pending',
+                        preConditions: [
+                            { check: 'Check 1', command: 'echo success', expected: 'success' },
+                        ],
+                    },
+                ],
+                artifacts: [],
+                completion: { status: 'pending_validation' },
+                currentPhase: { id: 1, name: 'Phase 1' },
+            };
+
+            const claudeUpdatedExecution = {
+                ...executionBefore,
+                attempts: 1,
+                status: 'in_progress',
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Phase 1',
+                        status: 'completed',
+                        preConditions: [
+                            { check: 'Check 1', command: 'echo success', expected: 'success', passed: true },
+                        ],
+                    },
+                ],
+                artifacts: [
+                    { type: 'modified', path: 'src/file.js', verified: true },
+                ],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+                completion: { status: 'pending_validation', summary: ['Updated code'] },
+            };
+
+            let executionReadCount = 0;
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT: TASK1\n\nTask content';
+                if (filePath.includes('execution.json')) {
+                    executionReadCount += 1;
+                    if (executionReadCount === 1) {
+                        return JSON.stringify(executionBefore);
+                    }
+                    return JSON.stringify(claudeUpdatedExecution);
+                }
+                if (filePath.includes('SHELL-COMMAND-RULE.md')) return 'Shell rules';
+                return '';
+            });
+
+            await step5(mockTask);
+
+            const executionWrites = fs.writeFileSync.mock.calls
+                .filter(([filePath]) => filePath.includes('execution.json'));
+
+            const finalWrite = JSON.parse(executionWrites[executionWrites.length - 1][1]);
+
+            expect(finalWrite.artifacts).toEqual(claudeUpdatedExecution.artifacts);
+            expect(finalWrite.beyondTheBasics.cleanup).toEqual(claudeUpdatedExecution.beyondTheBasics.cleanup);
+            expect(finalWrite.completion.status).toBe('completed');
+            expect(finalWrite.status).toBe('completed');
         });
     });
 
