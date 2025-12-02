@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { reviewCode } = require('./review-code');
 const { reanalyzeBlocked } = require('./reanalyze-blocked');
+const { completeChecklist } = require('./complete-checklist');
 const { smartCommit } = require('../../../../shared/services/git-commit');
 const { isCompletedFromExecution } = require('../../utils/validation');
 const state = require('../../../../shared/config/state');
@@ -102,7 +103,25 @@ const step6 = async (task, shouldPush = true) => {
         throw new Error(`execution.json not found for task ${task}. Step 4 must generate execution.json.`);
     }
 
-    // Perform main code review
+    // Step 1: Complete review checklist (if exists)
+    try {
+        const checklistResult = await completeChecklist(task);
+        if (checklistResult.totalCount > 0) {
+            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+            const stateManager = ParallelStateManager.getInstance();
+            if (!stateManager || !stateManager.isUIRendererActive()) {
+                logger.info(`[Step6] Checklist verification: ${checklistResult.completedCount}/${checklistResult.totalCount} items`);
+            }
+        }
+    } catch (checklistError) {
+        const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+        const stateManager = ParallelStateManager.getInstance();
+        if (!stateManager || !stateManager.isUIRendererActive()) {
+            logger.warning(`[Step6] Checklist completion skipped: ${checklistError.message}`);
+        }
+    }
+
+    // Step 2: Perform main code review
     const reviewResult = await reviewCode(task);
 
     // Check if implementation is complete from execution.json

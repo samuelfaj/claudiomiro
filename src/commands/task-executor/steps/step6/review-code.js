@@ -70,12 +70,13 @@ const extractContextChain = (blueprint) => {
 };
 
 /**
- * Builds review context from BLUEPRINT.md and execution.json
+ * Builds review context from BLUEPRINT.md, execution.json, and optional review checklist
  * @param {string} blueprint - Raw BLUEPRINT.md content
  * @param {Object} execution - Parsed execution.json
- * @returns {Object} Review context with taskDefinition, contextFiles, modifiedFiles, completionSummary
+ * @param {Object|null} reviewChecklist - Parsed review-checklist.json (optional)
+ * @returns {Object} Review context with taskDefinition, contextFiles, modifiedFiles, completionSummary, reviewChecklist
  */
-const buildReviewContext = (blueprint, execution) => {
+const buildReviewContext = (blueprint, execution, reviewChecklist = null) => {
     const contextChain = extractContextChain(blueprint);
     const artifacts = (execution?.artifacts || []).map(a => `${(a.type || 'file').toUpperCase()}: ${a.path}`);
 
@@ -84,6 +85,7 @@ const buildReviewContext = (blueprint, execution) => {
         contextFiles: contextChain,
         modifiedFiles: artifacts,
         completionSummary: execution?.completion?.summary || [],
+        reviewChecklist,
     };
 };
 
@@ -108,6 +110,18 @@ const reviewWithBlueprintFlow = async (task, folder, projectFolder) => {
         throw new Error(`Failed to parse execution.json: ${error.message}`);
     }
 
+    // Read review-checklist.json if available
+    let reviewChecklist = null;
+    const checklistPath = folder('review-checklist.json');
+    if (fs.existsSync(checklistPath)) {
+        try {
+            reviewChecklist = JSON.parse(fs.readFileSync(checklistPath, 'utf-8'));
+            logger.debug(`[Step6] Loaded review checklist with ${reviewChecklist.items?.length || 0} items`);
+        } catch (error) {
+            logger.warning(`[Step6] Failed to parse review-checklist.json: ${error.message}`);
+        }
+    }
+
     // Validate completion
     const validationResult = validateCompletionForReview(execution);
     logger.debug('[Step6] Completion validation:', validationResult);
@@ -115,10 +129,31 @@ const reviewWithBlueprintFlow = async (task, folder, projectFolder) => {
         throw new Error(`Task not ready for review: ${validationResult.reason}`);
     }
 
-    // Build review context from BLUEPRINT + execution (NO buildOptimizedContextAsync)
-    const reviewContext = buildReviewContext(blueprint, execution);
+    // Build review context from BLUEPRINT + execution + checklist
+    const reviewContext = buildReviewContext(blueprint, execution, reviewChecklist);
     logger.debug('[Step6] Building review context from BLUEPRINT + execution.json');
     logger.debug('[Step6] Context files:', reviewContext.contextFiles.length);
+
+    // Build review checklist section if available
+    let reviewChecklistSection = '';
+    if (reviewContext.reviewChecklist?.items?.length > 0) {
+        const items = reviewContext.reviewChecklist.items;
+        const groupedByFile = items.reduce((acc, item) => {
+            if (!acc[item.file]) acc[item.file] = [];
+            acc[item.file].push(item);
+            return acc;
+        }, {});
+
+        reviewChecklistSection = `\n### Review Checklist (from Step 5)
+
+The following verification items were generated based on the artifacts created/modified.
+Use these as a guided verification framework. Mark items as verified or failed.
+
+${Object.entries(groupedByFile).map(([file, fileItems]) => `
+#### ${file}
+${fileItems.map(item => `- [ ] **[${item.id}]** (${item.category}) ${item.description}${item.lines?.length ? ` [lines: ${item.lines.join(', ')}]` : ''}`).join('\n')}`).join('\n')}
+`;
+    }
 
     // Build context section from BLUEPRINT data
     const contextSection = `\n\n## 📚 CONTEXT SUMMARY FOR REVIEW
@@ -131,7 +166,7 @@ ${reviewContext.modifiedFiles.length > 0 ? reviewContext.modifiedFiles.map(f => 
 
 ### Completion Summary
 ${reviewContext.completionSummary.length > 0 ? reviewContext.completionSummary.map(s => `- ${s}`).join('\n') : '- Task completed'}
-
+${reviewChecklistSection}
 ## REFERENCE FILES (read if more detail needed):
 ${reviewContext.contextFiles.map(f => `- ${f}`).join('\n') || '- No additional context files'}
 

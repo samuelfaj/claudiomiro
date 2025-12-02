@@ -6,13 +6,13 @@ const state = require('../../../../shared/config/state');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { markTaskCompleted } = require('../../../../shared/services/context-cache');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const { validateExecutionJson } = require('../../utils/schema-validator');
 const reflectionHook = require('./reflection-hook');
 
 const exec = promisify(execCallback);
 
 // Valid execution statuses
 const VALID_STATUSES = ['pending', 'in_progress', 'completed', 'blocked'];
-const REQUIRED_FIELDS = ['status', 'phases', 'artifacts', 'completion'];
 
 // Dangerous command patterns (security)
 const DANGEROUS_PATTERNS = [
@@ -50,7 +50,7 @@ const estimateCodeChangeSize = (blueprintPath) => {
 };
 
 /**
- * Load execution.json with validation
+ * Load execution.json with schema validation
  * @param {string} executionPath - Path to execution.json
  * @returns {Object} Parsed execution object
  * @throws {Error} if file missing or invalid
@@ -67,38 +67,26 @@ const loadExecution = (executionPath) => {
         throw new Error(`Failed to parse execution.json: ${err.message}`);
     }
 
-    // Validate required fields
-    for (const field of REQUIRED_FIELDS) {
-        if (!(field in execution)) {
-            throw new Error(`execution.json missing required field: ${field}`);
-        }
-    }
-
-    // Validate status enum
-    if (!VALID_STATUSES.includes(execution.status)) {
-        throw new Error(`Invalid execution status: ${execution.status}. Must be one of: ${VALID_STATUSES.join(', ')}`);
+    // Validate against schema
+    const validation = validateExecutionJson(execution);
+    if (!validation.valid) {
+        throw new Error(`Invalid execution.json: ${validation.errors.join('; ')}`);
     }
 
     return execution;
 };
 
 /**
- * Save execution.json with validation
+ * Save execution.json with schema validation
  * @param {string} executionPath - Path to execution.json
  * @param {Object} execution - Execution object to save
  * @throws {Error} if validation fails
  */
 const saveExecution = (executionPath, execution) => {
-    // Validate required fields before save
-    for (const field of REQUIRED_FIELDS) {
-        if (!(field in execution)) {
-            throw new Error(`Cannot save execution.json: missing required field: ${field}`);
-        }
-    }
-
-    // Validate status enum
-    if (!VALID_STATUSES.includes(execution.status)) {
-        throw new Error(`Cannot save execution.json: invalid status: ${execution.status}`);
+    // Validate against schema before save
+    const validation = validateExecutionJson(execution);
+    if (!validation.valid) {
+        throw new Error(`Cannot save execution.json: ${validation.errors.join('; ')}`);
     }
 
     fs.writeFileSync(executionPath, JSON.stringify(execution, null, 2), 'utf8');
@@ -397,6 +385,21 @@ const step5 = async (task) => {
     try {
         const result = await executeNewFlow(task, taskFolder, cwd);
 
+        // Generate review checklist for step6
+        try {
+            const { generateReviewChecklist } = require('./generate-review-checklist');
+            const checklistResult = await generateReviewChecklist(task, { cwd });
+            if (checklistResult.success && checklistResult.checklistPath) {
+                logger.info(`[Step5] Generated review-checklist.json with ${checklistResult.itemCount} items`);
+            }
+        } catch (checklistError) {
+            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+            const stateManager = ParallelStateManager.getInstance();
+            if (!stateManager || !stateManager.isUIRendererActive()) {
+                logger.warning(`[Step5] Review checklist generation skipped: ${checklistError.message}`);
+            }
+        }
+
         // Reflection hook
         try {
             const executionPath = folder('execution.json');
@@ -463,5 +466,4 @@ module.exports = {
     isDangerousCommand,
     estimateCodeChangeSize,
     VALID_STATUSES,
-    REQUIRED_FIELDS,
 };

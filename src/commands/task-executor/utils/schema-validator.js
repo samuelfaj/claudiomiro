@@ -7,12 +7,24 @@ const addFormats = require('ajv-formats');
 let cachedValidator = null;
 let schemaLoadError = null;
 
+// Lazy-loaded review checklist validator (cached after first load)
+let cachedReviewChecklistValidator = null;
+let reviewChecklistSchemaLoadError = null;
+
 /**
  * Gets the path to the execution schema file
  * @returns {string}
  */
 const getSchemaPath = () => {
     return path.join(__dirname, '..', 'templates', 'execution-schema.json');
+};
+
+/**
+ * Gets the path to the review checklist schema file
+ * @returns {string}
+ */
+const getReviewChecklistSchemaPath = () => {
+    return path.join(__dirname, '..', 'templates', 'review-checklist-schema.json');
 };
 
 /**
@@ -49,6 +61,43 @@ const getValidator = () => {
             schemaLoadError = `Schema compilation error: ${error.message}`;
         }
         return { validator: null, error: schemaLoadError };
+    }
+};
+
+/**
+ * Loads and compiles the review checklist schema validator (cached)
+ * @returns {{ validator: Function|null, error: string|null }}
+ */
+const getReviewChecklistValidator = () => {
+    // Return cached result if available
+    if (cachedReviewChecklistValidator !== null || reviewChecklistSchemaLoadError !== null) {
+        return { validator: cachedReviewChecklistValidator, error: reviewChecklistSchemaLoadError };
+    }
+
+    const schemaPath = getReviewChecklistSchemaPath();
+
+    // Check if schema file exists
+    if (!fs.existsSync(schemaPath)) {
+        reviewChecklistSchemaLoadError = 'Review checklist schema file not found';
+        return { validator: null, error: reviewChecklistSchemaLoadError };
+    }
+
+    try {
+        const schemaContent = fs.readFileSync(schemaPath, 'utf-8');
+        const schema = JSON.parse(schemaContent);
+
+        const ajv = new Ajv({ allErrors: true, strict: false });
+        addFormats(ajv);
+
+        cachedReviewChecklistValidator = ajv.compile(schema);
+        return { validator: cachedReviewChecklistValidator, error: null };
+    } catch (error) {
+        if (error instanceof SyntaxError) {
+            reviewChecklistSchemaLoadError = 'Invalid JSON in review checklist schema file';
+        } else {
+            reviewChecklistSchemaLoadError = `Review checklist schema compilation error: ${error.message}`;
+        }
+        return { validator: null, error: reviewChecklistSchemaLoadError };
     }
 };
 
@@ -134,18 +183,67 @@ const validateExecutionJson = (data) => {
 };
 
 /**
+ * Validates review-checklist.json data against the schema
+ * @param {object} data - The review checklist data to validate
+ * @returns {{ valid: boolean, errors: string[] }}
+ */
+const validateReviewChecklist = (data) => {
+    // Handle null/undefined input
+    if (data === null || data === undefined) {
+        return {
+            valid: false,
+            errors: ['Input data is null or undefined'],
+        };
+    }
+
+    // Handle non-object input
+    if (typeof data !== 'object' || Array.isArray(data)) {
+        return {
+            valid: false,
+            errors: ['Input data must be an object'],
+        };
+    }
+
+    const { validator, error } = getReviewChecklistValidator();
+
+    // Handle schema loading errors
+    if (error) {
+        return {
+            valid: false,
+            errors: [error],
+        };
+    }
+
+    const valid = validator(data);
+
+    if (valid) {
+        return { valid: true, errors: [] };
+    }
+
+    return {
+        valid: false,
+        errors: formatErrors(validator.errors),
+    };
+};
+
+/**
  * Resets the cached validator (useful for testing)
  */
 const resetValidatorCache = () => {
     cachedValidator = null;
     schemaLoadError = null;
+    cachedReviewChecklistValidator = null;
+    reviewChecklistSchemaLoadError = null;
 };
 
 module.exports = {
     validateExecutionJson,
+    validateReviewChecklist,
     resetValidatorCache,
     // Exported for testing purposes only
     getSchemaPath,
+    getReviewChecklistSchemaPath,
     getValidator,
+    getReviewChecklistValidator,
     formatErrors,
 };
