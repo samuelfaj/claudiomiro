@@ -746,7 +746,7 @@ const allHasExecution = () => {
 };
 
 /**
- * Builds the task graph by reading dependencies from each TASK.md
+ * Builds the task graph by reading dependencies from each BLUEPRINT.md
  * @returns {Object|null} Task graph { TASK1: {deps: [], status: 'pending'}, ... } or null if no @dependencies
  */
 const buildTaskGraph = () => {
@@ -771,10 +771,10 @@ const buildTaskGraph = () => {
     let hasAnyDependencyTag = false;
 
     for (const task of tasks) {
-        const taskMdPath = path.join(state.claudiomiroFolder, task, 'TASK.md');
+        const taskMdPath = path.join(state.claudiomiroFolder, task, 'BLUEPRINT.md');
 
         if (!fs.existsSync(taskMdPath)) {
-            // Task without TASK.md yet, cannot build graph
+            // Task without BLUEPRINT.md yet, cannot build graph
             return null;
         }
         const taskMd = fs.readFileSync(taskMdPath, 'utf-8');

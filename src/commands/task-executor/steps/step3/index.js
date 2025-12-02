@@ -30,7 +30,7 @@ const step3 = async () => {
 
     // Handle single task case
     if (tasks.length === 1) {
-        const taskPath = path.join(state.claudiomiroFolder, tasks[0], 'TASK.md');
+        const taskPath = path.join(state.claudiomiroFolder, tasks[0], 'BLUEPRINT.md');
         if (fs.existsSync(taskPath)) {
             const taskContent = fs.readFileSync(taskPath, 'utf-8');
 
@@ -53,7 +53,7 @@ const step3 = async () => {
 
     // Build task descriptions for analysis
     const taskDescriptions = tasks.map(task => {
-        const taskMdPath = path.join(state.claudiomiroFolder, task, 'TASK.md');
+        const taskMdPath = path.join(state.claudiomiroFolder, task, 'BLUEPRINT.md');
         const promptMdPath = path.join(state.claudiomiroFolder, task, 'PROMPT.md');
 
         const taskContent = fs.existsSync(taskMdPath)
