@@ -40,7 +40,7 @@ const context = await buildOptimizedContextAsync(...);
 ```
 TASK{N}/
 ├── BLUEPRINT.md   ← Single Source of Truth (read-only após criação)
-├── EXECUTION.md   ← Living Document (atualizado durante execução)
+├── execution.json ← Machine State (atualizado durante execução)
 ├── info.json      ← Metadata (mantido)
 └── CODE_REVIEW.md ← Review (mantido)
 ```
@@ -50,9 +50,19 @@ TASK{N}/
 | Arquivo | Propósito | Quando Modificado |
 |---------|-----------|-------------------|
 | **BLUEPRINT.md** | O QUE fazer, POR QUE, COM BASE EM QUÊ | Nunca (criado no Step 2, read-only depois) |
-| **EXECUTION.md** | COMO está sendo feito, STATUS, INCERTEZAS | Durante toda execução |
+| **execution.json** | STATUS estruturado, EVIDÊNCIAS, INCERTEZAS | Durante toda execução |
 
-**Analogia**: BLUEPRINT é a planta da casa (não muda). EXECUTION é o diário de obra (atualizado todo dia).
+### Por Que JSON para Execution?
+
+| Aspecto | Markdown | JSON |
+|---------|----------|------|
+| **Estrutura forçada** | ❌ Claude pode "enrolar" | ✅ Campos obrigatórios |
+| **Status explícito** | "Acho que terminei..." | `"status": "completed"` |
+| **Evidência** | Pode esquecer | Campo obrigatório |
+| **Validação** | Difícil | Schema validation |
+| **Anti-hallucination** | Texto livre = mais fluff | Estrutura = menos invenção |
+
+**Analogia**: BLUEPRINT é a planta da casa (não muda). execution.json é o checklist de obra (campos obrigatórios, status claro).
 
 ---
 
@@ -89,6 +99,19 @@ TASK{N}/
 
 ```markdown
 ## 2. CONTEXT CHAIN
+
+### Priority 0 - LEGACY REFERENCE (Se Disponível):
+⚠️ **READ-ONLY:** Estes sistemas são apenas para referência. NÃO modifique código legado.
+
+- `${legacySystemPath}` → Sistema legado completo (business logic, padrões)
+- `${legacyBackendPath}` → Backend legado (APIs, services, models)
+- `${legacyFrontendPath}` → Frontend legado (componentes, patterns UI)
+
+**Como usar:**
+1. Use código legado como referência para business logic e patterns
+2. NÃO copie código legado diretamente - adapte e modernize
+3. NÃO modifique arquivos nos paths de sistemas legados
+4. Documente regras de negócio descobertas no código legado
 
 ### Priority 1 - LER PRIMEIRO (Obrigatório):
 - `AI_PROMPT.md:1-50` → Tech stack: Node.js, Express, Prisma
@@ -127,7 +150,7 @@ TASK{N}/
 **HARD STOP**: Se QUALQUER check falhar:
 1. NÃO escrever código
 2. Marcar task como BLOCKED
-3. Documentar em EXECUTION.md o que falta
+3. Atualizar execution.json: `"status": "blocked"` + reason
 
 ### 3.2 Success Criteria (VERIFICAR APÓS COMPLETAR):
 
@@ -158,7 +181,7 @@ TASK{N}/
 ### Phase 1: Preparation
 1. Executar TODOS os Pre-Condition checks
 2. Ler arquivos de Priority 1 e 2
-3. Documentar qualquer INCERTEZA em EXECUTION.md
+3. Adicionar incertezas em execution.json `uncertainties[]`
 
 **Gate**: Só prosseguir se todos checks passarem.
 
@@ -209,7 +232,7 @@ TASK{N}/
 ### Phase 5: Validation
 1. Executar TODOS os Success Criteria (seção 3.2)
 2. Executar "Beyond the Basics" checklist
-3. Atualizar EXECUTION.md com resultados
+3. Atualizar execution.json `completion.status` com resultados
 ```
 
 ### Seção 5: UNCERTAINTY LOG
@@ -259,149 +282,229 @@ NENHUM - Esta task só adiciona, não modifica comportamento existente.
 
 ---
 
-## EXECUTION.md - Estrutura Detalhada
+## execution.json - Schema Detalhado
 
-### Por Que Separar do BLUEPRINT?
+### Por Que JSON?
 
-BLUEPRINT é o **plano imutável**. EXECUTION é o **log de execução**. Misturá-los causa:
-- Confusão sobre o que era planejado vs o que foi feito
-- Perda de rastreabilidade quando algo dá errado
-- Impossibilidade de comparar plano vs realidade
+JSON força o agente de IA a ser **assertivo e estruturado**:
+- ❌ Markdown: "Acho que terminei a fase 2..."
+- ✅ JSON: `{ "phase": 2, "status": "completed", "evidence": "..." }`
 
-```markdown
-@version 1.0
-@task TASK2
-@status in_progress
-@attempts 1
-@started 2025-12-02T10:00:00Z
+### Schema Completo
 
-# EXECUTION LOG: Create User Endpoint
+```json
+{
+  "$schema": "execution-schema-v1",
+  "version": "1.0",
+  "task": "TASK2",
+  "title": "Create User Endpoint",
+  "status": "in_progress",
+  "started": "2025-12-02T10:00:00Z",
+  "attempts": 1,
 
-## CURRENT STATUS
-**Status**: IN_PROGRESS
-**Phase**: 2 (Core Implementation)
-**Last Action**: Criando src/api/users.js
+  "currentPhase": {
+    "id": 2,
+    "name": "Core Implementation",
+    "lastAction": "Creating src/api/users.js"
+  },
 
----
+  "phases": [
+    {
+      "id": 1,
+      "name": "Preparation",
+      "status": "completed",
+      "started": "2025-12-02T10:00:00Z",
+      "completed": "2025-12-02T10:05:00Z",
+      "preConditions": [
+        {
+          "check": "Model User exists",
+          "command": "grep -n 'model User' prisma/schema.prisma",
+          "expected": "Match na linha ~45",
+          "passed": true,
+          "evidence": "prisma/schema.prisma:47"
+        },
+        {
+          "check": "Validator exists",
+          "command": "ls src/validators/email.js",
+          "expected": "File exists",
+          "passed": true,
+          "evidence": "exit code 0"
+        },
+        {
+          "check": "Express configured",
+          "command": "grep -n 'app.use.*json' src/app.js",
+          "expected": "Match exists",
+          "passed": true,
+          "evidence": "src/app.js:12"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Core Implementation",
+      "status": "in_progress",
+      "started": "2025-12-02T10:05:00Z",
+      "completed": null,
+      "actions": [
+        {
+          "description": "Create src/api/users.js",
+          "done": true,
+          "pattern": "src/api/health.js:20-35",
+          "deviation": "Added rate limiting (security)"
+        },
+        {
+          "description": "Register route in app.js",
+          "done": false
+        }
+      ],
+      "compilationCheck": {
+        "command": "node --check src/api/users.js",
+        "passed": true
+      }
+    },
+    {
+      "id": 3,
+      "name": "Testing",
+      "status": "pending",
+      "started": null,
+      "completed": null
+    },
+    {
+      "id": 4,
+      "name": "Integration",
+      "status": "pending",
+      "started": null,
+      "completed": null
+    },
+    {
+      "id": 5,
+      "name": "Validation",
+      "status": "pending",
+      "started": null,
+      "completed": null
+    }
+  ],
 
-## PHASE TRACKING
+  "uncertainties": [
+    {
+      "id": "U1",
+      "topic": "bcrypt installed?",
+      "assumption": "Assumed installed (common package)",
+      "confidence": "MEDIUM",
+      "resolution": "VERIFIED: package.json:15",
+      "resolvedConfidence": "HIGH",
+      "timestamp": "2025-12-02T10:03:00Z"
+    },
+    {
+      "id": "U3",
+      "topic": "Rate limit needed?",
+      "assumption": "Not in requirements",
+      "confidence": "LOW",
+      "resolution": "ADDED: Security best practice for public endpoint",
+      "resolvedConfidence": "MEDIUM",
+      "timestamp": "2025-12-02T10:08:00Z"
+    }
+  ],
 
-### [x] Phase 1: Preparation
-**Started**: 2025-12-02T10:00:00Z
-**Completed**: 2025-12-02T10:05:00Z
+  "errors": [
+    {
+      "timestamp": "2025-12-02T10:07:00Z",
+      "phase": 2,
+      "error": "Import path wrong",
+      "resolution": "Fixed to '../lib/prisma'",
+      "resolved": true
+    }
+  ],
 
-#### Pre-Condition Results:
-| Check | Result | Evidence |
-|-------|--------|----------|
-| Model User existe | PASS | `prisma/schema.prisma:47` |
-| Validator existe | PASS | `ls` returned 0 |
-| Express configurado | PASS | `src/app.js:12` |
+  "artifacts": [
+    {
+      "type": "created",
+      "path": "src/api/users.js",
+      "verified": true,
+      "verification": "ls exit code 0"
+    },
+    {
+      "type": "created",
+      "path": "src/api/users.test.js",
+      "verified": false,
+      "verification": null
+    },
+    {
+      "type": "modified",
+      "path": "src/app.js",
+      "verified": false,
+      "verification": null
+    }
+  ],
 
-#### Uncertainties Captured:
-- U1: bcrypt → Verificado: ESTÁ instalado (package.json:15)
+  "beyondTheBasics": {
+    "extras": [
+      { "item": "Rate limiting", "reason": "security", "done": true },
+      { "item": "Input sanitization", "reason": "security", "done": true },
+      { "item": "Structured logging", "reason": "observability", "done": false }
+    ],
+    "edgeCases": [
+      { "case": "Input null/undefined", "handling": "Returns 400", "tested": true },
+      { "case": "Invalid email", "handling": "Returns 400 with message", "tested": true },
+      { "case": "Duplicate email", "handling": "Returns 409", "tested": true }
+    ],
+    "downstreamImpact": {
+      "command": "grep -r 'import.*users' src/",
+      "result": "No importers yet",
+      "testsPass": true,
+      "testCommand": "npm test --silent"
+    },
+    "cleanup": {
+      "debugLogsRemoved": true,
+      "formattingConsistent": true,
+      "deadCodeRemoved": false
+    }
+  },
 
----
-
-### [ ] Phase 2: Core Implementation
-**Started**: 2025-12-02T10:05:00Z
-
-#### Actions Taken:
-1. [x] Criado `src/api/users.js`
-   - Seguiu padrão de health.js
-   - DESVIO: Adicionei rate limiting (não planejado, mas necessário para segurança)
-
-2. [ ] Registrar em app.js
-   - Pendente
-
-#### Compilation Check:
-- `node --check src/api/users.js` → PASS
-
----
-
-### [ ] Phase 3: Testing
-**Not Started**
-
----
-
-### [ ] Phase 4: Integration
-**Not Started**
-
----
-
-### [ ] Phase 5: Validation
-**Not Started**
-
----
-
-## UNCERTAINTY LOG (Runtime)
-
-| ID | Tópico | Decisão | Confiança | Timestamp |
-|----|--------|---------|-----------|-----------|
-| U1 | bcrypt instalado? | SIM, package.json:15 | HIGH | 10:03:00 |
-| U3 | Rate limit necessário? | Adicionei por segurança | MEDIUM | 10:08:00 |
-
----
-
-## ERROR LOG
-
-| Timestamp | Phase | Error | Resolution | Resolved |
-|-----------|-------|-------|------------|----------|
-| 10:07:00 | 2 | Import path errado | Corrigido para '../lib/prisma' | YES |
-
----
-
-## ARTIFACTS PRODUCED
-
-| Artifact | Status | Path | Verification |
-|----------|--------|------|--------------|
-| Endpoint | CREATED | `src/api/users.js` | `ls` PASS |
-| Tests | PENDING | `src/api/users.test.js` | - |
-
----
-
-## BEYOND THE BASICS (Checklist Final)
-
-### O que o usuário NÃO pediu mas fiz:
-- [x] Rate limiting (segurança)
-- [x] Input sanitization
-- [ ] Logging estruturado (a fazer)
-
-### Verificações de Edge Cases:
-- [x] Input null/undefined → Retorna 400
-- [x] Email inválido → Retorna 400 com mensagem
-- [x] Email duplicado → Retorna 409
-
-### Downstream Impact Verified:
-- [x] `grep -r "import.*users" src/` → Nenhum importador ainda
-- [x] `npm test --silent` → Todos testes passam
-
-### Cleanup:
-- [x] Removidos console.logs de debug
-- [x] Formatação consistente (prettier)
-- [ ] Código morto removido
-
----
-
-## COMPLETION SUMMARY
-
-### Final Status: PENDING_VALIDATION
-
-### What Was Done:
-1. Endpoint POST /api/users criado
-2. Validação de email implementada
-3. Testes criados (3 cenários)
-4. Rate limiting adicionado (extra)
-
-### Deviations from Plan:
-- Adicionado rate limiting (não planejado)
-- Motivo: Segurança básica para endpoint público
-
-### For Future Tasks:
-- Rate limiter pode ser extraído para middleware reutilizável
-- Pattern de validação pode virar helper
-
-@end-execution
+  "completion": {
+    "status": "pending_validation",
+    "summary": [
+      "POST /api/users endpoint created",
+      "Email validation implemented",
+      "Tests created (3 scenarios)",
+      "Rate limiting added (extra)"
+    ],
+    "deviations": [
+      {
+        "what": "Added rate limiting",
+        "why": "Basic security for public endpoint"
+      }
+    ],
+    "forFutureTasks": [
+      "Rate limiter can be extracted to reusable middleware",
+      "Validation pattern can become helper"
+    ]
+  }
+}
 ```
+
+### Campos Obrigatórios (Schema Validation)
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|-------------|-----------|
+| `status` | enum | ✅ | `pending`, `in_progress`, `completed`, `blocked` |
+| `phases[].status` | enum | ✅ | Status de cada fase |
+| `phases[].preConditions[].passed` | boolean | ✅ | Resultado do check |
+| `phases[].preConditions[].evidence` | string | ✅ | Prova do resultado |
+| `artifacts[].verified` | boolean | ✅ | Se foi verificado |
+| `completion.status` | enum | ✅ | Status final |
+
+### Regras de Transição de Status
+
+```
+pending → in_progress → completed
+                     ↘ blocked (se pre-condition falhar)
+```
+
+**REGRA**: Só pode marcar `"status": "completed"` se:
+- Todos `preConditions[].passed === true`
+- Todos `artifacts[].verified === true`
+- `beyondTheBasics.cleanup` tudo `true`
 
 ---
 
@@ -492,21 +595,30 @@ REGRA: Se Phase N não completar com sucesso, NÃO iniciar Phase N+1.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
+│                        STEP 1                               │
+│  Gera AI_PROMPT.md                                          │
+│  - Transforma request do usuário em prompt estruturado      │
+│  - Injeta Legacy System Context (se --legacy-* flags)       │
+│  - Injeta Multi-Repo Context (se --backend/--frontend)      │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
 │                        STEP 2                               │
 │  Gera BLUEPRINT.md (substitui TASK.md + PROMPT.md)          │
 │  - Analisa codebase                                         │
 │  - Define IDENTITY (IS/IS NOT)                              │
-│  - Mapeia CONTEXT CHAIN                                     │
+│  - Mapeia CONTEXT CHAIN (inclui Legacy Systems se houver)   │
 │  - Cria Pre-Conditions                                      │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                        STEP 4                               │
-│  Gera EXECUTION.md inicial (substitui TODO.md)              │
-│  - Cria estrutura de phases                                 │
-│  - Inicializa status tracking                               │
-│  - Prepara uncertainty log                                  │
+│  Gera execution.json inicial (substitui TODO.md)            │
+│  - Cria estrutura de phases com status "pending"            │
+│  - Inicializa arrays vazios (uncertainties, errors, etc)    │
+│  - Schema validation antes de salvar                        │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -524,7 +636,7 @@ REGRA: Se Phase N não completar com sucesso, NÃO iniciar Phase N+1.
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │ Phase 2: CORE IMPLEMENTATION                         │   │
 │  │ - Segue BLUEPRINT.md phases                          │
-│  │ - Atualiza EXECUTION.md em tempo real                │
+│  │ - Atualiza execution.json (status, actions)                │
 │  │ - Documenta uncertainties                            │
 │  └─────────────────────────────────────────────────────┘   │
 │                          │                                  │
@@ -548,7 +660,7 @@ REGRA: Se Phase N não completar com sucesso, NÃO iniciar Phase N+1.
 │  │ Phase 5: VALIDATION                                  │   │
 │  │ - Executa Success Criteria                           │   │
 │  │ - Executa Beyond the Basics checklist                │   │
-│  │ - Só marca "Fully implemented: YES" se TUDO passar   │   │
+│  │ - Só marca completion.status: "completed" se TUDO passar   │   │
 │  └─────────────────────────────────────────────────────┘   │
 │                                                             │
 └─────────────────────────────────────────────────────────────┘
@@ -558,9 +670,9 @@ REGRA: Se Phase N não completar com sucesso, NÃO iniciar Phase N+1.
 │                        STEP 6                               │
 │  Code Review                                                │
 │  - Lê BLUEPRINT.md (o que deveria ser feito)                │
-│  - Lê EXECUTION.md (o que foi feito)                        │
-│  - Compara: Plano vs Realidade                              │
-│  - Verifica se Beyond the Basics foi executado              │
+│  - Lê execution.json (status, artifacts, deviations)        │
+│  - Valida: todos phases[].status === "completed"            │
+│  - Verifica: beyondTheBasics.cleanup all true               │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -584,12 +696,12 @@ REGRA: Se Phase N não completar com sucesso, NÃO iniciar Phase N+1.
 | Step | Ação | Tokens |
 |------|------|--------|
 | Step 2 | Criar BLUEPRINT.md (consolidado) | ~4,000 |
-| Step 4 | Criar EXECUTION.md (estrutura) | ~2,000 |
-| Step 5 | Executar (BLUEPRINT read-only, EXECUTION update) | ~4,000 |
-| Step 6 | Code review (BLUEPRINT + EXECUTION) | ~2,000 |
-| **Total** | | **~12,000** |
+| Step 4 | Criar execution.json (estrutura) | ~1,500 |
+| Step 5 | Executar (BLUEPRINT read-only, execution.json update) | ~3,500 |
+| Step 6 | Code review (BLUEPRINT + execution.json) | ~1,500 |
+| **Total** | | **~10,500** |
 
-**Economia: ~48% (11,000 tokens/task)**
+**Economia: ~54% (12,500 tokens/task)**
 
 ---
 
@@ -599,7 +711,7 @@ REGRA: Se Phase N não completar com sucesso, NÃO iniciar Phase N+1.
 |---------|---------|
 | **2 arquivos** | Menos fragmentação = menos context losing |
 | **BLUEPRINT read-only** | Source of truth não muda = sem confusão |
-| **EXECUTION living doc** | Rastreabilidade de o que foi feito vs planejado |
+| **execution.json** | Estado estruturado, validável, sem ambiguidade |
 | **Pre-conditions** | Claude verifica antes de inventar |
 | **Phase gates** | Claude não pula etapas |
 | **IS/IS NOT sections** | Claude sabe exatamente o escopo |
@@ -610,14 +722,143 @@ REGRA: Se Phase N não completar com sucesso, NÃO iniciar Phase N+1.
 
 ---
 
+## Integração com Legacy Systems
+
+### O Que São Legacy Systems?
+
+Legacy Systems são projetos externos (sistemas antigos, backends existentes, frontends legados) que servem como **referência READ-ONLY** durante a execução de tasks. São úteis para:
+
+- **Migrações**: Reescrever sistema antigo com nova stack
+- **Integrações**: Entender APIs e contratos existentes
+- **Business Logic**: Extrair regras de negócio do código legado
+- **Patterns**: Identificar padrões UI/UX a manter
+
+### Flags de Linha de Comando
+
+```bash
+# Sistema legado completo (projeto monolítico)
+claudiomiro --legacy-system=/path/to/old-project "Migrar autenticação"
+
+# Backend e frontend separados
+claudiomiro --legacy-backend=/path/to/old-api \
+            --legacy-frontend=/path/to/old-web \
+            "Modernizar checkout"
+
+# Combinação com multi-repo
+claudiomiro --backend=./new-api \
+            --frontend=./new-web \
+            --legacy-system=/path/to/monolith \
+            "Migrar sistema completo"
+```
+
+### Como o Legacy Context é Injetado
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    CLI Argument Parsing                      │
+│  --legacy-system=/path → state.setLegacySystems()           │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                        STEP 1                               │
+│  generateLegacySystemContext() → Markdown section           │
+│  Injetado no final do prompt para AI_PROMPT.md              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   AI_PROMPT.md Gerado                        │
+│  Contém seção "## Legacy Systems Reference"                 │
+│  Com paths e instruções de uso                              │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                 BLUEPRINT.md (Step 2)                        │
+│  CONTEXT CHAIN inclui Priority 0 - Legacy Reference         │
+│  Claude sabe quais arquivos legados consultar               │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Funções Disponíveis
+
+| Função | Descrição |
+|--------|-----------|
+| `generateLegacySystemContext()` | Gera markdown com info dos legacy systems para prompts |
+| `getLegacyFileContent(type, filePath)` | Lê conteúdo de arquivo específico do legacy system |
+| `getLegacyStructure(type)` | Retorna tree de arquivos filtrada do legacy system |
+
+### Regras de Segurança
+
+1. **READ-ONLY**: Código legado nunca é modificado
+2. **Filtrado**: `.gitignore` e smart defaults aplicados
+3. **Isolado**: Paths legados não interferem no projeto atual
+4. **Documentado**: Regras de negócio descobertas devem ser documentadas
+
+### Integração com o Sistema 2-Arquivos
+
+No BLUEPRINT.md, a seção CONTEXT CHAIN deve incluir:
+
+```markdown
+### Priority 0 - LEGACY REFERENCE (Se Disponível):
+⚠️ **READ-ONLY:** Não modifique código legado.
+
+- Sistema Legado: `/path/to/legacy`
+  - `src/auth/login.php:50-120` → Lógica de autenticação
+  - `src/models/User.php` → Model de usuário
+
+**Regras de Negócio Identificadas:**
+- Senha deve ter 8+ chars com número
+- Email é case-insensitive
+- Login bloqueado após 5 tentativas
+```
+
+No execution.json, documentar descobertas em campo dedicado:
+
+```json
+{
+  "legacyInsights": {
+    "businessRulesDiscovered": [
+      {
+        "rule": "Password 8+ chars with number",
+        "source": "legacy/auth.php:45",
+        "modernizedAs": "Zod schema with regex"
+      },
+      {
+        "rule": "Rate limit 5 attempts",
+        "source": "legacy/login.php:80",
+        "modernizedAs": "Redis rate limiter"
+      }
+    ],
+    "patternsPreserved": [
+      { "pattern": "Error message format", "preserved": true },
+      { "pattern": "Session timeout 30min", "preserved": true }
+    ]
+  }
+}
+```
+
+---
+
 ## Arquivos a Modificar na Implementação
 
 1. `templates/blueprint.md` - Novo template
-2. `templates/execution.md` - Novo template
+2. `templates/execution-schema.json` - JSON Schema para validação
 3. `step2/index.js` - Gerar BLUEPRINT.md
-4. `step4/generate-todo.js` → `step4/generate-execution.js`
-5. `step5/index.js` - Usar novo sistema
+4. `step4/generate-todo.js` → `step4/generate-execution.js` (gera JSON)
+5. `step5/index.js` - Usar novo sistema (lê/escreve JSON)
 6. `step5/generate-research.js` - ELIMINAR (merged no BLUEPRINT)
-7. `step5/generate-context.js` - ELIMINAR (merged no EXECUTION)
-8. `step6/review-code.js` - Atualizar para nova estrutura
+7. `step5/generate-context.js` - ELIMINAR (merged no execution.json)
+8. `step6/review-code.js` - Atualizar para ler execution.json
 9. `context-collector.js` - Atualizar paths
+
+### Já Implementado (Legacy Systems)
+
+10. `step1/index.js` - ✅ Já integrado com `generateLegacySystemContext()`
+11. `src/shared/services/legacy-system/` - ✅ Serviço completo:
+    - `index.js` - Exports principais funções
+    - `context-generator.js` - Gera markdown context para prompts
+    - `file-filter.js` - Filtra arquivos (smart defaults + .gitignore)
+12. `src/shared/config/state.js` - ✅ Já suporta `getLegacySystem()` e `hasLegacySystems()`
+13. `src/commands/task-executor/cli.js` - ✅ Já parseia `--legacy-system=` flag

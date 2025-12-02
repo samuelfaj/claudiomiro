@@ -1,0 +1,249 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "execution-schema-v1",
+  "title": "Execution State Schema",
+  "description": "JSON Schema for execution.json - tracks task execution state",
+  "type": "object",
+  "required": ["$schema", "version", "task", "title", "status", "started", "attempts"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "execution-schema-v1",
+      "description": "Schema identifier"
+    },
+    "version": {
+      "type": "string",
+      "description": "Schema version"
+    },
+    "task": {
+      "type": "string",
+      "pattern": "^TASK\\d+$",
+      "description": "Task identifier (e.g., TASK0, TASK1)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable task title"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "completed", "blocked"],
+      "description": "Current task status"
+    },
+    "started": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when task started"
+    },
+    "attempts": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of execution attempts"
+    },
+    "currentPhase": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Current phase number"
+        },
+        "name": {
+          "type": "string",
+          "description": "Current phase name"
+        },
+        "lastAction": {
+          "type": "string",
+          "description": "Description of last action taken"
+        }
+      },
+      "required": ["id", "name"],
+      "additionalProperties": false
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Phase number"
+          },
+          "name": {
+            "type": "string",
+            "description": "Phase name (e.g., Preparation, Core Implementation)"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed", "blocked"],
+            "description": "Phase status"
+          },
+          "preConditions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["check", "command", "expected", "passed"],
+              "properties": {
+                "check": {
+                  "type": "string",
+                  "description": "Description of what is being checked"
+                },
+                "command": {
+                  "type": "string",
+                  "description": "Shell command to run"
+                },
+                "expected": {
+                  "type": "string",
+                  "description": "Expected output or condition"
+                },
+                "passed": {
+                  "type": "boolean",
+                  "description": "Whether the check passed"
+                },
+                "evidence": {
+                  "type": "string",
+                  "description": "Actual output from command"
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "topic", "assumption", "confidence"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^U\\d+$",
+            "description": "Uncertainty identifier (e.g., U1, U2)"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Topic of uncertainty"
+          },
+          "assumption": {
+            "type": "string",
+            "description": "What was assumed"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH"],
+            "description": "Confidence level in assumption"
+          },
+          "resolution": {
+            "type": "string",
+            "description": "How the uncertainty was resolved"
+          },
+          "resolvedConfidence": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH"],
+            "description": "Confidence after resolution"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "path", "verified"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["created", "modified"],
+            "description": "Whether file was created or modified"
+          },
+          "path": {
+            "type": "string",
+            "description": "File path"
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether artifact was verified"
+          },
+          "verification": {
+            "type": "string",
+            "description": "Command or description of verification"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "beyondTheBasics": {
+      "type": "object",
+      "properties": {
+        "extras": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Extra improvements made"
+        },
+        "edgeCases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Edge cases handled"
+        },
+        "downstreamImpact": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Impact on downstream components"
+        },
+        "cleanup": {
+          "type": "object",
+          "required": ["debugLogsRemoved", "formattingConsistent", "deadCodeRemoved"],
+          "properties": {
+            "debugLogsRemoved": {
+              "type": "boolean",
+              "description": "Whether debug logs were removed"
+            },
+            "formattingConsistent": {
+              "type": "boolean",
+              "description": "Whether formatting is consistent"
+            },
+            "deadCodeRemoved": {
+              "type": "boolean",
+              "description": "Whether dead code was removed"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "completion": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending_validation", "completed"],
+          "description": "Completion validation status"
+        },
+        "summary": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Summary of what was done"
+        },
+        "deviations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Deviations from original plan"
+        },
+        "forFutureTasks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Notes for future related tasks"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
