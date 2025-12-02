@@ -360,6 +360,67 @@ describe('step7', () => {
 
             expect(logger.success).toHaveBeenCalledWith('✅ Step 7 completed - Critical review passed!');
         });
+
+        test('should propagate CRITICAL_REVIEW_PASSED.md from loop-fixes to main folder', async () => {
+            const loopFixesPassedPath = '/test/.claudiomiro/task-executor/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+
+            fs.existsSync.mockImplementation((filePath) => {
+                // Initial check: no CRITICAL_REVIEW_PASSED.md in main folder
+                if (filePath === passedPath) return false;
+                // After fix-branch: file exists in loop-fixes folder
+                if (filePath === loopFixesPassedPath) return true;
+                if (filePath.includes('newbranch.txt')) return true;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                return false;
+            });
+
+            execSync.mockReturnValue('M src/test.js');
+            fs.copyFileSync = jest.fn();
+
+            await step7();
+
+            expect(fs.copyFileSync).toHaveBeenCalledWith(loopFixesPassedPath, passedPath);
+            expect(logger.info).toHaveBeenCalledWith('📋 Propagated CRITICAL_REVIEW_PASSED.md to main folder');
+        });
+
+        test('should not propagate if file already exists in main folder', async () => {
+            const loopFixesPassedPath = '/test/.claudiomiro/task-executor/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+
+            // Simulate: file exists in both places (already propagated)
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath === passedPath) return true; // Already exists in main folder
+                if (filePath === loopFixesPassedPath) return true;
+                if (filePath.includes('newbranch.txt')) return true;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                return false;
+            });
+
+            await step7();
+
+            // Should skip (already passed) - fix-branch not called
+            expect(runFixBranch).not.toHaveBeenCalled();
+        });
+
+        test('should not propagate if file does not exist in loop-fixes folder', async () => {
+            const loopFixesPassedPath = '/test/.claudiomiro/task-executor/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+
+            fs.existsSync.mockImplementation((filePath) => {
+                // File doesn't exist in loop-fixes folder (fix-branch might have failed)
+                if (filePath === passedPath) return false;
+                if (filePath === loopFixesPassedPath) return false;
+                if (filePath.includes('newbranch.txt')) return true;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                return false;
+            });
+
+            execSync.mockReturnValue('M src/test.js');
+            fs.copyFileSync = jest.fn();
+
+            await step7();
+
+            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(logger.info).not.toHaveBeenCalledWith('📋 Propagated CRITICAL_REVIEW_PASSED.md to main folder');
+        });
     });
 
     describe('Error Handling', () => {
