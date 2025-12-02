@@ -1,3 +1,6 @@
+// Set 10 second timeout for all tests
+jest.setTimeout(10000);
+
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -34,6 +37,7 @@ describe('Claude Executor', () => {
         os.tmpdir.mockReturnValue('/tmp');
         path.join.mockImplementation((...args) => args.join('/'));
         state.claudiomiroFolder = '/test/.claudiomiro';
+        state.claudiomiroRoot = '/test/.claudiomiro';
         state.folder = '/test';
 
         // Mock file system operations

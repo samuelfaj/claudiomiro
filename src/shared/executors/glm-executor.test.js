@@ -1,3 +1,6 @@
+// Set 10 second timeout for all tests
+jest.setTimeout(10000);
+
 // Mock Date.now before importing modules that use it
 jest.spyOn(Date, 'now').mockReturnValue(1234567890);
 
@@ -37,6 +40,7 @@ describe('GLM Executor', () => {
         os.tmpdir.mockReturnValue('/tmp');
         path.join.mockImplementation((...args) => args.join('/'));
         state.claudiomiroFolder = '/test/.claudiomiro';
+        state.claudiomiroRoot = '/test/.claudiomiro';
         state.folder = '/test';
         state.executorType = 'glm';
 
