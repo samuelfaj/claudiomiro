@@ -49,10 +49,10 @@ const preAnalyzeFixContext = async (userPrompt, pendingBefore, pendingAfter, las
 };
 
 /**
- * Count pending items in BUGS.md
+ * Count pending items in CRITICAL_REVIEW_TODO.md
  * Counts lines that match `- [ ]` pattern (unchecked items)
  *
- * @param {string} bugsPath - Path to BUGS.md file
+ * @param {string} bugsPath - Path to CRITICAL_REVIEW_TODO.md file
  * @returns {number} Count of pending items
  */
 const countPendingItems = (bugsPath) => {
@@ -65,16 +65,16 @@ const countPendingItems = (bugsPath) => {
         const matches = content.match(/- \[ \]/g);
         return matches ? matches.length : 0;
     } catch (error) {
-        logger.warning(`Could not read BUGS.md: ${error.message}`);
+        logger.warning(`Could not read CRITICAL_REVIEW_TODO.md: ${error.message}`);
         return 0;
     }
 };
 
 /**
- * Count completed items in BUGS.md
+ * Count completed items in CRITICAL_REVIEW_TODO.md
  * Counts lines that match `- [x]` pattern (checked items)
  *
- * @param {string} bugsPath - Path to BUGS.md file
+ * @param {string} bugsPath - Path to CRITICAL_REVIEW_TODO.md file
  * @returns {number} Count of completed items
  */
 const countCompletedItems = (bugsPath) => {
@@ -87,7 +87,7 @@ const countCompletedItems = (bugsPath) => {
         const matches = content.match(/- \[x\]/gi);
         return matches ? matches.length : 0;
     } catch (error) {
-        logger.warning(`Could not read BUGS.md: ${error.message}`);
+        logger.warning(`Could not read CRITICAL_REVIEW_TODO.md: ${error.message}`);
         return 0;
     }
 };
@@ -137,7 +137,7 @@ const initializeFolder = (clearFolder = false) => {
  *
  * Executes a self-correcting loop that:
  * 1. Takes a user prompt describing what to check/fix
- * 2. Creates/updates BUGS.md with findings
+ * 2. Creates/updates CRITICAL_REVIEW_TODO.md with findings
  * 3. Fixes issues found
  * 4. When Claude creates CRITICAL_REVIEW_OVERVIEW.md, enters verification mode
  * 5. Verification checks if there are new issues missed
@@ -164,7 +164,7 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
     const loopFixesFolder = getLoopFixesFolder();
 
     // Define paths (all files go into .claudiomiro/loop-fixes/)
-    const bugsPath = path.join(loopFixesFolder, 'BUGS.md');
+    const bugsPath = path.join(loopFixesFolder, 'CRITICAL_REVIEW_TODO.md');
     const overviewPath = path.join(loopFixesFolder, 'CRITICAL_REVIEW_OVERVIEW.md');
     const passedPath = path.join(loopFixesFolder, 'CRITICAL_REVIEW_PASSED.md');
     const failedPath = path.join(loopFixesFolder, 'CRITICAL_REVIEW_FAILED.md');
@@ -173,7 +173,7 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
         try {
             fs.unlinkSync(bugsPath);
         } catch (error) {
-            logger.warning(`Could not delete BUGS.md: ${error.message}`);
+            logger.warning(`Could not delete CRITICAL_REVIEW_TODO.md: ${error.message}`);
         }
 
         try {
@@ -206,7 +206,7 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
                     logger.info(`📊 Previous summary: ${completedCount} issue(s) already fixed`);
                 }
             } catch (error) {
-                logger.debug(`Could not read BUGS.md summary: ${error.message}`);
+                logger.debug(`Could not read CRITICAL_REVIEW_TODO.md summary: ${error.message}`);
             }
         }
 
@@ -322,7 +322,7 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
                             logger.info(`📊 Summary: ${completedCount} issue(s) fixed across ${iteration} iteration(s)`);
                         }
                     } catch (error) {
-                        logger.warning(`Could not read BUGS.md for summary: ${error.message}`);
+                        logger.warning(`Could not read CRITICAL_REVIEW_TODO.md for summary: ${error.message}`);
                     }
                 }
 
@@ -363,7 +363,7 @@ All issues matching the user's request have been identified and addressed in pre
 
 ## Verification Summary
 
-- Total issues in BUGS.md: ${completedCount}
+- Total issues in CRITICAL_REVIEW_TODO.md: ${completedCount}
 - Completed issues: ${completedCount}
 
 ## Conclusion
@@ -380,7 +380,7 @@ The codebase has been thoroughly analyzed. No additional issues matching the use
             }
         }
 
-        // Check BUGS.md status
+        // Check CRITICAL_REVIEW_TODO.md status
         const pendingAfter = countPendingItems(bugsPath);
         const completedCount = countCompletedItems(bugsPath);
 
@@ -395,16 +395,16 @@ The codebase has been thoroughly analyzed. No additional issues matching the use
     logger.error(`❌ Max iterations (${maxIterDisplay}) reached`);
 
     if (fs.existsSync(bugsPath)) {
-        logger.error('📋 See BUGS.md for details on remaining issues');
+        logger.error('📋 See CRITICAL_REVIEW_TODO.md for details on remaining issues');
         try {
             const bugsContent = fs.readFileSync(bugsPath, 'utf-8');
             logger.error(`\n${bugsContent}`);
         } catch (error) {
-            logger.error(`Could not read BUGS.md: ${error.message}`);
+            logger.error(`Could not read CRITICAL_REVIEW_TODO.md: ${error.message}`);
         }
     }
 
-    throw new Error(`Loop-fixes did not complete after ${maxIterDisplay} iterations. Check BUGS.md for remaining issues.`);
+    throw new Error(`Loop-fixes did not complete after ${maxIterDisplay} iterations. Check CRITICAL_REVIEW_TODO.md for remaining issues.`);
 };
 
 module.exports = { loopFixes, countPendingItems, countCompletedItems, initializeFolder, getLoopFixesFolder };

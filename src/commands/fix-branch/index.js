@@ -5,36 +5,24 @@ const state = require('../../shared/config/state');
 const { loopFixes } = require('../loop-fixes/executor');
 
 /**
- * Get the level instructions based on correction level
+ * Get the prompt content for a given level
+ *
+ * Each level has a self-contained prompt:
+ * - level1.md: BLOCKERS only
+ * - level2.md: BLOCKERS + WARNINGS
+ * - level3.md: All issues (BLOCKERS + WARNINGS + SUGGESTIONS)
  *
  * @param {number} level - Correction level (1, 2, or 3)
- * @returns {string} The level instructions to append to prompt
+ * @returns {string} The prompt content for the specified level
  */
-const getLevelInstructions = (level) => {
+const getLevelPrompt = (level) => {
     const promptPath = path.join(__dirname, 'level' + level + '.md');
 
     if (!fs.existsSync(promptPath)) {
         throw new Error('fix-branch level' + level + '.md not found');
     }
 
-    return promptPath;
-};
-
-/**
- * Get the fixed prompt from prompt.md with level instructions
- *
- * @param {number} level - Correction level (1, 2, or 3)
- * @returns {string} The fixed prompt content with level instructions
- */
-const getFixedPrompt = (level = 1) => {
-    const promptPath = path.join(__dirname, 'prompt.md');
-
-    if (!fs.existsSync(promptPath)) {
-        throw new Error('fix-branch prompt.md not found');
-    }
-
-    const basePrompt = fs.readFileSync(promptPath, 'utf-8');
-    return basePrompt + '\n' + getLevelInstructions(level);
+    return fs.readFileSync(promptPath, 'utf-8');
 };
 
 /**
@@ -102,11 +90,11 @@ const run = async (args) => {
     logger.info('Starting fix-branch (Staff+ Engineer Code Review)...');
     logger.info(`Running fix-branch (level: ${level} - ${getLevelName(level)}, max iterations: ${noLimit ? 'no limit' : maxIterations})`);
 
-    // Get the fixed prompt with level instructions
-    const fixedPrompt = getFixedPrompt(level);
+    // Get the self-contained prompt content for this level
+    const reviewPrompt = getLevelPrompt(level);
 
-    // Execute the loop with the fixed prompt
-    await loopFixes(fixedPrompt, maxIterations, { clearFolder: !noClear });
+    // Execute the loop with the level prompt
+    await loopFixes(reviewPrompt, maxIterations, { clearFolder: !noClear });
 };
 
-module.exports = { run, getFixedPrompt, getLevelInstructions, getLevelName };
+module.exports = { run, getLevelPrompt, getLevelName };

@@ -6,7 +6,7 @@ jest.mock('../../shared/utils/logger');
 jest.mock('../../shared/config/state');
 jest.mock('../loop-fixes/executor');
 
-const { run, getFixedPrompt, getLevelInstructions, getLevelName } = require('./index');
+const { run, getLevelPrompt, getLevelName } = require('./index');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
 const { loopFixes } = require('../loop-fixes/executor');
@@ -17,37 +17,63 @@ describe('fix-branch command', () => {
 
         // Default mock implementations
         fs.existsSync.mockReturnValue(true);
-        fs.readFileSync.mockReturnValue('Mock fixed prompt content');
+        fs.readFileSync.mockImplementation((filePath) => {
+            if (filePath.includes('level1.md')) {
+                return 'CORRECTION LEVEL: 1 (BLOCKERS ONLY)\nYou MUST ONLY report [BLOCKER] issues';
+            }
+            if (filePath.includes('level2.md')) {
+                return 'CORRECTION LEVEL: 2 (BLOCKERS + WARNINGS)\nReport [BLOCKER] and [WARNING] issues ONLY';
+            }
+            if (filePath.includes('level3.md')) {
+                return 'CORRECTION LEVEL: 3 (COMPREHENSIVE REVIEW)\nReport [BLOCKER], [WARNING], and [SUGGESTION] issues';
+            }
+            return 'Mock content';
+        });
         loopFixes.mockResolvedValue();
         state.setFolder = jest.fn();
     });
 
-    describe('getLevelInstructions', () => {
-        test('should return blockers only instructions for level 1', () => {
-            const instructions = getLevelInstructions(1);
+    describe('getLevelPrompt', () => {
+        test('should return blockers only prompt for level 1', () => {
+            const prompt = getLevelPrompt(1);
 
-            expect(instructions).toContain('CORRECTION LEVEL: 1');
-            expect(instructions).toContain('BLOCKERS ONLY');
-            expect(instructions).toContain('DO NOT fix WARNINGS');
-            expect(instructions).toContain('DO NOT fix SUGGESTIONS');
+            expect(prompt).toContain('CORRECTION LEVEL: 1');
+            expect(prompt).toContain('BLOCKERS ONLY');
+            expect(prompt).toContain('[BLOCKER]');
         });
 
-        test('should return blockers + warnings instructions for level 2', () => {
-            const instructions = getLevelInstructions(2);
+        test('should return blockers + warnings prompt for level 2', () => {
+            const prompt = getLevelPrompt(2);
 
-            expect(instructions).toContain('CORRECTION LEVEL: 2');
-            expect(instructions).toContain('BLOCKERS + WARNINGS');
-            expect(instructions).toContain('DO NOT fix SUGGESTIONS');
-            expect(instructions).not.toContain('DO NOT fix WARNINGS');
+            expect(prompt).toContain('CORRECTION LEVEL: 2');
+            expect(prompt).toContain('BLOCKERS + WARNINGS');
+            expect(prompt).toContain('[BLOCKER]');
+            expect(prompt).toContain('[WARNING]');
         });
 
-        test('should return all issues instructions for level 3', () => {
-            const instructions = getLevelInstructions(3);
+        test('should return comprehensive review prompt for level 3', () => {
+            const prompt = getLevelPrompt(3);
 
-            expect(instructions).toContain('CORRECTION LEVEL: 3');
-            expect(instructions).toContain('ALL ISSUES');
-            expect(instructions).toContain('BLOCKERS, WARNINGS, and SUGGESTIONS');
-            expect(instructions).not.toContain('DO NOT fix');
+            expect(prompt).toContain('CORRECTION LEVEL: 3');
+            expect(prompt).toContain('COMPREHENSIVE REVIEW');
+            expect(prompt).toContain('[BLOCKER]');
+            expect(prompt).toContain('[WARNING]');
+            expect(prompt).toContain('[SUGGESTION]');
+        });
+
+        test('should throw error if level file does not exist', () => {
+            fs.existsSync.mockReturnValue(false);
+
+            expect(() => getLevelPrompt(1)).toThrow('fix-branch level1.md not found');
+        });
+
+        test('should read from correct level file path', () => {
+            getLevelPrompt(2);
+
+            expect(fs.readFileSync).toHaveBeenCalledWith(
+                expect.stringContaining('level2.md'),
+                'utf-8',
+            );
         });
     });
 
@@ -62,48 +88,6 @@ describe('fix-branch command', () => {
 
         test('should return "all issues" for level 3', () => {
             expect(getLevelName(3)).toBe('all issues');
-        });
-    });
-
-    describe('getFixedPrompt', () => {
-        test('should read prompt from prompt.md file and append level 1 instructions by default', () => {
-            const basePrompt = 'You are a Staff+ Engineer...';
-            fs.readFileSync.mockReturnValue(basePrompt);
-
-            const result = getFixedPrompt();
-
-            expect(result).toContain(basePrompt);
-            expect(result).toContain('CORRECTION LEVEL: 1');
-            expect(fs.readFileSync).toHaveBeenCalledWith(
-                expect.stringContaining('prompt.md'),
-                'utf-8',
-            );
-        });
-
-        test('should append level 2 instructions when level 2 is specified', () => {
-            const basePrompt = 'You are a Staff+ Engineer...';
-            fs.readFileSync.mockReturnValue(basePrompt);
-
-            const result = getFixedPrompt(2);
-
-            expect(result).toContain(basePrompt);
-            expect(result).toContain('CORRECTION LEVEL: 2');
-        });
-
-        test('should append level 3 instructions when level 3 is specified', () => {
-            const basePrompt = 'You are a Staff+ Engineer...';
-            fs.readFileSync.mockReturnValue(basePrompt);
-
-            const result = getFixedPrompt(3);
-
-            expect(result).toContain(basePrompt);
-            expect(result).toContain('CORRECTION LEVEL: 3');
-        });
-
-        test('should throw error if prompt.md does not exist', () => {
-            fs.existsSync.mockReturnValue(false);
-
-            expect(() => getFixedPrompt()).toThrow('fix-branch prompt.md not found');
         });
     });
 
@@ -122,7 +106,7 @@ describe('fix-branch command', () => {
             await run(['--limit=5']);
 
             expect(loopFixes).toHaveBeenCalledWith(
-                expect.stringContaining('Mock fixed prompt content'),
+                expect.stringContaining('CORRECTION LEVEL: 1'),
                 5,
                 { clearFolder: true },
             );
@@ -132,7 +116,7 @@ describe('fix-branch command', () => {
             await run(['--no-limit']);
 
             expect(loopFixes).toHaveBeenCalledWith(
-                expect.stringContaining('Mock fixed prompt content'),
+                expect.stringContaining('CORRECTION LEVEL: 1'),
                 Infinity,
                 { clearFolder: true },
             );
@@ -156,7 +140,7 @@ describe('fix-branch command', () => {
             await run(['--no-limit', '--limit=5']);
 
             expect(loopFixes).toHaveBeenCalledWith(
-                expect.stringContaining('Mock fixed prompt content'),
+                expect.stringContaining('CORRECTION LEVEL: 1'),
                 Infinity,
                 { clearFolder: true },
             );
@@ -178,7 +162,7 @@ describe('fix-branch command', () => {
 
             expect(state.setFolder).toHaveBeenCalledWith('/my/project');
             expect(loopFixes).toHaveBeenCalledWith(
-                expect.stringContaining('Mock fixed prompt content'),
+                expect.stringContaining('CORRECTION LEVEL: 1'),
                 3,
                 { clearFolder: true },
             );
@@ -191,10 +175,10 @@ describe('fix-branch command', () => {
             await expect(run([])).rejects.toThrow('Loop failed');
         });
 
-        test('should throw error if prompt.md is missing', async () => {
+        test('should throw error if level file is missing', async () => {
             fs.existsSync.mockReturnValue(false);
 
-            await expect(run([])).rejects.toThrow('fix-branch prompt.md not found');
+            await expect(run([])).rejects.toThrow('fix-branch level1.md not found');
         });
 
         // Level argument tests

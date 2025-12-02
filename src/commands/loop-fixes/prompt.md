@@ -116,8 +116,6 @@ If applicable:
   - Validate behavioral coverage, not just shallow mocks
   - Check handling of edge cases, negative paths, unhappy flows
   - Ensure tests are isolated, stable, maintainable
-- If critical logic has no tests:
-  - Mark it as a **BLOCKER** issue
 
 ### 7. SECURITY
 
@@ -187,22 +185,11 @@ Use any structure that makes sense for tracking items. The only REQUIRED rule:
 
 ## Current Iteration: {{iteration}}
 
-### BLOCKERS (must be processed)
+### TODO
 
-- [ ] [BLOCKER] Title - File: [path:line]
-  - Why: [Why it is a problem]
+- [x] [TYPE] Title - File: [path:line]
+  - Why: [Why it is here]
   - Action: [What needs to be done]
-
-### WARNINGS (should be processed)
-
-- [ ] [WARNING] Title - File: [path:line]
-  - Why: [Why it matters]
-  - Action: [What to do]
-
-### SUGGESTIONS (improvements)
-
-- [ ] [SUGGESTION] Title - File: [path:line]
-  - Recommendation: [Concrete recommendation]
 
 ### Completed Items
 
@@ -248,26 +235,7 @@ Use any structure that makes sense for tracking items. The only REQUIRED rule:
 - Include iteration and status info in a way that fits your structure
 - Be consistent within your chosen format
 
-### 2.2 Item Classification
-
-**BLOCKER** - Must be processed/fixed:
-- Critical issues blocking progress
-- Security vulnerabilities
-- Functionality breaking problems
-- Essential requirements not met
-
-**WARNING** - Should be processed/fixed:
-- Inconsistencies or issues that matter
-- Performance concerns
-- Missing validation or error handling
-- Pattern violations
-
-**SUGGESTION** - Nice to have:
-- Improvement opportunities
-- Quality enhancements
-- Minor inconsistencies
-
-### 2.3 Rules for Items File
+### 2.2 Rules for Items File
 
 **CRITICAL**:
 - Always UPDATE the items file, don't overwrite history
@@ -275,18 +243,12 @@ Use any structure that makes sense for tracking items. The only REQUIRED rule:
 - Mark items as `[x]` ONLY after actually processing them
 - Add new items as `[ ]` (pending)
 - Include file paths and line numbers when possible
-- Prioritize processing BLOCKERs first, then WARNINGs, then SUGGESTIONs
 
 ---
 
 ## 📋 PHASE 3: PROCESS ITEMS
 
-### 3.1 Process Each Pending Item (Priority Order)
-
-Process in this order:
-1. **BLOCKERs** first (must be processed)
-2. **WARNINGs** second (should be processed)
-3. **SUGGESTIONs** last (nice to have)
+### 3.1 Process Each Pending Item
 
 For each `- [ ]` item:
 
@@ -308,7 +270,7 @@ For each `- [ ]` item:
 
 **Item found:**
 ```markdown
-- [ ] [BLOCKER] Missing null check in user handler - File: src/handlers/user.js:45
+- [ ] [TYPE] Missing null check in user handler - File: src/handlers/user.js:45
   - Why: Will throw TypeError when user is undefined
   - Action: Add null check before accessing user properties
 ```
@@ -319,7 +281,7 @@ For each `- [ ]` item:
 3. Add the necessary changes
 4. Update the items file:
    ```markdown
-   - [x] [BLOCKER] Missing null check in user handler - PROCESSED in iteration {{iteration}}
+   - [x] [TYPE] Missing null check in user handler - PROCESSED in iteration {{iteration}}
      - Solution: Added null check before accessing user properties
    ```
 
@@ -351,14 +313,7 @@ After analyzing and processing:
 
 ## Items Processed
 
-### Blockers Processed
-[List all processed BLOCKERs with solutions]
-
-### Warnings Processed
-[List all processed WARNINGs with solutions]
-
-### Suggestions Implemented
-[List all implemented SUGGESTIONs with solutions]
+[List all processed items with solutions]
 
 ## Files Modified
 
@@ -443,7 +398,6 @@ Before finishing this iteration, verify:
 - [ ] I analyzed the codebase using the appropriate methodology sections
 - [ ] I read existing items file (if it exists)
 - [ ] I documented all items found in items file with proper classification
-- [ ] I processed BLOCKERs first, then WARNINGs, then SUGGESTIONs
 - [ ] I updated items file with processing status
 - [ ] If 0 pending items AND no new items → I created the overview file
 - [ ] If items remain → I updated items file and will continue next iteration
@@ -453,7 +407,6 @@ Before finishing this iteration, verify:
 - [ ] Did I mark something as `[x]` without actually processing it?
 - [ ] Did I create the overview file while items still exist?
 - [ ] Did I forget to update the items file?
-- [ ] Did I process SUGGESTIONs before BLOCKERs?
 
 ---
 
@@ -479,8 +432,6 @@ Before finishing this iteration, verify:
 
 1. **You are on iteration {{iteration}} of {{maxIterations}}**
 2. **Analyze thoroughly** based on the user's specific request
-3. **Classify items** as BLOCKER, WARNING, or SUGGESTION
-4. **Process in priority order**: BLOCKERs → WARNINGs → SUGGESTIONs
 5. **Document everything** in the items file
 6. **Process items directly** - don't just document them
 7. **Update status** after processing each item
