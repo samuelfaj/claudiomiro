@@ -14,16 +14,33 @@ jest.mock('fs');
 jest.mock('../../shared/utils/logger');
 jest.mock('../../shared/config/state');
 jest.mock('./services/file-manager');
-jest.mock('./steps');
+jest.mock('./steps', () => ({
+    step0: jest.fn().mockResolvedValue(),
+    step1: jest.fn().mockResolvedValue(),
+    step2: jest.fn().mockResolvedValue(),
+    step3: jest.fn().mockResolvedValue(),
+    step7: jest.fn().mockResolvedValue(),
+    step8: jest.fn().mockResolvedValue(),
+}));
 jest.mock('./services/dag-executor');
 jest.mock('./utils/validation');
 jest.mock('../../shared/services/git-detector');
+jest.mock('../../shared/services/prompt-reader');
+jest.mock('../../shared/services/git-manager');
 
 const fs = require('fs');
 const logger = require('../../shared/utils/logger');
 const state = require('../../shared/config/state');
 const { startFresh } = require('./services/file-manager');
 const { detectGitConfiguration } = require('../../shared/services/git-detector');
+const { getMultilineInput, getSimpleInput } = require('../../shared/services/prompt-reader');
+const { createBranches, getCurrentBranch } = require('../../shared/services/git-manager');
+
+// Setup default mock implementations for prompt-reader and git-manager
+getMultilineInput.mockResolvedValue('Test task description');
+getSimpleInput.mockResolvedValue('');
+getCurrentBranch.mockReturnValue('test-branch');
+createBranches.mockImplementation(() => {});
 
 // Setup default mock implementations
 logger.banner = jest.fn();
@@ -100,6 +117,25 @@ Object.defineProperty(state, 'executorType', {
 state.setMultiRepo = jest.fn();
 state.isMultiRepo = jest.fn().mockReturnValue(false);
 
+// Mock state legacy systems methods
+let mockLegacySystems = new Map();
+
+state.setLegacySystems = jest.fn((paths) => {
+    mockLegacySystems.clear();
+    for (const [type, legacyPath] of Object.entries(paths)) {
+        if (!legacyPath) continue;
+        const resolved = path.resolve(legacyPath);
+        // Simulate validation - throw if path doesn't exist
+        if (!fs.existsSync(resolved)) {
+            throw new Error(`Legacy ${type} path does not exist: ${resolved}`);
+        }
+        mockLegacySystems.set(type, resolved);
+    }
+});
+
+state.getAllLegacySystems = jest.fn(() => new Map(mockLegacySystems));
+state.hasLegacySystems = jest.fn(() => mockLegacySystems.size > 0);
+
 // Now require the module under test
 const cliModule = require('./cli');
 
@@ -119,6 +155,7 @@ describe('src/commands/task-executor/cli.js', () => {
         mockWorkspaceClaudiomiroRoot = null;
         mockWorkspaceClaudiomiroFolder = null;
         mockExecutorType = 'claude';
+        mockLegacySystems = new Map();
 
         // Mock process.exit
         process.exit = jest.fn();
@@ -134,6 +171,12 @@ describe('src/commands/task-executor/cli.js', () => {
         fs.writeFileSync = jest.fn();
         fs.mkdirSync = jest.fn();
         fs.copyFileSync = jest.fn();
+
+        // Reset prompt-reader mocks
+        getMultilineInput.mockResolvedValue('Test task description');
+        getSimpleInput.mockResolvedValue('');
+        getCurrentBranch.mockReturnValue('test-branch');
+        createBranches.mockImplementation(() => {});
     });
 
     afterEach(() => {
@@ -658,42 +701,228 @@ describe('src/commands/task-executor/cli.js', () => {
             expect(logger.warning).toHaveBeenCalledWith('Invalid multi-repo.json, continuing as single-repo mode');
         });
         describe('branch prompt handling', () => {
-            beforeEach(() => {
-                // Mock git-manager functions
-                const gitManager = require('../../shared/services/git-manager');
-                gitManager.getCurrentBranch = jest.fn();
-                gitManager.createBranches = jest.fn();
-                // Mock prompt-reader for task and branch input
-                const promptReader = require('../../shared/services/prompt-reader');
-                promptReader.getMultilineInput = jest.fn().mockResolvedValue('Test task description');
-                promptReader.getSimpleInput = jest.fn();
-            });
-
             test('uses current branch when user leaves input empty', async () => {
-                const gitManager = require('../../shared/services/git-manager');
-                const promptReader = require('../../shared/services/prompt-reader');
-                gitManager.getCurrentBranch.mockReturnValue('feature/old-branch');
-                promptReader.getSimpleInput.mockResolvedValue(''); // user presses Enter
+                getCurrentBranch.mockReturnValue('feature/old-branch');
+                getSimpleInput.mockResolvedValue(''); // user presses Enter
 
                 await cliModule.init(['.']);
 
-                expect(gitManager.getCurrentBranch).toHaveBeenCalled();
-                expect(promptReader.getSimpleInput).toHaveBeenCalled();
-                expect(gitManager.createBranches).not.toHaveBeenCalled();
+                expect(getCurrentBranch).toHaveBeenCalled();
+                expect(getSimpleInput).toHaveBeenCalled();
+                expect(createBranches).not.toHaveBeenCalled();
                 expect(logger.info).toHaveBeenCalledWith('Using current branch: feature/old-branch');
             });
 
             test('creates new branch when user provides a name', async () => {
-                const gitManager = require('../../shared/services/git-manager');
-                const promptReader = require('../../shared/services/prompt-reader');
-                gitManager.getCurrentBranch.mockReturnValue('feature/old-branch');
-                promptReader.getSimpleInput.mockResolvedValue('new-feature-branch');
+                getCurrentBranch.mockReturnValue('feature/old-branch');
+                getSimpleInput.mockResolvedValue('new-feature-branch');
 
                 await cliModule.init(['.']);
 
-                expect(gitManager.createBranches).toHaveBeenCalledWith('new-feature-branch');
+                expect(createBranches).toHaveBeenCalledWith('new-feature-branch');
                 expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Using current branch'));
             });
+        });
+    });
+
+    describe('legacy system flag parsing', () => {
+        beforeEach(() => {
+            mockLegacySystems = new Map();
+            state.setLegacySystems.mockClear();
+            state.getAllLegacySystems.mockClear();
+            state.hasLegacySystems.mockClear();
+
+            // Make process.exit throw to stop the main loop
+            process.exit = jest.fn((code) => {
+                throw new Error(`process.exit(${code})`);
+            });
+
+            // Override mock to actually set the map and track calls
+            state.setLegacySystems.mockImplementation((paths) => {
+                mockLegacySystems.clear();
+                for (const [type, lPath] of Object.entries(paths)) {
+                    if (!lPath) continue;
+                    const resolved = path.resolve(lPath);
+                    if (!fs.existsSync(resolved)) {
+                        throw new Error(`Legacy ${type} path does not exist: ${resolved}`);
+                    }
+                    mockLegacySystems.set(type, resolved);
+                }
+            });
+            state.getAllLegacySystems.mockImplementation(() => new Map(mockLegacySystems));
+        });
+
+        test('should parse --legacy-system=<path> correctly', async () => {
+            const legacyPath = '/test/legacy-system';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === legacyPath || p === path.resolve(legacyPath)) return true;
+                // Simulate folder doesn't exist so test exits via process.exit
+                if (p && p.includes(process.cwd())) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return false;
+            });
+
+            // Expect process.exit to throw (which is how we mock it)
+            await expect(cliModule.init(['.', `--legacy-system=${legacyPath}`]))
+                .rejects.toThrow('process.exit(1)');
+
+            expect(state.setLegacySystems).toHaveBeenCalledWith({ system: legacyPath });
+        });
+
+        test('should parse --legacy-backend=<path> correctly', async () => {
+            const legacyPath = '/test/legacy-backend';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === legacyPath || p === path.resolve(legacyPath)) return true;
+                if (p && p.includes(process.cwd())) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return false;
+            });
+
+            await expect(cliModule.init(['.', `--legacy-backend=${legacyPath}`]))
+                .rejects.toThrow('process.exit(1)');
+
+            expect(state.setLegacySystems).toHaveBeenCalledWith({ backend: legacyPath });
+        });
+
+        test('should parse --legacy-frontend=<path> correctly', async () => {
+            const legacyPath = '/test/legacy-frontend';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === legacyPath || p === path.resolve(legacyPath)) return true;
+                if (p && p.includes(process.cwd())) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return false;
+            });
+
+            await expect(cliModule.init(['.', `--legacy-frontend=${legacyPath}`]))
+                .rejects.toThrow('process.exit(1)');
+
+            expect(state.setLegacySystems).toHaveBeenCalledWith({ frontend: legacyPath });
+        });
+
+        test('should parse multiple legacy flags simultaneously', async () => {
+            const systemPath = '/test/legacy-system';
+            const backendPath = '/test/legacy-backend';
+            const frontendPath = '/test/legacy-frontend';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === systemPath || p === path.resolve(systemPath)) return true;
+                if (p === backendPath || p === path.resolve(backendPath)) return true;
+                if (p === frontendPath || p === path.resolve(frontendPath)) return true;
+                if (p && p.includes(process.cwd())) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return false;
+            });
+
+            await expect(cliModule.init([
+                '.',
+                `--legacy-system=${systemPath}`,
+                `--legacy-backend=${backendPath}`,
+                `--legacy-frontend=${frontendPath}`,
+            ])).rejects.toThrow('process.exit(1)');
+
+            expect(state.setLegacySystems).toHaveBeenCalledWith({
+                system: systemPath,
+                backend: backendPath,
+                frontend: frontendPath,
+            });
+        });
+
+        test('should exit with error when legacy path does not exist', async () => {
+            const legacyPath = '/nonexistent/legacy-system';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === legacyPath || p === path.resolve(legacyPath)) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return true;
+            });
+
+            await expect(cliModule.init(['.', `--legacy-system=${legacyPath}`]))
+                .rejects.toThrow('process.exit(1)');
+
+            expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('does not exist'));
+        });
+
+        test('should filter legacy flags from remaining args', async () => {
+            const legacyPath = '/test/legacy-system';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === legacyPath || p === path.resolve(legacyPath)) return true;
+                if (p && p.includes(process.cwd())) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return false;
+            });
+
+            await expect(cliModule.init(['.', `--legacy-system=${legacyPath}`]))
+                .rejects.toThrow('process.exit(1)');
+
+            // The folder should be set to '.' not the legacy path
+            expect(state.setFolder).toHaveBeenCalledWith('.');
+        });
+
+        test('should be independent from multi-repo mode', async () => {
+            const legacyPath = '/test/legacy-system';
+            const backendPath = '/test/backend';
+            const frontendPath = '/test/frontend';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === legacyPath || p === path.resolve(legacyPath)) return true;
+                if (p === backendPath || p === frontendPath) return true;
+                if (p && p.includes(process.cwd())) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return false;
+            });
+
+            detectGitConfiguration.mockReturnValue({
+                mode: 'separate',
+                gitRoots: [backendPath, frontendPath],
+            });
+
+            await expect(cliModule.init([
+                '.',
+                `--legacy-system=${legacyPath}`,
+                `--backend=${backendPath}`,
+                `--frontend=${frontendPath}`,
+            ])).rejects.toThrow('process.exit(1)');
+
+            // Both multi-repo and legacy systems should be configured
+            expect(state.setMultiRepo).toHaveBeenCalled();
+            expect(state.setLegacySystems).toHaveBeenCalledWith({ system: legacyPath });
+        });
+
+        test('should log configured legacy systems on success', async () => {
+            const legacyPath = '/test/legacy-system';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === legacyPath || p === path.resolve(legacyPath)) return true;
+                if (p && p.includes(process.cwd())) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return false;
+            });
+
+            await expect(cliModule.init(['.', `--legacy-system=${legacyPath}`]))
+                .rejects.toThrow('process.exit(1)');
+
+            expect(logger.info).toHaveBeenCalledWith('Legacy systems configured for reference:');
+            expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('system:'));
+        });
+
+        test('should extract path with equals sign correctly', async () => {
+            const legacyPath = '/test/path/with=equals/dir';
+
+            fs.existsSync = jest.fn((p) => {
+                if (p === legacyPath || p === path.resolve(legacyPath)) return true;
+                if (p && p.includes(process.cwd())) return false;
+                if (p && p.includes('.claudiomiro')) return false;
+                return false;
+            });
+
+            await expect(cliModule.init(['.', `--legacy-system=${legacyPath}`]))
+                .rejects.toThrow('process.exit(1)');
+
+            expect(state.setLegacySystems).toHaveBeenCalledWith({ system: legacyPath });
         });
     });
 });

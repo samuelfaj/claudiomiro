@@ -63,6 +63,11 @@ const chooseAction = async (i, args) => {
     const backendArg = args.find(arg => arg.startsWith('--backend='));
     const frontendArg = args.find(arg => arg.startsWith('--frontend='));
 
+    // Check if legacy system flags were passed for reference during task execution
+    const legacySystemArg = args.find(arg => arg.startsWith('--legacy-system='));
+    const legacyBackendArg = args.find(arg => arg.startsWith('--legacy-backend='));
+    const legacyFrontendArg = args.find(arg => arg.startsWith('--legacy-frontend='));
+
     // Check if --fresh was passed
     // IMPORTANT: --continue should not activate --fresh
     // IMPORTANT: --prompt should NOT automatically activate --fresh (user must explicitly use --fresh if they want to start fresh)
@@ -141,7 +146,10 @@ const chooseAction = async (i, args) => {
         arg !== '--glm' &&
         arg !== '--gemini' &&
         !arg.startsWith('--backend=') &&
-        !arg.startsWith('--frontend='),
+        !arg.startsWith('--frontend=') &&
+        !arg.startsWith('--legacy-system=') &&
+        !arg.startsWith('--legacy-backend=') &&
+        !arg.startsWith('--legacy-frontend='),
     );
     const folderArg = filteredArgs[0] || process.cwd();
 
@@ -213,6 +221,35 @@ const chooseAction = async (i, args) => {
         } catch (error) {
             logger.error(`Invalid git configuration: ${error.message}`);
             logger.error('Ensure both paths are inside git repositories');
+            process.exit(1);
+        }
+    }
+
+    // Configure legacy systems for reference if any legacy flags were provided
+    const hasLegacyFlags = legacySystemArg || legacyBackendArg || legacyFrontendArg;
+
+    if (hasLegacyFlags) {
+        const legacyPaths = {};
+
+        if (legacySystemArg) {
+            legacyPaths.system = legacySystemArg.split('=').slice(1).join('=');
+        }
+        if (legacyBackendArg) {
+            legacyPaths.backend = legacyBackendArg.split('=').slice(1).join('=');
+        }
+        if (legacyFrontendArg) {
+            legacyPaths.frontend = legacyFrontendArg.split('=').slice(1).join('=');
+        }
+
+        try {
+            state.setLegacySystems(legacyPaths);
+            logger.info('Legacy systems configured for reference:');
+            for (const [type, legacyPath] of state.getAllLegacySystems()) {
+                logger.info(`  ${type}: ${legacyPath}`);
+            }
+            logger.newline();
+        } catch (error) {
+            logger.error(error.message);
             process.exit(1);
         }
     }
@@ -803,7 +840,10 @@ const init = async (args) => {
         arg !== '--no-limit' &&
         !arg.startsWith('--limit=') &&
         !arg.startsWith('--backend=') &&
-        !arg.startsWith('--frontend='),
+        !arg.startsWith('--frontend=') &&
+        !arg.startsWith('--legacy-system=') &&
+        !arg.startsWith('--legacy-backend=') &&
+        !arg.startsWith('--legacy-frontend='),
     );
     const folderArg = filteredArgs[0] || process.cwd();
     state.setFolder(folderArg);
