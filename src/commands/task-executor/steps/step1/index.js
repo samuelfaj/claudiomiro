@@ -234,7 +234,44 @@ const step1 = async (sameBranch = false, maxIterations = 20) => {
     }
 
     // Run refinement loop to ensure AI_PROMPT.md is 100% complete
-    await runRefinementLoop(maxIterations);
+    let refinementSuccess = false;
+    try {
+        await runRefinementLoop(maxIterations);
+        refinementSuccess = true;
+    } catch (error) {
+        refinementSuccess = false;
+        throw error;
+    } finally {
+        // Cleanup REASONING.md based on success/failure
+        const reasoningPath = folder('REASONING.md');
+        if (fs.existsSync(reasoningPath)) {
+            if (refinementSuccess) {
+                // Delete on success - no need to keep reasoning artifacts
+                fs.unlinkSync(reasoningPath);
+                logger.debug('REASONING.md deleted (success)');
+            } else {
+                // Preserve on failure for debugging
+                logger.info('REASONING.md preserved for debugging');
+            }
+        }
+    }
 };
 
-module.exports = { step1, generateMultiRepoContext, runRefinementLoop };
+/**
+ * Cleanup reasoning artifacts after step1 completion
+ * Called externally if step1 needs to be re-run
+ * @param {boolean} preserveOnError - Whether to keep REASONING.md on error
+ */
+const cleanupReasoningArtifacts = (preserveOnError = true) => {
+    const folder = (file) => path.join(state.claudiomiroFolder, file);
+    const reasoningPath = folder('REASONING.md');
+
+    if (fs.existsSync(reasoningPath)) {
+        if (!preserveOnError) {
+            fs.unlinkSync(reasoningPath);
+            logger.debug('REASONING.md cleaned up');
+        }
+    }
+};
+
+module.exports = { step1, generateMultiRepoContext, runRefinementLoop, cleanupReasoningArtifacts };

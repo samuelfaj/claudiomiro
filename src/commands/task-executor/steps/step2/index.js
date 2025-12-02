@@ -6,14 +6,16 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
 const { getLocalLLMService } = require('../../../../shared/services/local-llm');
 const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
 const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system/context-generator');
+const { runValidation } = require('./decomposition-validator');
 
 /**
  * Step 2: Task Decomposition
  * Decomposes AI_PROMPT.md into individual tasks (TASK0, TASK1, etc.)
- * With Local LLM validation for quality check
+ * With decomposition analysis validation and Local LLM quality check
  */
 const step2 = async () => {
-    const _folder = (file) => path.join(state.claudiomiroFolder, file);
+    const folder = (file) => path.join(state.claudiomiroFolder, file);
+    const analysisPath = folder('DECOMPOSITION_ANALYSIS.md');
 
     logger.newline();
     logger.startSpinner('Creating tasks...');
@@ -42,22 +44,52 @@ const step2 = async () => {
     };
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
-    await executeClaude(replace(prompt));
 
-    logger.stopSpinner();
-    logger.success('Tasks created successfully');
+    // Track success/failure for cleanup
+    let decompositionSuccess = false;
 
-    // Check if tasks were created, but only in non-test environment
-    if (process.env.NODE_ENV !== 'test') {
-        const task0BlueprintExists = fs.existsSync(path.join(state.claudiomiroFolder, 'TASK0', 'BLUEPRINT.md'));
-        const task1BlueprintExists = fs.existsSync(path.join(state.claudiomiroFolder, 'TASK1', 'BLUEPRINT.md'));
+    try {
+        await executeClaude(replace(prompt));
 
-        if (!task0BlueprintExists && !task1BlueprintExists) {
-            throw new Error('Error creating tasks');
+        logger.stopSpinner();
+        logger.success('Tasks created successfully');
+
+        // Check if tasks were created, but only in non-test environment
+        if (process.env.NODE_ENV !== 'test') {
+            const task0BlueprintExists = fs.existsSync(path.join(state.claudiomiroFolder, 'TASK0', 'BLUEPRINT.md'));
+            const task1BlueprintExists = fs.existsSync(path.join(state.claudiomiroFolder, 'TASK1', 'BLUEPRINT.md'));
+
+            if (!task0BlueprintExists && !task1BlueprintExists) {
+                throw new Error('Error creating tasks');
+            }
+
+            // Validate decomposition analysis document
+            logger.startSpinner('Validating decomposition analysis...');
+            runValidation(state.claudiomiroFolder);
+            logger.stopSpinner();
+            logger.success('Decomposition analysis validated');
+
+            // Validate decomposition with Local LLM (if available)
+            await validateDecompositionWithLLM();
         }
 
-        // Validate decomposition with Local LLM (if available)
-        await validateDecompositionWithLLM();
+        decompositionSuccess = true;
+    } catch (error) {
+        logger.stopSpinner();
+        decompositionSuccess = false;
+        throw error;
+    } finally {
+        // Cleanup DECOMPOSITION_ANALYSIS.md based on success/failure
+        if (fs.existsSync(analysisPath)) {
+            if (decompositionSuccess) {
+                // Delete on success - reasoning artifacts no longer needed
+                fs.unlinkSync(analysisPath);
+                logger.debug('DECOMPOSITION_ANALYSIS.md deleted (success)');
+            } else {
+                // Preserve on failure for debugging
+                logger.info('DECOMPOSITION_ANALYSIS.md preserved for debugging');
+            }
+        }
     }
 };
 
@@ -134,4 +166,20 @@ const validateDecompositionWithLLM = async () => {
     }
 };
 
-module.exports = { step2 };
+/**
+ * Cleanup decomposition analysis artifacts after step2 completion
+ * Called externally if step2 needs to be re-run
+ * @param {boolean} preserveOnError - Whether to keep DECOMPOSITION_ANALYSIS.md on error
+ */
+const cleanupDecompositionArtifacts = (preserveOnError = true) => {
+    const analysisPath = path.join(state.claudiomiroFolder, 'DECOMPOSITION_ANALYSIS.md');
+
+    if (fs.existsSync(analysisPath)) {
+        if (!preserveOnError) {
+            fs.unlinkSync(analysisPath);
+            logger.debug('DECOMPOSITION_ANALYSIS.md cleaned up');
+        }
+    }
+};
+
+module.exports = { step2, cleanupDecompositionArtifacts };

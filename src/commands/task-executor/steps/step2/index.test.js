@@ -29,9 +29,13 @@ jest.mock('../../../../shared/services/context-cache/context-collector', () => (
 jest.mock('../../../../shared/services/legacy-system/context-generator', () => ({
     generateLegacySystemContext: jest.fn().mockReturnValue(''),
 }));
+jest.mock('./decomposition-validator', () => ({
+    runValidation: jest.fn(),
+}));
 
 // Import after mocks are defined
-const { step2 } = require('./index');
+const { step2, cleanupDecompositionArtifacts } = require('./index');
+const { runValidation } = require('./decomposition-validator');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
 const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
@@ -433,6 +437,169 @@ describe('step2', () => {
             // Should still complete successfully with empty context
             expect(executeClaude).toHaveBeenCalled();
             expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
+        });
+    });
+
+    describe('cleanupDecompositionArtifacts', () => {
+        test('should delete DECOMPOSITION_ANALYSIS.md when preserveOnError is false', () => {
+            // Arrange
+            fs.existsSync.mockReturnValue(true);
+
+            // Act
+            cleanupDecompositionArtifacts(false);
+
+            // Assert
+            expect(fs.unlinkSync).toHaveBeenCalledWith(
+                expect.stringContaining('DECOMPOSITION_ANALYSIS.md'),
+            );
+            expect(logger.debug).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.md cleaned up');
+        });
+
+        test('should NOT delete DECOMPOSITION_ANALYSIS.md when preserveOnError is true (default)', () => {
+            // Arrange
+            fs.existsSync.mockReturnValue(true);
+
+            // Act
+            cleanupDecompositionArtifacts(); // Default: preserveOnError = true
+
+            // Assert
+            expect(fs.unlinkSync).not.toHaveBeenCalled();
+        });
+
+        test('should do nothing if DECOMPOSITION_ANALYSIS.md does not exist', () => {
+            // Arrange
+            fs.existsSync.mockReturnValue(false);
+
+            // Act
+            cleanupDecompositionArtifacts(false);
+
+            // Assert
+            expect(fs.unlinkSync).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('step2 with validation and cleanup', () => {
+        test('should run decomposition validation in non-test environment', async () => {
+            // Arrange
+            process.env.NODE_ENV = 'production';
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('DECOMPOSITION_ANALYSIS.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return 'Create tasks in {{claudiomiroFolder}}';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+            runValidation.mockReturnValue({ valid: true, blocking: [], warnings: [] });
+
+            // Act
+            await step2();
+
+            // Assert
+            expect(runValidation).toHaveBeenCalledWith('/test/.claudiomiro/task-executor');
+            expect(logger.success).toHaveBeenCalledWith('Decomposition analysis validated');
+        });
+
+        test('should delete DECOMPOSITION_ANALYSIS.md on success', async () => {
+            // Arrange
+            process.env.NODE_ENV = 'production';
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('DECOMPOSITION_ANALYSIS.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return 'Create tasks in {{claudiomiroFolder}}';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+            runValidation.mockReturnValue({ valid: true, blocking: [], warnings: [] });
+
+            // Act
+            await step2();
+
+            // Assert
+            expect(fs.unlinkSync).toHaveBeenCalledWith(
+                expect.stringContaining('DECOMPOSITION_ANALYSIS.md'),
+            );
+            expect(logger.debug).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.md deleted (success)');
+        });
+
+        test('should preserve DECOMPOSITION_ANALYSIS.md on failure', async () => {
+            // Arrange
+            process.env.NODE_ENV = 'production';
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                if (filePath.includes('DECOMPOSITION_ANALYSIS.md')) return true;
+                // No TASK0 or TASK1 - will cause failure
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return 'Create tasks in {{claudiomiroFolder}}';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act & Assert
+            await expect(step2()).rejects.toThrow('Error creating tasks');
+
+            // DECOMPOSITION_ANALYSIS.md should be preserved
+            expect(fs.unlinkSync).not.toHaveBeenCalledWith(
+                expect.stringContaining('DECOMPOSITION_ANALYSIS.md'),
+            );
+            expect(logger.info).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.md preserved for debugging');
+        });
+
+        test('should preserve DECOMPOSITION_ANALYSIS.md when validation fails', async () => {
+            // Arrange
+            process.env.NODE_ENV = 'production';
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('DECOMPOSITION_ANALYSIS.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return 'Create tasks in {{claudiomiroFolder}}';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+            runValidation.mockImplementation(() => {
+                throw new Error('Validation failed: Missing Phase A');
+            });
+
+            // Act & Assert
+            await expect(step2()).rejects.toThrow('Validation failed');
+
+            // DECOMPOSITION_ANALYSIS.md should be preserved for debugging
+            expect(fs.unlinkSync).not.toHaveBeenCalledWith(
+                expect.stringContaining('DECOMPOSITION_ANALYSIS.md'),
+            );
+            expect(logger.info).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.md preserved for debugging');
         });
     });
 });

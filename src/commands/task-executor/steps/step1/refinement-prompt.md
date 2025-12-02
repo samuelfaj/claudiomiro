@@ -106,13 +106,17 @@ Based on the refinement analysis above:
 
 ---
 
-## PHASE 2: DOCUMENT IN TODO FILE
+## PHASE 2: DOCUMENT IN TODO FILE (Evidence-Based)
 
 ### 2.1 Create or Update TODO File
 
 **File location**: `{{todoPath}}`
 
-**Format**:
+**CRITICAL: Every TODO item MUST have STRONG evidence. Weak evidence = REJECT the item.**
+
+### 2.2 Mandatory Evidence Structure
+
+**Every TODO item MUST follow this exact format:**
 
 ```markdown
 # AI_PROMPT.md Refinement
@@ -122,31 +126,125 @@ Based on the refinement analysis above:
 ### Pending Items
 
 - [ ] [CONTEXT] Missing test framework documentation
-  - Evidence: No testing section in AI_PROMPT.md
-  - Action: Read package.json and test files to determine framework
+  - **Evidence (Source):** INITIAL_PROMPT.md:15 "ensure tests pass"
+  - **Evidence (AI_PROMPT):** Searched for "test", "jest", "pytest" → 0 results
+  - **Impact:** Agent won't know which test command to run
+  - **Solution:** Add "Test Framework: Jest (package.json:8)" to § Environment
+  - **Confidence:** HIGH (verified in package.json)
+  - **Action:** Read package.json, find test framework, update AI_PROMPT.md
 
 - [ ] [CLARITY] Ambiguous endpoint naming requirement
-  - Evidence: User said "standard REST" but project uses different convention
-  - Action: Check existing routes and document actual convention
+  - **Evidence (Source):** CLARIFICATION_ANSWERS.json → "use standard REST"
+  - **Evidence (AI_PROMPT):** No endpoint naming convention documented
+  - **Impact:** Agent may use inconsistent naming
+  - **Solution:** Document naming pattern from src/routes/users.ts:10-20
+  - **Confidence:** HIGH (existing routes show pattern)
+  - **Action:** Extract naming pattern, add to § Related Code Context
 
-- [ ] [COVERAGE] Missing requirement from INITIAL_PROMPT
-  - Evidence: User asked for "validation" but not specified in AI_PROMPT
-  - Action: Add validation requirements section
+- [ ] [COVERAGE] Missing validation requirement
+  - **Evidence (Source):** INITIAL_PROMPT.md:8 "validate input data"
+  - **Evidence (AI_PROMPT):** No acceptance criteria for validation
+  - **Impact:** Agent won't implement validation
+  - **Solution:** Add validation criteria to § Acceptance Criteria
+  - **Confidence:** HIGH (explicit user requirement)
+  - **Action:** Define validation rules, add to AI_PROMPT.md
 
 ### Completed Items
 
 - [x] [CONTEXT] Missing database schema information - DONE iteration 1
-  - Solution: Added Prisma schema details from src/prisma/schema.prisma
+  - **Evidence (Source):** INITIAL_PROMPT.md:3 "store in database"
+  - **Evidence (AI_PROMPT):** No Prisma/schema mentioned
+  - **Impact:** Agent won't know database structure
+  - **Solution:** Added Prisma schema from prisma/schema.prisma:25-40
+  - **Confidence:** HIGH (direct file reference)
+  - **Verified:** prisma/schema.prisma referenced in § Environment
 ```
 
-### 2.2 Rules for TODO File
+### 2.3 Evidence Quality Standards
 
-**CRITICAL**:
-- Always UPDATE the TODO file, don't overwrite history
-- Keep track of which iteration found/processed each item
-- Mark items as `[x]` ONLY after actually processing them
-- Add new items as `[ ]` (pending)
-- Categorize: [CONTEXT], [CLARITY], [COVERAGE]
+**✅ STRONG Evidence (Accept):**
+
+| Field | Good Example | Why It's Good |
+|-------|--------------|---------------|
+| Evidence (Source) | `INITIAL_PROMPT.md:15 "validate all input"` | Exact quote + line number |
+| Evidence (AI_PROMPT) | `Searched "validation", "validate" → 0 results` | Specific search terms + result |
+| Impact | `Agent will skip validation, allowing invalid data` | Concrete consequence |
+| Solution | `Add to § Acceptance Criteria: "Validate email format"` | Specific location + content |
+| Confidence | `HIGH - explicit user requirement` | Justified confidence level |
+
+**❌ WEAK Evidence (REJECT):**
+
+| Field | Bad Example | Why It's Bad |
+|-------|-------------|--------------|
+| Evidence (Source) | `Seems like user wants validation` | No quote, no line number |
+| Evidence (AI_PROMPT) | `Missing some context` | Vague, no specifics |
+| Impact | `Might cause issues` | No concrete consequence |
+| Solution | `Add validation` | No location, no specifics |
+| Confidence | `Unknown` | Not assessed |
+
+### 2.4 Confidence Level Guidelines
+
+**HIGH (90-100%):**
+- Direct quote from INITIAL_PROMPT.md or CLARIFICATION_ANSWERS.json
+- Verified by reading actual file (file:line)
+- Explicit user requirement
+
+**MEDIUM (70-89%):**
+- Inferred from context but reasonable
+- Based on project patterns (not explicit requirement)
+- Related code suggests this need
+
+**LOW (<70%):**
+- Assumption without evidence
+- "Seems like" or "probably needs"
+- **→ DO NOT ADD TO TODO - Ask for clarification instead**
+
+### 2.5 Rules for TODO File
+
+**CRITICAL RULES:**
+1. **MUST** include all 6 fields: Evidence (Source), Evidence (AI_PROMPT), Impact, Solution, Confidence, Action
+2. **MUST** quote exact text from source files (not paraphrase)
+3. **MUST** include file:line references
+4. **MUST NOT** add items with LOW confidence (ask for clarification instead)
+5. **MUST NOT** use vague language ("seems", "probably", "might")
+6. **MUST** verify evidence by reading the actual file
+7. Always UPDATE the TODO file, don't overwrite history
+8. Keep track of which iteration found/processed each item
+9. Mark items as `[x]` ONLY after actually updating AI_PROMPT.md
+10. Categorize: [CONTEXT], [CLARITY], [COVERAGE]
+
+### 2.6 Evidence Validation Examples
+
+**Example 1: ✅ ACCEPT**
+```markdown
+- [ ] [COVERAGE] Missing error handling requirement
+  - **Evidence (Source):** INITIAL_PROMPT.md:12 "handle errors gracefully"
+  - **Evidence (AI_PROMPT):** § Acceptance Criteria has no error scenarios
+  - **Impact:** Agent won't implement error handling, crashes on errors
+  - **Solution:** Add "- [ ] Returns 400 for invalid input" to § Acceptance Criteria
+  - **Confidence:** HIGH (explicit user quote)
+  - **Action:** Add error scenarios to acceptance criteria
+```
+
+**Example 2: ❌ REJECT**
+```markdown
+- [ ] [CONTEXT] Maybe needs caching
+  - Evidence: Could improve performance
+  - Impact: Might be slow
+  - Solution: Add caching
+  - Confidence: Unknown
+```
+**Why REJECT:** No source quote, vague impact, no file reference, no confidence.
+
+**Example 3: ❌ REJECT**
+```markdown
+- [ ] [CLARITY] Unclear architecture
+  - Evidence: Seems complex
+  - Impact: Hard to understand
+  - Solution: Document better
+  - Confidence: Low
+```
+**Why REJECT:** LOW confidence items must not be added. Ask for clarification instead.
 
 ---
 

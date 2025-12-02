@@ -37,7 +37,7 @@ jest.mock('./state-manager', () => ({
 }));
 
 // Import after mocks
-const { step1, generateMultiRepoContext, runRefinementLoop } = require('./index');
+const { step1, generateMultiRepoContext, runRefinementLoop, cleanupReasoningArtifacts } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
 const state = require('../../../../shared/config/state');
@@ -814,6 +814,101 @@ describe('step1', () => {
 
             // Act & Assert
             await expect(step1(true, 15)).rejects.toThrow('refinement-prompt.md not found');
+        });
+    });
+
+    describe('cleanupReasoningArtifacts', () => {
+        test('should delete REASONING.md when preserveOnError is false', () => {
+            // Arrange
+            fs.existsSync.mockReturnValue(true);
+
+            // Act
+            cleanupReasoningArtifacts(false);
+
+            // Assert
+            expect(fs.unlinkSync).toHaveBeenCalledWith(
+                expect.stringContaining('REASONING.md'),
+            );
+            expect(logger.debug).toHaveBeenCalledWith('REASONING.md cleaned up');
+        });
+
+        test('should NOT delete REASONING.md when preserveOnError is true (default)', () => {
+            // Arrange
+            fs.existsSync.mockReturnValue(true);
+
+            // Act
+            cleanupReasoningArtifacts(); // Default: preserveOnError = true
+
+            // Assert
+            expect(fs.unlinkSync).not.toHaveBeenCalled();
+        });
+
+        test('should do nothing if REASONING.md does not exist', () => {
+            // Arrange
+            fs.existsSync.mockReturnValue(false);
+
+            // Act
+            cleanupReasoningArtifacts(false);
+
+            // Assert
+            expect(fs.unlinkSync).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('step1 REASONING.md cleanup on success/failure', () => {
+        test('should delete REASONING.md on successful completion', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(true);
+            let existsCallCount = 0;
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('AI_PROMPT.md')) {
+                    existsCallCount++;
+                    return existsCallCount > 1;
+                }
+                if (filePath.includes('REASONING.md')) return true;
+                if (filePath.includes('INITIAL_PROMPT.md')) return true;
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('INITIAL_PROMPT.md')) return 'Task';
+                if (filePath.includes('prompt.md')) return 'Generate {{TASK}}';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step1(true, 10);
+
+            // Assert
+            expect(fs.unlinkSync).toHaveBeenCalledWith(
+                expect.stringContaining('REASONING.md'),
+            );
+            expect(logger.debug).toHaveBeenCalledWith('REASONING.md deleted (success)');
+        });
+
+        test('should preserve REASONING.md on failure for debugging', async () => {
+            // Arrange
+            stateManager.isVerificationPassed.mockReturnValue(false);
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('AI_PROMPT.md')) return true; // Skip generation
+                if (filePath.includes('REASONING.md')) return true;
+                if (filePath.includes('refinement-prompt.md')) return false; // Fail
+                return false;
+            });
+
+            // Act & Assert
+            await expect(step1(true, 10)).rejects.toThrow();
+
+            // REASONING.md should be preserved (not deleted)
+            expect(fs.unlinkSync).not.toHaveBeenCalledWith(
+                expect.stringContaining('REASONING.md'),
+            );
+            expect(logger.info).toHaveBeenCalledWith('REASONING.md preserved for debugging');
         });
     });
 });

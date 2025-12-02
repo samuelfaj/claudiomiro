@@ -612,6 +612,74 @@ Before adding any Ollama-powered feature, verify:
 
 ---
 
+## Assertive Reasoning in Task Executor Steps
+
+The task executor uses advanced reasoning techniques to ensure deep analysis and high-quality decomposition. These patterns are implemented in `src/commands/task-executor/steps/`.
+
+### Reasoning Artifacts
+
+**Step 1 (AI_PROMPT.md Generation):**
+- Creates `REASONING.md` documenting the Chain of Thought analysis
+- Includes requirement extraction, gap analysis, decision log
+- **Cleanup:** Deleted on success, preserved on failure for debugging
+
+**Step 2 (Task Decomposition):**
+- Creates `DECOMPOSITION_ANALYSIS.md` documenting the decomposition reasoning
+- Includes Phases A-F for systematic analysis
+- **Cleanup:** Deleted on success, preserved on failure for debugging
+
+### Implemented Techniques
+
+1. **Chain of Thought (CoT)**
+   - Forces explicit reasoning before output
+   - Documents: requirements extraction, gap analysis, decision log
+   - Used in: `step1/prompt.md` (REASONING.md)
+
+2. **Evidence-Based Reasoning**
+   - Every decision requires file:line evidence
+   - 6 mandatory fields: Evidence (Source), Evidence (AI_PROMPT), Impact, Solution, Confidence, Action
+   - Used in: `step1/refinement-prompt.md`
+
+3. **Self-Consistency (Multi-Path Verification)**
+   - Analyze from 3 different perspectives (Approach A/B/C)
+   - Cross-validate findings to catch blind spots
+   - Used in: `step1/verification-prompt.md`
+
+4. **Tree of Thought (Alternative Exploration)**
+   - Explore 2+ alternatives for each major decision
+   - Self-consistency check with 3 analysis paths
+   - Confidence scoring (1-5 scale)
+   - Used in: `step2/prompt.md` (Phase F)
+
+5. **Few-Shot Learning**
+   - Concrete GOOD/BAD/EDGE CASE examples
+   - Shows expected format and quality
+   - Used in: `step1/prompt.md`, `step2/prompt.md`
+
+### Validation System (Step 2)
+
+**BLOCKING Errors (Fail the step):**
+- `DECOMPOSITION_ANALYSIS.md` doesn't exist
+- Phases A-E incomplete
+- Confidence score < 3.0
+- Tasks missing Pre-BLUEPRINT Analysis
+
+**WARNINGS (Log but continue):**
+- Confidence score between 3.0 and 4.0
+- Phase F (Tree of Thought) incomplete
+- Unresolved divergences in self-consistency
+
+### Quality Standards
+
+When modifying task executor prompts:
+- [ ] Maintain all existing reasoning requirements
+- [ ] Evidence must trace to specific file:line references
+- [ ] Examples must include GOOD, BAD, and EDGE CASE
+- [ ] Confidence thresholds must be enforced
+- [ ] Cleanup logic must delete on success, preserve on failure
+
+---
+
 ## Best Practices
 
 1. **Always write tests** - Code without tests doesn't enter the project

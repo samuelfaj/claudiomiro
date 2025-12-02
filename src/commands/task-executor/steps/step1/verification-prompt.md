@@ -44,37 +44,136 @@ Read `{{todoPath}}` to understand:
 
 **Important**: Know what was already documented to avoid duplicates.
 
-### Step 2: Re-Analyze AI_PROMPT.md
+### Step 2: Multi-Path Verification (Self-Consistency)
 
-Perform a FRESH analysis checking:
+**CRITICAL:** To ensure thorough verification, analyze AI_PROMPT.md using THREE different approaches. This prevents single-perspective blind spots.
 
-**Context Completeness:**
-- [ ] All tech stack components documented
-- [ ] Project structure explained
-- [ ] Existing patterns referenced with file:line
-- [ ] Integration points identified
-- [ ] Related code examples provided
+---
 
-**Requirement Coverage:**
-- [ ] EVERY requirement from INITIAL_PROMPT.md is in AI_PROMPT.md
-- [ ] All CLARIFICATION_ANSWERS.json responses are incorporated
-- [ ] Acceptance criteria are measurable
-- [ ] Edge cases are addressed
-- [ ] Error scenarios are covered
+#### 🔍 APPROACH A: Bottom-Up Requirement Tracing
 
-**Clarity:**
-- [ ] No ambiguous terms or phrases
-- [ ] Technical terms are precise
-- [ ] File references use file:line format
-- [ ] Can be split into independent tasks
+**Method:** Start from INITIAL_PROMPT.md, trace each requirement to AI_PROMPT.md
 
-### Step 3: Compare Findings
+For EACH line/bullet in INITIAL_PROMPT.md:
 
-Ask yourself:
-- Did I find any gaps that are **NOT** already in the TODO file?
-- Are there requirements from INITIAL_PROMPT.md still missing?
-- Are there CLARIFICATION_ANSWERS.json responses not incorporated?
-- Are there any ambiguities that were missed?
+| Line | Requirement (Quote) | Found in AI_PROMPT.md? | Location | Status |
+|------|---------------------|------------------------|----------|--------|
+| 1 | "[exact text]" | YES/NO | § Section, line X | ✅/❌ |
+| 2 | "[exact text]" | YES/NO | § Section, line Y | ✅/❌ |
+
+**Repeat for CLARIFICATION_ANSWERS.json:**
+
+| Question | Answer | Incorporated in AI_PROMPT.md? | Where? |
+|----------|--------|-------------------------------|--------|
+| [Question 1] | [Answer] | YES/NO | § Section |
+
+**Gap Detection:**
+- If Status = ❌ → **NEW GAP FOUND (Approach A)**
+- If Answer not incorporated → **NEW GAP FOUND (Approach A)**
+
+---
+
+#### 🔍 APPROACH B: Top-Down Context Completeness
+
+**Method:** Start from AI_PROMPT.md sections, verify each has concrete content
+
+| Section | Has Content? | Has file:line refs? | Sufficient Detail? | Status |
+|---------|--------------|---------------------|-------------------|--------|
+| § Purpose | YES/NO | YES/NO | YES/NO | ✅/❌ |
+| § Environment | YES/NO | YES/NO | YES/NO | ✅/❌ |
+| § Related Code | YES/NO | YES/NO | YES/NO | ✅/❌ |
+| § Acceptance Criteria | YES/NO | N/A | YES/NO | ✅/❌ |
+| § Implementation Guidance | YES/NO | YES/NO | YES/NO | ✅/❌ |
+| § Reasoning Boundaries | YES/NO | N/A | YES/NO | ✅/❌ |
+
+**Context Depth Check:**
+- [ ] Tech stack has versions? (e.g., "Node.js 18+", not just "Node.js")
+- [ ] Project structure has directory purposes? (e.g., "src/routes/ - Express route handlers")
+- [ ] Patterns have line ranges? (e.g., "src/services/userService.ts:20-45")
+- [ ] Integration points have concrete file references?
+
+**Gap Detection:**
+- If Status = ❌ → **NEW GAP FOUND (Approach B)**
+- If any depth check fails → **NEW GAP FOUND (Approach B)**
+
+---
+
+#### 🔍 APPROACH C: Acceptance Criteria Audit
+
+**Method:** Verify each acceptance criterion is specific, testable, and complete
+
+| Criterion | Specific? | Testable? | Edge Case? | Error Case? | Status |
+|-----------|-----------|-----------|------------|-------------|--------|
+| "[Criterion 1]" | YES/NO | YES/NO | YES/NO | YES/NO | ✅/❌ |
+| "[Criterion 2]" | YES/NO | YES/NO | YES/NO | YES/NO | ✅/❌ |
+
+**Specificity Check:**
+- ✅ "Returns 400 for email without @ character"
+- ❌ "Validates email format" (too vague)
+
+**Testability Check:**
+- ✅ "Response time < 500ms for 95th percentile"
+- ❌ "Should be fast" (not measurable)
+
+**Gap Detection:**
+- If Status = ❌ → **NEW GAP FOUND (Approach C)**
+- If criterion is vague → **NEW GAP FOUND (Approach C)**
+
+---
+
+### Step 3: Cross-Validate Findings
+
+**Consolidate gaps found by each approach:**
+
+| Gap Description | Found by A? | Found by B? | Found by C? | Confidence |
+|-----------------|-------------|-------------|-------------|------------|
+| [Gap 1] | ✅ | ✅ | ❌ | HIGH |
+| [Gap 2] | ✅ | ❌ | ❌ | MEDIUM |
+| [Gap 3] | ❌ | ❌ | ✅ | LOW - Verify! |
+
+**Confidence Levels:**
+- **HIGH (Found by 2-3 approaches):** DEFINITELY a gap → Add to TODO
+- **MEDIUM (Found by 1 approach, verifiable):** LIKELY a gap → Add to TODO
+- **LOW (Found by 1 approach, uncertain):** POSSIBLE false positive → Verify before adding
+
+**For LOW confidence gaps:**
+1. Re-read the source files (INITIAL_PROMPT.md, AI_PROMPT.md)
+2. Verify the gap is real (not just different wording)
+3. If still uncertain → Add with "LOW confidence" note
+
+---
+
+### Step 4: Final Gap List
+
+**Compile all verified gaps (not already in TODO):**
+
+```markdown
+## New Gaps Found (Verification Phase)
+
+### HIGH Confidence (Found by multiple approaches)
+- [ ] [Category] Gap description
+  - **Detected by:** Approach A + Approach B
+  - **Evidence:** [specific quote or reference]
+  - **Location in AI_PROMPT.md:** Missing from § Section
+  - **Confidence:** HIGH
+
+### MEDIUM Confidence (Found by single approach, verified)
+- [ ] [Category] Gap description
+  - **Detected by:** Approach A only
+  - **Evidence:** [specific quote or reference]
+  - **Verification:** Confirmed by re-reading source
+  - **Confidence:** MEDIUM
+
+### LOW Confidence (Review before adding)
+- [ ] [Category] Possible gap
+  - **Detected by:** Approach C only
+  - **Note:** May be covered differently, needs review
+  - **Confidence:** LOW
+```
+
+**Action:**
+- HIGH/MEDIUM → Add to TODO file
+- LOW → Add with note, or investigate further before adding
 
 ---
 

@@ -191,6 +191,271 @@ This is the **mandatory system-level validation** step.
 
 ---
 
+## 🧠 MANDATORY PRE-DECOMPOSITION ANALYSIS
+
+**CRITICAL:** You MUST complete this analysis BEFORE creating ANY BLUEPRINT.md files.
+
+Create `{{claudiomiroFolder}}/DECOMPOSITION_ANALYSIS.md` to document your reasoning.
+
+This file captures your thought process and ensures decomposition is deliberate, not arbitrary.
+
+---
+
+### PHASE A: Requirements Extraction
+
+From `AI_PROMPT.md`, extract ALL requirements:
+
+```markdown
+## Phase A: Requirements Extraction
+
+### Explicit Requirements (From AI_PROMPT.md)
+
+| Req ID | Exact Quote | Section | Line | Intent |
+|--------|-------------|---------|------|--------|
+| R1 | "[verbatim text from AI_PROMPT.md]" | § Acceptance Criteria | 45 | [What this requirement means] |
+| R2 | "[verbatim text]" | § Acceptance Criteria | 47 | [True intent] |
+| R3 | "[verbatim text]" | § Implementation Guidance | 62 | [Intent] |
+
+**Checkpoint:** Every bullet in AI_PROMPT.md must appear above.
+
+### Implicit Requirements
+
+- [ ] Testing required? Evidence: [YES/NO + quote from AI_PROMPT.md]
+- [ ] Documentation required? Evidence: [YES/NO + quote]
+- [ ] Integration validation? Evidence: [YES/NO + quote]
+- [ ] Error handling? Evidence: [YES/NO + quote]
+- [ ] Edge cases? Evidence: [YES/NO + quote]
+
+**Total Requirements:** [N] explicit + [M] implicit = [Total]
+```
+
+---
+
+### PHASE B: Complexity Analysis
+
+For EACH requirement, evaluate complexity:
+
+```markdown
+## Phase B: Complexity Analysis
+
+| Req ID | Complexity | Reasoning | Evidence |
+|--------|-----------|-----------|----------|
+| R1 | LOW | Single file, <100 LOC, clear pattern exists | AI_PROMPT.md:§Environment shows existing pattern |
+| R2 | MEDIUM | Multiple files, some integration needed | Cross-references 3 modules |
+| R3 | HIGH | System-wide impact, many integration points | Requires changes to 5+ files |
+
+### Complexity Scale:
+- **LOW:** Single file, <100 LOC, well-defined pattern exists in codebase
+- **MEDIUM:** Multiple files, cross-module interaction, some unknowns
+- **HIGH:** System-wide impact, multiple integration points, significant uncertainty
+```
+
+---
+
+### PHASE C: Dependency Analysis
+
+For EACH requirement, identify dependencies:
+
+```markdown
+## Phase C: Dependency Analysis
+
+### Dependency Matrix
+
+| Req ID | Depends On | Why? | Can Parallelize? |
+|--------|-----------|------|------------------|
+| R1 | None (Layer 0) | Foundation setup | N/A |
+| R2 | R1 | Needs R1's database schema | NO - sequential |
+| R3 | R1 | Needs R1's types | NO - sequential |
+| R4 | R1 | Independent feature | YES - parallel with R2, R3 |
+| R5 | R2, R3 | Integration of R2 and R3 | NO - after both |
+| R_Ω | All | Final validation | NO - depends on everything |
+
+### Dependency Graph (Visual)
+
+```
+Layer 0: R1 (foundation)
+         |
+         v
+Layer 1: R2  R3  R4 (parallel)
+         |   |
+         v   v
+Layer 2: R5 (integration R2+R3)
+         |
+         v
+Layer Ω: R_Ω (final validation)
+```
+
+### Maximum Parallelism Identified
+
+- Layer 0: 1 task (foundation)
+- Layer 1: 3 tasks (parallel)
+- Layer 2: 1 task (integration)
+- Layer Ω: 1 task (validation)
+- **Total layers:** 4
+```
+
+---
+
+### PHASE D: Decomposition Strategy
+
+For EACH requirement, decide task granularity:
+
+```markdown
+## Phase D: Decomposition Strategy
+
+### R1: [Requirement Description]
+- **Keep atomic?** YES/NO
+- **Reasoning:** [Why keep together OR why split]
+- **Proposed tasks:** TASK0 OR [TASK0, TASK1]
+- **Evidence:** [Quote from AI_PROMPT.md supporting this decision]
+
+### R2: [Requirement Description]
+- **Keep atomic?** YES/NO
+- **Reasoning:** [Reasoning]
+- **Proposed tasks:** [Task assignments]
+- **Evidence:** [Evidence]
+
+### Summary of Proposed Tasks
+
+| Task | Covers Requirements | Layer | Dependencies |
+|------|---------------------|-------|--------------|
+| TASK0 | R1 | 0 | None |
+| TASK1 | R2 | 1 | TASK0 |
+| TASK2 | R3 | 1 | TASK0 |
+| TASK3 | R4 | 1 | TASK0 |
+| TASK4 | R5 | 2 | TASK1, TASK2 |
+| TASKΩ | R_Ω | Ω | All |
+
+**Total Tasks:** [N]
+```
+
+---
+
+### PHASE E: Self-Critique
+
+Before generating BLUEPRINTs, critique your decomposition:
+
+```markdown
+## Phase E: Self-Critique
+
+### Quality Gates
+
+- [ ] Every requirement from Phase A has at least one task
+- [ ] No requirement is split unnecessarily (over-fragmentation check)
+- [ ] No requirement is merged with unrelated concerns (under-decomposition check)
+- [ ] Dependencies are minimal (no artificial sequencing)
+- [ ] Parallelism is maximized (independent tasks in same layer)
+- [ ] Final Ω validation task exists
+- [ ] All tasks have clear acceptance criteria traceable to AI_PROMPT.md
+
+### Red Flags (Revise if TRUE)
+
+- [ ] Task with vague identity ("implement feature")
+- [ ] Task combining unrelated requirements
+- [ ] Missing integration/validation task
+- [ ] Dependency cycle detected
+- [ ] Task without clear success criteria
+- [ ] Over-fragmentation (tasks with <50 LOC each)
+- [ ] Under-decomposition (tasks with >500 LOC each)
+
+### Revisions Made
+
+[Document any changes made during self-critique]
+
+### Final Decision
+
+**Proceed with decomposition:** YES/NO
+
+If NO → Iterate on Phases A-D until quality gates pass.
+```
+
+---
+
+**CRITICAL:** Complete all 5 phases in `DECOMPOSITION_ANALYSIS.md` BEFORE creating any BLUEPRINT.md files.
+
+This ensures deliberate, traceable, and high-quality decomposition.
+
+---
+
+## 🎯 PER-TASK REASONING REQUIREMENT
+
+**CRITICAL:** For EACH task, you MUST document reasoning in `DECOMPOSITION_ANALYSIS.md` BEFORE creating its BLUEPRINT.md.
+
+### Pre-BLUEPRINT Analysis (Required for Each Task)
+
+Before generating `TASKX/BLUEPRINT.md`, add to `DECOMPOSITION_ANALYSIS.md`:
+
+```markdown
+## Pre-BLUEPRINT Analysis: TASKX
+
+### 1. Why This Task Exists
+- **Origin:** [Which requirement(s) from Phase A does this satisfy?]
+- **Necessity:** [Why can't this be merged with another task?]
+- **Evidence:** [Quote from AI_PROMPT.md justifying this task]
+
+### 2. Scope Justification
+- **IS (Explicit Boundaries):**
+  - [Concrete item 1 this task WILL do]
+  - [Concrete item 2 this task WILL do]
+  - [File paths this task WILL touch]
+
+- **IS NOT (Explicit Exclusions):**
+  - [What this task will NOT do + which task handles it]
+  - [Out of scope items with reasoning]
+
+- **Scope Size Check:**
+  - Estimated LOC: [LOW (<100) | MEDIUM (100-300) | HIGH (>300)]
+  - If HIGH → Consider splitting. Justify if keeping as one task.
+
+### 3. Dependency Reasoning
+- **Depends on:** [TASK0, TASK1] or [None - Layer 0]
+- **Why these dependencies?**
+  - TASK0: [What TASK0 provides that this task needs]
+  - TASK1: [What TASK1 provides that this task needs]
+- **Can parallelize with:** [TASK2, TASK3] - [Why these are independent]
+- **Blocks:** [TASK4, TASK5] - [What this task provides to them]
+
+### 4. Success Criteria Traceability
+| Criterion | Source | Testable? | Command/Check |
+|-----------|--------|-----------|---------------|
+| [Criterion 1] | AI_PROMPT.md:§Acceptance Criteria:L45 | YES | [test command] |
+| [Criterion 2] | AI_PROMPT.md:§Acceptance Criteria:L47 | YES | [verification] |
+
+**Validation:** Every criterion MUST trace back to AI_PROMPT.md
+
+### 5. Confidence & Risk Assessment
+| Aspect | Confidence | Risk | Mitigation |
+|--------|------------|------|------------|
+| Requirements clarity | HIGH/MEDIUM/LOW | [Risk if LOW] | [How to handle] |
+| Implementation path | HIGH/MEDIUM/LOW | [Risk if LOW] | [How to handle] |
+| Dependencies exist | HIGH/MEDIUM/LOW | [Risk if LOW] | [How to handle] |
+| Testing feasibility | HIGH/MEDIUM/LOW | [Risk if LOW] | [How to handle] |
+
+**Decision:**
+- If ANY confidence is LOW on critical aspect → Mark task as NEEDS_CLARIFICATION
+- If ALL confidence is MEDIUM or HIGH → Proceed with BLUEPRINT generation
+```
+
+---
+
+### Workflow Enforcement
+
+**ONLY AFTER completing the Pre-BLUEPRINT Analysis for TASKX:**
+1. ✅ Verify all 5 sections are completed
+2. ✅ Verify no LOW confidence on critical aspects
+3. ✅ Verify scope is reasonable (not too large, not too fragmented)
+4. ✅ Verify dependencies are correctly identified
+5. **THEN** → Generate `TASKX/BLUEPRINT.md`
+
+**Anti-Pattern Detection:**
+- ❌ BLUEPRINT created without Pre-BLUEPRINT Analysis → INVALID
+- ❌ Vague scope ("implement feature") → REJECT, be specific
+- ❌ Missing dependency reasoning → REJECT, explain why
+- ❌ Criteria not traceable to AI_PROMPT.md → REJECT, add source
+- ❌ LOW confidence ignored → REJECT, address risk first
+
+---
+
 ## INJECTED CONTEXT
 
 ### Legacy System Context (Priority 0)
@@ -426,6 +691,295 @@ Decomposition into BLUEPRINTs:
 ✅ **Anti-hallucination anchors prevent guessing:** Agent knows when to stop vs. proceed.
 ✅ **Pre-conditions are verifiable:** Commands that return pass/fail.
 ✅ **Legacy reference is explicit:** Agent knows if legacy systems exist.
+
+---
+
+## 📚 FEW-SHOT EXAMPLES: DECOMPOSITION ANALYSIS
+
+### Example 1: ✅ GOOD Decomposition (Complete Reasoning)
+
+**AI_PROMPT.md Request:**
+```
+Add user authentication with JWT tokens and password reset functionality.
+```
+
+**DECOMPOSITION_ANALYSIS.md (Excerpt):**
+```markdown
+## Phase A: Requirements Extraction
+
+| Req ID | Exact Quote | Section | Intent |
+|--------|-------------|---------|--------|
+| R1 | "user authentication with JWT tokens" | §1:L3 | Implement JWT-based auth flow |
+| R2 | "password reset functionality" | §1:L3 | Email-based password recovery |
+
+## Phase D: Decomposition Strategy
+
+### R1: JWT Authentication
+- **Keep atomic?** NO - requires multiple components
+- **Reasoning:** Auth flow needs: schema → service → routes → middleware. Each is testable independently.
+- **Proposed tasks:** TASK0 (schema), TASK1 (auth service), TASK2 (routes), TASK3 (middleware)
+- **Evidence:** AI_PROMPT.md:§Environment "Prisma ORM" → needs schema; "Express" → needs routes
+
+### R2: Password Reset
+- **Keep atomic?** NO - separate concern from auth
+- **Reasoning:** Password reset is independent feature, can be built after basic auth
+- **Proposed tasks:** TASK4 (email service), TASK5 (reset flow)
+- **Evidence:** AI_PROMPT.md doesn't specify email provider → needs investigation
+
+## Phase F: Tree of Thought
+
+### F.1 Decomposition Alternatives
+
+| Approach | Description | Pros | Cons |
+|----------|-------------|------|------|
+| **A** | 6 tasks (schema→service→routes→middleware→email→reset) | Maximum parallelism, testable | More overhead |
+| **B** | 3 tasks (auth-all→reset-all→integration) | Less overhead | Larger tasks, less parallel |
+| **C** | 2 tasks (auth+reset combined, integration) | Minimal tasks | Too large, hard to test |
+
+**Selected:** A
+**Reasoning:** 6 tasks allows TASK1-3 to run in parallel after TASK0. TASK4-5 can run parallel to auth tasks.
+**Evidence:** AI_PROMPT.md:§Environment "Jest tests" suggests testability is valued.
+
+### F.3 Confidence Score
+| Aspect | Score | Justification |
+|--------|-------|---------------|
+| Requirement coverage | 5 | Every requirement mapped to tasks |
+| Task independence | 4 | TASK1-3 share TASK0 dependency only |
+| Dependency correctness | 5 | Clear Layer 0→1→2 progression |
+
+**Overall Confidence:** 4.7 / 5 → ✅ Proceed
+```
+
+**Why this is GOOD:**
+- ✅ Every requirement traced with exact quotes
+- ✅ Decomposition decisions have explicit reasoning
+- ✅ Alternatives explored with pros/cons
+- ✅ Evidence from AI_PROMPT.md supports choices
+- ✅ Confidence score justifies proceeding
+
+---
+
+### Example 2: ❌ BAD Decomposition (Superficial Analysis)
+
+**AI_PROMPT.md Request:**
+```
+Add user authentication with JWT tokens and password reset functionality.
+```
+
+**DECOMPOSITION_ANALYSIS.md (Superficial - REJECT):**
+```markdown
+## Phase A: Requirements
+
+- R1: Add authentication
+- R2: Add password reset
+
+## Phase D: Strategy
+
+TASK0: Implement authentication
+TASK1: Implement password reset
+TASK2: Test everything
+
+## Phase F: Confidence
+
+Looks good. Proceeding.
+```
+
+**Why this is BAD:**
+- ❌ No exact quotes from AI_PROMPT.md
+- ❌ No reasoning for task boundaries
+- ❌ No alternatives considered
+- ❌ No evidence supporting decisions
+- ❌ Vague confidence without scores
+- ❌ Tasks too large ("implement authentication" is not atomic)
+
+**This decomposition would be REJECTED.**
+
+---
+
+### Example 3: ⚠️ EDGE CASE (Deceptively Simple Request)
+
+**AI_PROMPT.md Request:**
+```
+Add a "last seen" timestamp to user profiles.
+```
+
+**Initial Reaction:** "This is simple - just one task!"
+
+**DECOMPOSITION_ANALYSIS.md (Correct Analysis):**
+```markdown
+## Phase A: Requirements Extraction
+
+| Req ID | Exact Quote | Intent | Hidden Complexity |
+|--------|-------------|--------|-------------------|
+| R1 | "last seen timestamp" | Track user activity | When to update? Every request? |
+| R2 | "user profiles" | Display timestamp | Format? Timezone handling? |
+
+### Implicit Requirements (Investigation Results)
+- [ ] Performance: Updating timestamp on every request → database load
+- [ ] Privacy: AI_PROMPT.md:§Acceptance Criteria:L12 "GDPR compliance" → need consent?
+- [ ] UX: Real-time vs cached display?
+
+## Phase B: Complexity Analysis
+
+| Req ID | Complexity | Reasoning |
+|--------|-----------|-----------|
+| R1 | MEDIUM | Not just schema change - needs middleware hook |
+| R2 | MEDIUM | Timezone conversion, formatting, privacy display |
+
+**Initial assessment was WRONG.** This is NOT a single-task feature.
+
+## Phase D: Decomposition Strategy
+
+### R1: Last Seen Tracking
+- **Keep atomic?** NO - discovered hidden complexity
+- **Proposed tasks:**
+  - TASK0: Schema migration (add lastSeenAt field)
+  - TASK1: Middleware to update timestamp (with rate limiting)
+  - TASK2: Profile API to expose timestamp (with privacy controls)
+
+### Evidence of complexity:
+- AI_PROMPT.md:§Environment mentions "high traffic" → rate limiting needed
+- AI_PROMPT.md:§Acceptance Criteria:L12 "GDPR compliance" → privacy controls
+
+## Phase F: Tree of Thought
+
+### F.2 Self-Consistency Check
+
+**Path 1 (Requirements-First):** 1 task (surface reading)
+**Path 2 (Architecture-First):** 3 tasks (schema→middleware→API)
+**Path 3 (Risk-First):** 3 tasks (identified performance + privacy risks)
+
+**Divergence detected!** Path 1 differs from Path 2 and 3.
+
+**Resolution:** Paths 2 and 3 agree. Path 1 was superficial.
+**Decision:** 3 tasks is correct. Surface simplicity was deceptive.
+```
+
+**Why this EDGE CASE matters:**
+- ⚠️ Simple-sounding requests often hide complexity
+- ⚠️ "Just add a field" ignores middleware, privacy, performance
+- ⚠️ Self-consistency check caught the superficial Path 1
+- ⚠️ Implicit requirements revealed true scope
+
+**Lesson:** Always investigate beyond the surface. Use the 3-path check to catch shallow analysis.
+
+---
+
+## 🌳 TREE OF THOUGHT: FINAL VALIDATION
+
+**CRITICAL:** Before generating BLUEPRINTs, you MUST explore alternative decomposition strategies and validate your choices.
+
+Add this section to `DECOMPOSITION_ANALYSIS.md` AFTER Phase E:
+
+```markdown
+## Phase F: Tree of Thought - Alternative Exploration
+
+### F.1 Decomposition Alternatives
+
+For EACH major decomposition decision, explore at least 2 alternatives:
+
+#### Decision 1: [Task Grouping/Splitting]
+
+| Approach | Description | Pros | Cons |
+|----------|-------------|------|------|
+| **A (Current)** | [What you chose] | [Benefits] | [Drawbacks] |
+| **B (Alternative)** | [Different grouping] | [Benefits] | [Drawbacks] |
+| **C (Alternative)** | [Another option] | [Benefits] | [Drawbacks] |
+
+**Selected:** [A/B/C]
+**Reasoning:** [Why this approach is superior for THIS project]
+**Evidence:** [Quote from AI_PROMPT.md supporting this choice]
+
+#### Decision 2: [Layer Assignment]
+
+| Approach | Layer Structure | Parallelism | Risk |
+|----------|-----------------|-------------|------|
+| **A (Current)** | [Your layers] | [X tasks parallel] | [Risk level] |
+| **B (Alternative)** | [Different layers] | [Y tasks parallel] | [Risk level] |
+
+**Selected:** [A/B]
+**Reasoning:** [Why this layer structure is optimal]
+
+#### Decision 3: [Dependency Strategy]
+
+| Approach | Dependencies | Coupling | Flexibility |
+|----------|--------------|----------|-------------|
+| **A (Current)** | [Deps list] | [HIGH/LOW] | [HIGH/LOW] |
+| **B (Alternative)** | [Alt deps] | [HIGH/LOW] | [HIGH/LOW] |
+
+**Selected:** [A/B]
+**Reasoning:** [Why these dependencies are correct]
+
+---
+
+### F.2 Self-Consistency Check
+
+**Question:** Would a different analysis path lead to the same decomposition?
+
+#### Path 1: Requirements-First Analysis
+Starting from requirements, I would group tasks as:
+[List task grouping from requirements perspective]
+
+#### Path 2: Architecture-First Analysis
+Starting from architecture, I would group tasks as:
+[List task grouping from architecture perspective]
+
+#### Path 3: Risk-First Analysis
+Starting from highest risks, I would group tasks as:
+[List task grouping from risk mitigation perspective]
+
+**Convergence Check:**
+| Path | Same Task Count? | Same Dependencies? | Same Layers? |
+|------|------------------|-------------------|--------------|
+| Requirements-First | YES/NO | YES/NO | YES/NO |
+| Architecture-First | YES/NO | YES/NO | YES/NO |
+| Risk-First | YES/NO | YES/NO | YES/NO |
+
+**If divergence detected:**
+- [ ] Analyze WHY paths diverge
+- [ ] Determine which path best serves AI_PROMPT.md intent
+- [ ] Document reasoning for chosen path
+- [ ] Revise decomposition if necessary
+
+---
+
+### F.3 Decomposition Confidence Score
+
+Rate your confidence in the final decomposition:
+
+| Aspect | Score (1-5) | Justification |
+|--------|-------------|---------------|
+| Requirement coverage | [1-5] | [Why this score] |
+| Task independence | [1-5] | [Why this score] |
+| Dependency correctness | [1-5] | [Why this score] |
+| Parallelism optimization | [1-5] | [Why this score] |
+| Scope sizing | [1-5] | [Why this score] |
+
+**Overall Confidence:** [Average] / 5
+
+**Decision:**
+- Score ≥ 4.0 → ✅ Proceed with BLUEPRINT generation
+- Score 3.0-3.9 → ⚠️ Review weak areas before proceeding
+- Score < 3.0 → ❌ STOP - Revise decomposition strategy
+```
+
+---
+
+### Tree of Thought Enforcement
+
+**ONLY AFTER completing Phase F:**
+1. ✅ At least 2 alternatives explored for each major decision
+2. ✅ Self-consistency check completed with 3 paths
+3. ✅ Confidence score ≥ 4.0 (or weak areas addressed)
+4. ✅ Divergences analyzed and resolved
+5. **THEN** → Proceed to BLUEPRINT generation
+
+**Red Flags (STOP if any are true):**
+- ❌ Only one approach considered (no alternatives)
+- ❌ Self-consistency paths not analyzed
+- ❌ Confidence score < 3.0
+- ❌ Unresolved divergence between analysis paths
+- ❌ "Selected" without "Reasoning" or "Evidence"
 
 ---
 
