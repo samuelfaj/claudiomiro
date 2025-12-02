@@ -4,8 +4,6 @@ const { promisify } = require('util');
 const { exec: execCallback } = require('child_process');
 const state = require('../../../../shared/config/state');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
-const { generateResearchFile } = require('./generate-research');
-const { generateContextFile } = require('./generate-context');
 const {
     buildConsolidatedContextAsync,
     markTaskCompleted,
@@ -417,9 +415,6 @@ const executeOldFlow = async (task, folder, cwd, needsReResearch) => {
 
     logger.info('Falling back to old flow (TASK.md + TODO.md)');
 
-    // PHASE 1: Research and context gathering
-    await generateResearchFile(task, { cwd });
-
     if (fs.existsSync(folder('CODE_REVIEW.md'))) {
         fs.rmSync(folder('CODE_REVIEW.md'));
     }
@@ -520,9 +515,6 @@ ${contextFilePaths.map(f => `- ${f}`).join('\n')}
     );
 
     const result = await executeClaude(promptTemplate + '\n\n' + shellCommandRule, task, { cwd });
-
-    // Generate CONTEXT.md after successful execution
-    await generateContextFile(task);
 
     // Mark task as completed in cache
     markTaskCompleted(state.claudiomiroFolder, task);

@@ -5,6 +5,12 @@ const path = require('path');
 jest.mock('fs');
 jest.mock('path');
 jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/utils/logger', () => ({
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+}));
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test/project',
@@ -24,7 +30,12 @@ jest.mock('../../../../shared/services/context-cache', () => ({
 }));
 
 // Import after mocking
-const { reviewCode } = require('./review-code');
+const {
+    reviewCode,
+    validateCompletionForReview,
+    extractContextChain,
+    buildReviewContext,
+} = require('./review-code');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const state = require('../../../../shared/config/state');
 
@@ -546,6 +557,589 @@ describe('review-code', () => {
                 mockTask,
                 { cwd: '/test/frontend' },
             );
+        });
+    });
+
+    describe('validateCompletionForReview', () => {
+        test('should return ready:true when all phases completed and cleanup done', () => {
+            const execution = {
+                phases: [
+                    { name: 'planning', status: 'completed' },
+                    { name: 'implementation', status: 'completed' },
+                    { name: 'testing', status: 'completed' },
+                ],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+            };
+
+            const result = validateCompletionForReview(execution);
+            expect(result).toEqual({ ready: true });
+        });
+
+        test('should return ready:false with phase names when phases incomplete', () => {
+            const execution = {
+                phases: [
+                    { name: 'planning', status: 'completed' },
+                    { name: 'implementation', status: 'in_progress' },
+                    { name: 'testing', status: 'pending' },
+                ],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+            };
+
+            const result = validateCompletionForReview(execution);
+            expect(result.ready).toBe(false);
+            expect(result.reason).toContain('Incomplete phases');
+            expect(result.reason).toContain('implementation');
+            expect(result.reason).toContain('testing');
+        });
+
+        test('should return ready:false with single phase name when one phase incomplete', () => {
+            const execution = {
+                phases: [
+                    { name: 'planning', status: 'completed' },
+                    { name: 'implementation', status: 'in_progress' },
+                ],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+            };
+
+            const result = validateCompletionForReview(execution);
+            expect(result.ready).toBe(false);
+            expect(result.reason).toBe('Incomplete phases: implementation');
+        });
+
+        test('should return ready:false when debugLogsRemoved is false', () => {
+            const execution = {
+                phases: [{ name: 'implementation', status: 'completed' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: false,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+            };
+
+            const result = validateCompletionForReview(execution);
+            expect(result.ready).toBe(false);
+            expect(result.reason).toContain('Cleanup not complete');
+            expect(result.reason).toContain('debugLogsRemoved');
+        });
+
+        test('should return ready:false with all missing flags when multiple cleanup flags false', () => {
+            const execution = {
+                phases: [{ name: 'implementation', status: 'completed' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: false,
+                        formattingConsistent: false,
+                        deadCodeRemoved: true,
+                    },
+                },
+            };
+
+            const result = validateCompletionForReview(execution);
+            expect(result.ready).toBe(false);
+            expect(result.reason).toContain('debugLogsRemoved');
+            expect(result.reason).toContain('formattingConsistent');
+        });
+
+        test('should handle missing beyondTheBasics gracefully', () => {
+            const execution = {
+                phases: [{ name: 'implementation', status: 'completed' }],
+            };
+
+            const result = validateCompletionForReview(execution);
+            expect(result.ready).toBe(false);
+            expect(result.reason).toContain('Missing beyondTheBasics.cleanup');
+        });
+
+        test('should handle missing cleanup object gracefully', () => {
+            const execution = {
+                phases: [{ name: 'implementation', status: 'completed' }],
+                beyondTheBasics: {},
+            };
+
+            const result = validateCompletionForReview(execution);
+            expect(result.ready).toBe(false);
+            expect(result.reason).toContain('Missing beyondTheBasics.cleanup');
+        });
+
+        test('should handle empty phases array', () => {
+            const execution = {
+                phases: [],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+            };
+
+            const result = validateCompletionForReview(execution);
+            expect(result).toEqual({ ready: true });
+        });
+
+        test('should handle null/undefined execution', () => {
+            const result = validateCompletionForReview(null);
+            expect(result.ready).toBe(false);
+        });
+    });
+
+    describe('extractContextChain', () => {
+        test('should extract file paths from CONTEXT CHAIN section', () => {
+            const blueprint = `# BLUEPRINT
+## 1. IDENTITY
+Some identity info
+
+## 2. CONTEXT CHAIN
+### Priority 0
+- src/index.js
+- src/utils/helper.js
+
+### Priority 1
+* src/services/api.ts
+* config/settings.json
+
+## 3. EXECUTION CONTRACT
+Some contract info`;
+
+            const result = extractContextChain(blueprint);
+            expect(result).toContain('src/index.js');
+            expect(result).toContain('src/utils/helper.js');
+            expect(result).toContain('src/services/api.ts');
+            expect(result).toContain('config/settings.json');
+        });
+
+        test('should return empty array when CONTEXT CHAIN section missing', () => {
+            const blueprint = `# BLUEPRINT
+## 1. IDENTITY
+Some identity info
+
+## 3. EXECUTION CONTRACT
+Some contract info`;
+
+            const result = extractContextChain(blueprint);
+            expect(result).toEqual([]);
+        });
+
+        test('should handle empty CONTEXT CHAIN section', () => {
+            const blueprint = `# BLUEPRINT
+## 2. CONTEXT CHAIN
+
+## 3. EXECUTION CONTRACT`;
+
+            const result = extractContextChain(blueprint);
+            expect(result).toEqual([]);
+        });
+
+        test('should extract paths with backticks', () => {
+            const blueprint = `## 2. CONTEXT CHAIN
+- \`src/main.ts\`
+- \`lib/utils.js\`
+## 3. NEXT`;
+
+            const result = extractContextChain(blueprint);
+            expect(result).toContain('src/main.ts');
+            expect(result).toContain('lib/utils.js');
+        });
+
+        test('should handle various file extensions', () => {
+            const blueprint = `## 2. CONTEXT CHAIN
+- src/app.jsx
+- src/styles.css
+- src/data.json
+- src/readme.md
+## 3. NEXT`;
+
+            const result = extractContextChain(blueprint);
+            expect(result).toContain('src/app.jsx');
+            expect(result).toContain('src/styles.css');
+            expect(result).toContain('src/data.json');
+            expect(result).toContain('src/readme.md');
+        });
+    });
+
+    describe('buildReviewContext', () => {
+        test('should build context with all fields populated', () => {
+            const blueprint = `## 2. CONTEXT CHAIN
+- src/index.js
+## 3. NEXT`;
+            const execution = {
+                artifacts: [
+                    { type: 'file', path: 'src/new-file.js' },
+                    { type: 'test', path: 'src/new-file.test.js' },
+                ],
+                completion: {
+                    summary: ['Added new feature', 'Fixed bug'],
+                },
+            };
+
+            const result = buildReviewContext(blueprint, execution);
+
+            expect(result.taskDefinition).toBe(blueprint);
+            expect(result.contextFiles).toContain('src/index.js');
+            expect(result.modifiedFiles).toContain('FILE: src/new-file.js');
+            expect(result.modifiedFiles).toContain('TEST: src/new-file.test.js');
+            expect(result.completionSummary).toContain('Added new feature');
+            expect(result.completionSummary).toContain('Fixed bug');
+        });
+
+        test('should handle empty artifacts array', () => {
+            const blueprint = `## 2. CONTEXT CHAIN
+- src/index.js
+## 3. NEXT`;
+            const execution = {
+                artifacts: [],
+                completion: { summary: [] },
+            };
+
+            const result = buildReviewContext(blueprint, execution);
+            expect(result.modifiedFiles).toEqual([]);
+        });
+
+        test('should handle missing artifacts', () => {
+            const blueprint = `## 2. CONTEXT CHAIN
+## 3. NEXT`;
+            const execution = {};
+
+            const result = buildReviewContext(blueprint, execution);
+            expect(result.modifiedFiles).toEqual([]);
+            expect(result.completionSummary).toEqual([]);
+        });
+
+        test('should handle missing completion summary', () => {
+            const blueprint = 'test';
+            const execution = {
+                artifacts: [{ type: 'file', path: 'test.js' }],
+            };
+
+            const result = buildReviewContext(blueprint, execution);
+            expect(result.completionSummary).toEqual([]);
+        });
+
+        test('should default artifact type to FILE when missing', () => {
+            const blueprint = 'test';
+            const execution = {
+                artifacts: [{ path: 'test.js' }],
+            };
+
+            const result = buildReviewContext(blueprint, execution);
+            expect(result.modifiedFiles).toContain('FILE: test.js');
+        });
+    });
+
+    describe('backward compatibility', () => {
+        beforeEach(() => {
+            state.isMultiRepo.mockReturnValue(false);
+        });
+
+        test('should use old flow when BLUEPRINT.md does not exist', async () => {
+            const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
+            buildOptimizedContextAsync.mockClear();
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return false;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                if (filePath.includes('INITIAL_PROMPT.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
+                }
+                return 'mock content';
+            });
+
+            await reviewCode(mockTask);
+
+            expect(buildOptimizedContextAsync).toHaveBeenCalled();
+        });
+
+        test('should use new flow when BLUEPRINT.md exists', async () => {
+            const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
+            buildOptimizedContextAsync.mockClear();
+
+            const validExecution = {
+                phases: [{ name: 'impl', status: 'completed' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+                artifacts: [],
+                completion: { summary: [] },
+            };
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                if (filePath.includes('INITIAL_PROMPT.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n## 3. NEXT';
+                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Template with {{contextSection}} {{promptMdPath}} {{taskMdPath}} {{todoMdPath}} {{codeReviewMdPath}} {{researchMdPath}} {{researchSection}}';
+                }
+                return 'mock content';
+            });
+
+            await reviewCode(mockTask);
+
+            // buildOptimizedContextAsync should NOT be called in BLUEPRINT flow
+            expect(buildOptimizedContextAsync).not.toHaveBeenCalled();
+        });
+
+        test('should NOT call buildOptimizedContextAsync when BLUEPRINT exists', async () => {
+            const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache');
+            buildOptimizedContextAsync.mockClear();
+
+            const validExecution = {
+                phases: [{ name: 'impl', status: 'completed' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+                artifacts: [{ type: 'file', path: 'src/test.js' }],
+                completion: { summary: ['Done'] },
+            };
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n- src/index.js\n## 3. NEXT';
+                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
+                if (filePath.includes('prompt-review.md')) {
+                    return 'Template {{contextSection}}';
+                }
+                return '';
+            });
+
+            await reviewCode(mockTask);
+
+            expect(buildOptimizedContextAsync).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('new review flow with BLUEPRINT', () => {
+        beforeEach(() => {
+            state.isMultiRepo.mockReturnValue(false);
+        });
+
+        test('should read BLUEPRINT.md and execution.json', async () => {
+            const validExecution = {
+                phases: [{ name: 'impl', status: 'completed' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+                artifacts: [],
+                completion: { summary: [] },
+            };
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT content';
+                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
+                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
+                return '';
+            });
+
+            await reviewCode(mockTask);
+
+            expect(fs.readFileSync).toHaveBeenCalledWith(
+                expect.stringContaining('BLUEPRINT.md'),
+                'utf-8',
+            );
+            expect(fs.readFileSync).toHaveBeenCalledWith(
+                expect.stringContaining('execution.json'),
+                'utf-8',
+            );
+        });
+
+        test('should throw when completion validation fails', async () => {
+            const invalidExecution = {
+                phases: [{ name: 'impl', status: 'in_progress' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+            };
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT';
+                if (filePath.includes('execution.json')) return JSON.stringify(invalidExecution);
+                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
+                return '';
+            });
+
+            await expect(reviewCode(mockTask)).rejects.toThrow('Task not ready for review');
+            await expect(reviewCode(mockTask)).rejects.toThrow('Incomplete phases: impl');
+        });
+
+        test('should throw when cleanup flags incomplete', async () => {
+            const invalidExecution = {
+                phases: [{ name: 'impl', status: 'completed' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: false,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+            };
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT';
+                if (filePath.includes('execution.json')) return JSON.stringify(invalidExecution);
+                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
+                return '';
+            });
+
+            await expect(reviewCode(mockTask)).rejects.toThrow('Task not ready for review');
+            await expect(reviewCode(mockTask)).rejects.toThrow('Cleanup not complete');
+        });
+
+        test('should throw with clear message when execution.json is invalid JSON', async () => {
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '# BLUEPRINT';
+                if (filePath.includes('execution.json')) return 'invalid json {';
+                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
+                return '';
+            });
+
+            await expect(reviewCode(mockTask)).rejects.toThrow('Failed to parse execution.json');
+        });
+
+        test('should build context from BLUEPRINT without buildOptimizedContextAsync', async () => {
+            const validExecution = {
+                phases: [{ name: 'impl', status: 'completed' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+                artifacts: [{ type: 'file', path: 'src/new.js' }],
+                completion: { summary: ['Added feature'] },
+            };
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return '## 2. CONTEXT CHAIN\n- src/context.js\n## 3. NEXT';
+                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
+                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
+                return '';
+            });
+
+            await reviewCode(mockTask);
+
+            // Check that the prompt includes BLUEPRINT context
+            const actualCall = executeClaude.mock.calls[0][0];
+            expect(actualCall).toContain('Task Definition (from BLUEPRINT.md)');
+            expect(actualCall).toContain('Modified Files (from execution.json)');
+            expect(actualCall).toContain('FILE: src/new.js');
+        });
+
+        test('should extract context chain from BLUEPRINT', async () => {
+            const validExecution = {
+                phases: [{ name: 'impl', status: 'completed' }],
+                beyondTheBasics: {
+                    cleanup: {
+                        debugLogsRemoved: true,
+                        formattingConsistent: true,
+                        deadCodeRemoved: true,
+                    },
+                },
+                artifacts: [],
+                completion: { summary: [] },
+            };
+
+            const blueprintContent = `# TASK BLUEPRINT
+## 2. CONTEXT CHAIN
+### Priority 0
+- src/important.js
+- src/critical.ts
+### Priority 1
+- src/secondary.js
+## 3. EXECUTION CONTRACT`;
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                if (filePath.includes('execution.json')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) return blueprintContent;
+                if (filePath.includes('execution.json')) return JSON.stringify(validExecution);
+                if (filePath.includes('prompt-review.md')) return 'Template {{contextSection}}';
+                return '';
+            });
+
+            await reviewCode(mockTask);
+
+            const actualCall = executeClaude.mock.calls[0][0];
+            expect(actualCall).toContain('src/important.js');
+            expect(actualCall).toContain('src/critical.ts');
+            expect(actualCall).toContain('src/secondary.js');
         });
     });
 });

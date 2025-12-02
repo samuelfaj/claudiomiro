@@ -3,8 +3,6 @@ const path = require('path');
 
 jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
-jest.mock('./generate-research');
-jest.mock('./generate-context');
 jest.mock('../../utils/scope-parser', () => ({
     parseTaskScope: jest.fn().mockReturnValue(null),
     validateScope: jest.fn().mockReturnValue(true),
@@ -63,8 +61,6 @@ const {
     REQUIRED_FIELDS,
 } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
-const { generateResearchFile } = require('./generate-research');
-const { generateContextFile } = require('./generate-context');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
@@ -81,8 +77,6 @@ describe('step5', () => {
     describe('step5', () => {
         test('should execute successfully on first run', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
             reflectionHook.shouldReflect.mockReturnValue({ should: false });
 
@@ -112,9 +106,7 @@ describe('step5', () => {
             const result = await step5(mockTask);
 
             // Assert
-            expect(generateResearchFile).toHaveBeenCalledWith(mockTask, { cwd: '/test/project' });
             expect(executeClaude).toHaveBeenCalled();
-            expect(generateContextFile).toHaveBeenCalledWith(mockTask);
 
             // Check that info.json was written with attempts: 1
             const writeCalls = fs.writeFileSync.mock.calls;
@@ -127,8 +119,6 @@ describe('step5', () => {
         });
 
         test('should trigger reflection when hook requests it', async () => {
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({});
             reflectionHook.shouldReflect.mockReturnValueOnce({ should: true, trigger: 'quality-threshold' });
             reflectionHook.createReflection.mockResolvedValue({
@@ -180,8 +170,6 @@ describe('step5', () => {
 
         test('should handle re-research after 3+ failed attempts', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
 
             let researchExists = true; // RESEARCH.md exists initially
@@ -243,8 +231,6 @@ describe('step5', () => {
                 '/test/.claudiomiro/task-executor/TASK3/CONTEXT.md',
             ]);
 
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -293,7 +279,6 @@ describe('step5', () => {
 
         test('should handle executeClaude failure and update info.json with error', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
             const error = new Error('Claude execution failed');
             executeClaude.mockRejectedValue(error);
 
@@ -357,8 +342,6 @@ describe('step5', () => {
 
         test('should remove CODE_REVIEW.md if it exists', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -391,8 +374,6 @@ describe('step5', () => {
 
         test('should handle missing RESEARCH.md in execution context', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -428,8 +409,6 @@ describe('step5', () => {
 
         test('should track execution history in info.json', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -482,8 +461,6 @@ describe('step5', () => {
 
         test('should create new info.json for first run', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -540,8 +517,6 @@ describe('step5', () => {
 
         test('should use state.folder as cwd in single-repo mode (backward compatible)', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
             state.isMultiRepo.mockReturnValue(false);
             parseTaskScope.mockReturnValue(null);
@@ -578,8 +553,6 @@ describe('step5', () => {
 
         test('should use state.getRepository(backend) as cwd for @scope backend', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
             state.isMultiRepo.mockReturnValue(true);
             state.getRepository.mockReturnValue('/test/backend');
@@ -619,8 +592,6 @@ describe('step5', () => {
 
         test('should use state.getRepository(frontend) as cwd for @scope frontend', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
             state.isMultiRepo.mockReturnValue(true);
             state.getRepository.mockReturnValue('/test/frontend');
@@ -660,8 +631,6 @@ describe('step5', () => {
 
         test('should use state.getRepository(integration) as cwd for @scope integration', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
             state.isMultiRepo.mockReturnValue(true);
             state.getRepository.mockReturnValue('/test/backend'); // integration uses backend path
@@ -701,7 +670,6 @@ describe('step5', () => {
 
         test('should throw validation error when scope missing in multi-repo mode', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
             state.isMultiRepo.mockReturnValue(true);
             parseTaskScope.mockReturnValue(null);
             validateScope.mockImplementation(() => {
@@ -725,8 +693,6 @@ describe('step5', () => {
 
         test('should work when TASK.md does not exist in single-repo mode', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
             state.isMultiRepo.mockReturnValue(false);
             parseTaskScope.mockReturnValue(null);
@@ -810,14 +776,10 @@ describe('step5', () => {
             // Assert
             expect(logger.info).toHaveBeenCalledWith('Using new 2-file flow (BLUEPRINT.md)');
             expect(executeClaude).toHaveBeenCalled();
-            expect(generateResearchFile).not.toHaveBeenCalled();
-            expect(generateContextFile).not.toHaveBeenCalled();
         });
 
         test('should fall back to old flow when BLUEPRINT.md missing', async () => {
             // Arrange
-            generateResearchFile.mockResolvedValue();
-            generateContextFile.mockResolvedValue();
             executeClaude.mockResolvedValue({ success: true });
 
             fs.existsSync.mockImplementation((filePath) => {
@@ -844,8 +806,6 @@ describe('step5', () => {
 
             // Assert
             expect(logger.info).toHaveBeenCalledWith('Falling back to old flow (TASK.md + TODO.md)');
-            expect(generateResearchFile).toHaveBeenCalled();
-            expect(generateContextFile).toHaveBeenCalled();
         });
 
         test('should throw error when BLUEPRINT.md exists but execution.json missing', async () => {
