@@ -15,6 +15,7 @@ class State {
         this._repositories = new Map();
         this._gitMode = null;
         this._gitRoots = [];
+        this._legacySystems = new Map();
     }
 
     setFolder(folderPath) {
@@ -179,6 +180,50 @@ class State {
      */
     getGitRoots() {
         return this._gitRoots;
+    }
+
+    /**
+     * Configures legacy systems for reference
+     * @param {Object} legacyPaths - { system?: string, backend?: string, frontend?: string }
+     * @throws {Error} If any provided path does not exist
+     */
+    setLegacySystems(legacyPaths) {
+        this._legacySystems.clear();
+
+        for (const [type, legacyPath] of Object.entries(legacyPaths)) {
+            if (!legacyPath) continue;
+
+            const resolvedPath = path.resolve(legacyPath);
+            if (!fs.existsSync(resolvedPath)) {
+                throw new Error(`Legacy ${type} path does not exist: ${resolvedPath}`);
+            }
+            this._legacySystems.set(type, resolvedPath);
+        }
+    }
+
+    /**
+     * Checks if any legacy systems are configured
+     * @returns {boolean}
+     */
+    hasLegacySystems() {
+        return this._legacySystems.size > 0;
+    }
+
+    /**
+     * Gets a specific legacy system path
+     * @param {string} type - 'system' | 'backend' | 'frontend'
+     * @returns {string|null}
+     */
+    getLegacySystem(type) {
+        return this._legacySystems.get(type) || null;
+    }
+
+    /**
+     * Gets all configured legacy systems
+     * @returns {Map<string, string>} Copy of legacy systems Map
+     */
+    getAllLegacySystems() {
+        return new Map(this._legacySystems);
     }
 
     setExecutorType(type) {
