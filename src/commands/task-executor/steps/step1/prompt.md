@@ -257,6 +257,59 @@ Convert **every bullet or implicit expectation** from the original user request 
 - [ ] Error case: what happens when X fails
 - [ ] Edge case: behavior when Y is empty/null/invalid
 
+### 4.1 🚫 Guardrails (Prohibitions)
+Define explicit constraints on what the agent MUST NOT do. These complement Acceptance Criteria by preventing common mistakes and scope creep.
+
+**Categories to Consider:**
+
+**Scope Guardrails (Prevent Scope Creep):**
+- DO NOT add features not explicitly requested
+- DO NOT refactor code outside the task scope
+- DO NOT "improve" unrelated code while implementing
+- DO NOT add dependencies unless strictly necessary
+
+**Code Quality Guardrails (Prevent Over-Engineering):**
+- DO NOT create abstractions for single-use cases
+- DO NOT add configuration options "for flexibility" unless requested
+- DO NOT add comments to code you didn't write
+- DO NOT add error handling for impossible scenarios
+
+**Architecture Guardrails (Preserve System Integrity):**
+- DO NOT change existing public APIs without explicit requirement
+- DO NOT modify shared utilities used by other modules
+- DO NOT introduce new patterns different from existing codebase conventions
+- DO NOT break backward compatibility unless explicitly requested
+
+**Testing Guardrails (Prevent Test Bloat):**
+- DO NOT write tests for unchanged code
+- DO NOT add integration tests when unit tests suffice
+- DO NOT mock internal implementation details
+- DO NOT test external library behavior
+
+**Security Guardrails (Prevent Vulnerabilities):**
+- DO NOT commit secrets, API keys, or credentials
+- DO NOT disable security validations for convenience
+- DO NOT expose internal endpoints publicly
+- DO NOT trust user input without validation
+
+**Format:**
+```markdown
+🚫 **Guardrails:**
+- [ ] DO NOT [specific prohibition + reason]
+- [ ] DO NOT [specific prohibition + reason]
+- [ ] NEVER [absolute prohibition]
+- [ ] AVOID [soft prohibition with exception]
+```
+
+**Example:**
+```markdown
+🚫 **Guardrails:**
+- [ ] DO NOT modify src/auth/* (out of scope - auth team owns this)
+- [ ] DO NOT add new npm packages without justification
+- [ ] NEVER store passwords in plain text
+- [ ] AVOID direct database queries (use repository pattern from existing code)
+```
+
 ### 5. ⚙️ Implementation Guidance
 Detail how the agent should think, plan, and execute:
 
@@ -361,6 +414,12 @@ Before outputting `AI_PROMPT.md`, verify using this checklist:
 - [ ] Not missing environmental context
 - [ ] Not skipping concrete examples
 
+**Guardrails Defined:**
+- [ ] Scope prohibitions identified (what NOT to touch)
+- [ ] Architecture guardrails defined (patterns to preserve)
+- [ ] Security prohibitions explicit (what NEVER to do)
+- [ ] Each guardrail has a reason (not just "don't")
+
 ---
 
 ## 📚 FEW-SHOT EXAMPLES
@@ -434,6 +493,21 @@ Implement RESTful CRUD operations for products resource, enabling creation, retr
 - [ ] Non-existent ID returns 404 with clear message
 - [ ] Unauthorized request returns 401
 
+# 🚫 Guardrails
+**Scope:**
+- [ ] DO NOT modify existing user routes (out of scope)
+- [ ] DO NOT change auth middleware (shared module)
+- [ ] DO NOT add new packages (use existing Prisma + Express)
+
+**Architecture:**
+- [ ] DO NOT create new patterns (follow users.ts exactly)
+- [ ] DO NOT add global error handlers (use existing from errorHandler.ts)
+- [ ] AVOID raw SQL (use Prisma ORM consistently)
+
+**Security:**
+- [ ] NEVER expose product data without authentication
+- [ ] DO NOT skip input validation on any endpoint
+
 # ⚙️ Implementation Guidance
 **Layer 0 (Foundation):**
 - Create Prisma model for Product
@@ -447,11 +521,6 @@ Implement RESTful CRUD operations for products resource, enabling creation, retr
 **Layer 2 (Integration):**
 - Register route in app.ts
 - Add tests
-
-**Constraints:**
-- DO NOT modify existing user routes
-- DO NOT change auth middleware
-- Follow existing naming conventions (camelCase)
 ```
 
 **Why This is GOOD:**
@@ -461,7 +530,7 @@ Implement RESTful CRUD operations for products resource, enabling creation, retr
 - ✅ Edge cases covered (pagination limits, validation rules)
 - ✅ Concrete patterns to follow
 - ✅ Clear layered implementation guidance
-- ✅ Explicit constraints
+- ✅ Explicit guardrails with reasons
 
 ---
 

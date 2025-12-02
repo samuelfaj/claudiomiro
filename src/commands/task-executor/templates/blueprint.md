@@ -11,6 +11,20 @@
 ### Anti-Hallucination Anchors:
 {{antiHallucinationAnchors}}
 
+### 🚫 Guardrails (Prohibitions):
+
+**Scope Guardrails:**
+{{scopeGuardrails}}
+
+**Architecture Guardrails:**
+{{architectureGuardrails}}
+
+**Quality Guardrails:**
+{{qualityGuardrails}}
+
+**Security Guardrails:**
+{{securityGuardrails}}
+
 ## 2. CONTEXT CHAIN
 
 ### Priority 0 - LEGACY REFERENCE (If Available):

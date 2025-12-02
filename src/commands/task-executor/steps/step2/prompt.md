@@ -434,6 +434,22 @@ Before generating `TASKX/BLUEPRINT.md`, add to `DECOMPOSITION_ANALYSIS.md`:
 **Decision:**
 - If ANY confidence is LOW on critical aspect → Mark task as NEEDS_CLARIFICATION
 - If ALL confidence is MEDIUM or HIGH → Proceed with BLUEPRINT generation
+
+### 6. Guardrails Identification
+Identify prohibitions for this specific task (inherited from AI_PROMPT.md + task-specific):
+
+| Category | Guardrail | Reason | Source |
+|----------|-----------|--------|--------|
+| Scope | DO NOT touch [file/module] | [Why excluded] | AI_PROMPT.md:§Guardrails or task-specific |
+| Architecture | DO NOT use [pattern] | [Why forbidden] | AI_PROMPT.md:§Guardrails or codebase convention |
+| Quality | DO NOT [over-engineering trap] | [Why to avoid] | Task scope analysis |
+| Security | NEVER [violation] | [Consequence] | AI_PROMPT.md:§Guardrails |
+
+**Guardrail Validation:**
+- [ ] All scope guardrails from AI_PROMPT.md propagated
+- [ ] Task-specific guardrails identified (what this task must NOT do)
+- [ ] Each guardrail has a clear reason (not just "don't")
+- [ ] Security guardrails are explicit (NEVER, not just "avoid")
 ```
 
 ---
@@ -441,7 +457,7 @@ Before generating `TASKX/BLUEPRINT.md`, add to `DECOMPOSITION_ANALYSIS.md`:
 ### Workflow Enforcement
 
 **ONLY AFTER completing the Pre-BLUEPRINT Analysis for TASKX:**
-1. ✅ Verify all 5 sections are completed
+1. ✅ Verify all 6 sections are completed
 2. ✅ Verify no LOW confidence on critical aspects
 3. ✅ Verify scope is reasonable (not too large, not too fragmented)
 4. ✅ Verify dependencies are correctly identified
@@ -492,6 +508,25 @@ Before generating `TASKX/BLUEPRINT.md`, add to `DECOMPOSITION_ANALYSIS.md`:
 - [Condition] → [Action if unmet]
 - Example: "If pattern not found in reference file → BLOCKED"
 - Example: "If dependency function doesn't exist → Create issue, don't invent"
+
+### 🚫 Guardrails (Prohibitions):
+Explicit constraints inherited from AI_PROMPT.md + task-specific prohibitions.
+
+**Scope Guardrails:**
+- [ ] DO NOT [specific file/module this task must NOT touch + reason]
+- [ ] DO NOT [feature that belongs to another task]
+
+**Architecture Guardrails:**
+- [ ] DO NOT [pattern to avoid + what to use instead]
+- [ ] DO NOT [breaking change + why forbidden]
+
+**Quality Guardrails:**
+- [ ] DO NOT [over-engineering trap to avoid]
+- [ ] DO NOT [unnecessary abstraction]
+
+**Security Guardrails:**
+- [ ] NEVER [security violation + consequence]
+- [ ] DO NOT [unsafe practice + safe alternative]
 
 ## 2. CONTEXT CHAIN
 
@@ -602,9 +637,12 @@ LOW confidence on critical decision → BLOCKED (do not proceed with guesses)
 - Second line must be `@dependencies [...]`
 - Third line is `@scope [...]` for multi-repo projects only
 - All 6 sections (IDENTITY, CONTEXT CHAIN, EXECUTION CONTRACT, IMPLEMENTATION STRATEGY, UNCERTAINTY LOG, INTEGRATION IMPACT) are REQUIRED
+- IDENTITY section MUST include: IS, IS NOT, Anti-Hallucination Anchors, AND 🚫 Guardrails
+- Guardrails MUST have at least one item per category (Scope, Architecture, Quality, Security)
 - Context Chain must include legacy reference section (even if "None")
 - Pre-conditions table must have at least one verifiable check
 - Anti-hallucination anchors prevent the agent from inventing code
+- Guardrails prevent scope creep, over-engineering, and security violations
 
 ---
 
@@ -650,6 +688,22 @@ Decomposition into BLUEPRINTs:
 ### Anti-Hallucination Anchors:
 - If Prisma schema pattern differs from users model → Follow users model exactly
 - If route structure unclear → Reference users.ts:1-15 for setup pattern
+
+### 🚫 Guardrails:
+**Scope:**
+- [ ] DO NOT modify existing User model (only create Products)
+- [ ] DO NOT implement CRUD endpoints (belongs to TASK1-4)
+
+**Architecture:**
+- [ ] DO NOT create new patterns (follow users.ts exactly)
+- [ ] DO NOT add custom validators yet (belongs to TASK1)
+
+**Quality:**
+- [ ] DO NOT add optional fields "for future use"
+- [ ] DO NOT create utility functions (use existing utils/)
+
+**Security:**
+- [ ] NEVER commit with hardcoded database credentials
 ```
 
 **TASK1/BLUEPRINT.md** – Create endpoint (Layer 1, parallel)
@@ -664,6 +718,15 @@ Decomposition into BLUEPRINTs:
 - Implementing POST /api/products endpoint
 - Adding input validation with productValidator
 - Following create pattern from users.ts:20-35
+
+### 🚫 Guardrails:
+**Scope:**
+- [ ] DO NOT implement GET/PUT/DELETE (belongs to TASK2-4)
+- [ ] DO NOT modify TASK0's schema
+
+**Security:**
+- [ ] NEVER skip input validation
+- [ ] DO NOT expose internal error details to client
 ```
 
 ---
@@ -680,6 +743,8 @@ Decomposition into BLUEPRINTs:
 ❌ **Missing sections:** Not including all 6 required sections
 ❌ **Vague identity:** "Implement the feature" instead of explicit scope
 ❌ **No anti-hallucination anchors:** Letting agent invent code without guards
+❌ **Missing guardrails:** No explicit prohibitions leads to scope creep
+❌ **Guardrails without reasons:** "DO NOT X" without explaining why
 ❌ **Empty pre-conditions:** Not verifying dependencies before coding
 ❌ **Copy-paste context:** Duplicating AI_PROMPT.md instead of referencing
 ❌ **Missing legacy reference:** Not including Priority 0 section
@@ -689,6 +754,7 @@ Decomposition into BLUEPRINTs:
 ✅ Each task should represent a single verifiable truth from the user's request.
 ✅ **Every BLUEPRINT is self-contained:** Agent reads AI_PROMPT.md + BLUEPRINT.md to have full context.
 ✅ **Anti-hallucination anchors prevent guessing:** Agent knows when to stop vs. proceed.
+✅ **Guardrails prevent scope creep:** Agent knows what NOT to do with explicit reasons.
 ✅ **Pre-conditions are verifiable:** Commands that return pass/fail.
 ✅ **Legacy reference is explicit:** Agent knows if legacy systems exist.
 
