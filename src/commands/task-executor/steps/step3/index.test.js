@@ -55,7 +55,7 @@ describe('step3', () => {
             fs.readdirSync.mockReturnValue([mockTask]);
             fs.statSync.mockReturnValue({ isDirectory: () => true });
             fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
                 return false;
             });
             fs.readFileSync.mockReturnValue(mockTaskContent);
@@ -66,7 +66,7 @@ describe('step3', () => {
 
             // Assert
             expect(fs.writeFileSync).toHaveBeenCalledWith(
-                path.join('/test/.claudiomiro/task-executor', mockTask, 'TASK.md'),
+                path.join('/test/.claudiomiro/task-executor', mockTask, 'BLUEPRINT.md'),
                 `@dependencies []\n${mockTaskContent}`,
                 'utf-8',
             );
@@ -86,7 +86,7 @@ describe('step3', () => {
             fs.readdirSync.mockReturnValue([mockTask]);
             fs.statSync.mockReturnValue({ isDirectory: () => true });
             fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
                 return false;
             });
             fs.readFileSync.mockReturnValue(mockTaskContent);
@@ -102,14 +102,14 @@ describe('step3', () => {
             expect(executeClaude).not.toHaveBeenCalled();
         });
 
-        test('should skip when single task TASK.md does not exist', async () => {
+        test('should skip when single task BLUEPRINT.md does not exist', async () => {
             // Arrange
             const mockTask = 'TASK1';
 
             fs.readdirSync.mockReturnValue([mockTask]);
             fs.statSync.mockReturnValue({ isDirectory: () => true });
             fs.existsSync.mockImplementation((filePath) => {
-                if (filePath.includes('TASK.md')) return false;
+                if (filePath.includes('BLUEPRINT.md')) return false;
                 return false;
             });
 
@@ -138,8 +138,8 @@ describe('step3', () => {
             fs.readdirSync.mockReturnValue(mockTasks);
             fs.statSync.mockReturnValue({ isDirectory: () => true });
             fs.existsSync.mockImplementation((filePath) => {
-                // Return true for all TASK.md and PROMPT.md files
-                if (filePath.includes('TASK.md') || filePath.includes('PROMPT.md')) return true;
+                // Return true for all BLUEPRINT.md and PROMPT.md files
+                if (filePath.includes('BLUEPRINT.md') || filePath.includes('PROMPT.md')) return true;
                 if (filePath.includes('prompt.md')) return true; // Template file
                 return false;
             });
@@ -152,7 +152,7 @@ describe('step3', () => {
 
                 // Mock task and prompt files
                 for (const [task, content] of Object.entries(mockTaskContents)) {
-                    if (filePath.includes(`${task}/TASK.md`)) return content.task;
+                    if (filePath.includes(`${task}/BLUEPRINT.md`)) return content.task;
                     if (filePath.includes(`${task}/PROMPT.md`)) return content.prompt;
                 }
 
@@ -184,15 +184,15 @@ describe('step3', () => {
             expect(logger.success).toHaveBeenCalledWith('Task dependencies analyzed and configured');
         });
 
-        test('should handle missing TASK.md and PROMPT.md files gracefully', async () => {
+        test('should handle missing BLUEPRINT.md and PROMPT.md files gracefully', async () => {
             // Arrange
             const mockTasks = ['TASK1', 'TASK2'];
 
             fs.readdirSync.mockReturnValue(mockTasks);
             fs.statSync.mockReturnValue({ isDirectory: () => true });
             fs.existsSync.mockImplementation((filePath) => {
-                // Return false for all TASK.md and PROMPT.md files
-                if (filePath.includes('TASK.md') || filePath.includes('PROMPT.md')) return false;
+                // Return false for all BLUEPRINT.md and PROMPT.md files
+                if (filePath.includes('BLUEPRINT.md') || filePath.includes('PROMPT.md')) return false;
                 if (filePath.includes('prompt.md')) return true; // Template file
                 return false;
             });
@@ -281,11 +281,11 @@ describe('step3', () => {
                 }
 
                 // Mock task-specific content
-                if (filePath.includes('TASK1/TASK.md')) return '### TASK1\n\nTask 1 content';
+                if (filePath.includes('TASK1/BLUEPRINT.md')) return '### TASK1\n\nTask 1 content';
                 if (filePath.includes('TASK1/PROMPT.md')) return 'Prompt 1';
-                if (filePath.includes('TASK2/TASK.md')) return '### TASK2\n\nTask 2 content';
+                if (filePath.includes('TASK2/BLUEPRINT.md')) return '### TASK2\n\nTask 2 content';
                 if (filePath.includes('TASK2/PROMPT.md')) return 'Prompt 2';
-                if (filePath.includes('TASK10/TASK.md')) return '### TASK10\n\nTask 10 content';
+                if (filePath.includes('TASK10/BLUEPRINT.md')) return '### TASK10\n\nTask 10 content';
                 if (filePath.includes('TASK10/PROMPT.md')) return 'Prompt 10';
 
                 return '';
@@ -324,9 +324,9 @@ describe('step3', () => {
                 }
 
                 // Mock task-specific content
-                if (filePath.includes('TASK1/TASK.md')) return '### TASK1\n\nTask 1 content';
+                if (filePath.includes('TASK1/BLUEPRINT.md')) return '### TASK1\n\nTask 1 content';
                 if (filePath.includes('TASK1/PROMPT.md')) return 'Prompt 1';
-                if (filePath.includes('TASK2/TASK.md')) return '### TASK2\n\nTask 2 content';
+                if (filePath.includes('TASK2/BLUEPRINT.md')) return '### TASK2\n\nTask 2 content';
                 if (filePath.includes('TASK2/PROMPT.md')) return 'Prompt 2';
 
                 return '';
@@ -368,9 +368,9 @@ describe('step3', () => {
                 }
 
                 // Mock task-specific content
-                if (filePath.includes('TASK1/TASK.md')) return '### TASK1\n\nTask 1 content';
+                if (filePath.includes('TASK1/BLUEPRINT.md')) return '### TASK1\n\nTask 1 content';
                 if (filePath.includes('TASK1/PROMPT.md')) return 'Prompt 1';
-                if (filePath.includes('TASK2/TASK.md')) return '### TASK2\n\nTask 2 content';
+                if (filePath.includes('TASK2/BLUEPRINT.md')) return '### TASK2\n\nTask 2 content';
                 if (filePath.includes('TASK2/PROMPT.md')) return 'Prompt 2';
 
                 return '';
@@ -409,9 +409,9 @@ describe('step3', () => {
                 }
 
                 // Mock task-specific content
-                if (filePath.includes('TASK1/TASK.md')) return '### TASK1\n\nTask 1 content';
+                if (filePath.includes('TASK1/BLUEPRINT.md')) return '### TASK1\n\nTask 1 content';
                 if (filePath.includes('TASK1/PROMPT.md')) return 'Prompt 1';
-                if (filePath.includes('TASK2/TASK.md')) return '### TASK2\n\nTask 2 content';
+                if (filePath.includes('TASK2/BLUEPRINT.md')) return '### TASK2\n\nTask 2 content';
                 if (filePath.includes('TASK2/PROMPT.md')) return 'Prompt 2';
 
                 return '';

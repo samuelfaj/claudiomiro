@@ -29,13 +29,13 @@ jest.mock('../../../../shared/services/context-cache/context-collector', () => (
 jest.mock('../../../../shared/services/legacy-system/context-generator', () => ({
     generateLegacySystemContext: jest.fn().mockReturnValue(''),
 }));
-jest.mock('./decomposition-validator', () => ({
+jest.mock('./decomposition-json-validator', () => ({
     runValidation: jest.fn(),
 }));
 
 // Import after mocks are defined
 const { step2, cleanupDecompositionArtifacts } = require('./index');
-const { runValidation } = require('./decomposition-validator');
+const { runValidation } = require('./decomposition-json-validator');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
 const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
@@ -441,7 +441,7 @@ describe('step2', () => {
     });
 
     describe('cleanupDecompositionArtifacts', () => {
-        test('should delete DECOMPOSITION_ANALYSIS.md when preserveOnError is false', () => {
+        test('should delete DECOMPOSITION_ANALYSIS.json when preserveOnError is false', () => {
             // Arrange
             fs.existsSync.mockReturnValue(true);
 
@@ -450,12 +450,12 @@ describe('step2', () => {
 
             // Assert
             expect(fs.unlinkSync).toHaveBeenCalledWith(
-                expect.stringContaining('DECOMPOSITION_ANALYSIS.md'),
+                expect.stringContaining('DECOMPOSITION_ANALYSIS.json'),
             );
-            expect(logger.debug).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.md cleaned up');
+            expect(logger.debug).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.json cleaned up');
         });
 
-        test('should NOT delete DECOMPOSITION_ANALYSIS.md when preserveOnError is true (default)', () => {
+        test('should NOT delete DECOMPOSITION_ANALYSIS.json when preserveOnError is true (default)', () => {
             // Arrange
             fs.existsSync.mockReturnValue(true);
 
@@ -466,7 +466,7 @@ describe('step2', () => {
             expect(fs.unlinkSync).not.toHaveBeenCalled();
         });
 
-        test('should do nothing if DECOMPOSITION_ANALYSIS.md does not exist', () => {
+        test('should do nothing if DECOMPOSITION_ANALYSIS.json does not exist', () => {
             // Arrange
             fs.existsSync.mockReturnValue(false);
 
@@ -486,7 +486,7 @@ describe('step2', () => {
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt.md')) return true;
                 if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return true;
-                if (filePath.includes('DECOMPOSITION_ANALYSIS.md')) return true;
+                if (filePath.includes('DECOMPOSITION_ANALYSIS.json')) return true;
                 return false;
             });
 
@@ -508,14 +508,14 @@ describe('step2', () => {
             expect(logger.success).toHaveBeenCalledWith('Decomposition analysis validated');
         });
 
-        test('should delete DECOMPOSITION_ANALYSIS.md on success', async () => {
+        test('should delete DECOMPOSITION_ANALYSIS.json on success', async () => {
             // Arrange
             process.env.NODE_ENV = 'production';
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt.md')) return true;
                 if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return true;
-                if (filePath.includes('DECOMPOSITION_ANALYSIS.md')) return true;
+                if (filePath.includes('DECOMPOSITION_ANALYSIS.json')) return true;
                 return false;
             });
 
@@ -534,18 +534,18 @@ describe('step2', () => {
 
             // Assert
             expect(fs.unlinkSync).toHaveBeenCalledWith(
-                expect.stringContaining('DECOMPOSITION_ANALYSIS.md'),
+                expect.stringContaining('DECOMPOSITION_ANALYSIS.json'),
             );
-            expect(logger.debug).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.md deleted (success)');
+            expect(logger.debug).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.json deleted (success)');
         });
 
-        test('should preserve DECOMPOSITION_ANALYSIS.md on failure', async () => {
+        test('should preserve DECOMPOSITION_ANALYSIS.json on failure', async () => {
             // Arrange
             process.env.NODE_ENV = 'production';
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath.includes('DECOMPOSITION_ANALYSIS.md')) return true;
+                if (filePath.includes('DECOMPOSITION_ANALYSIS.json')) return true;
                 // No TASK0 or TASK1 - will cause failure
                 return false;
             });
@@ -562,21 +562,21 @@ describe('step2', () => {
             // Act & Assert
             await expect(step2()).rejects.toThrow('Error creating tasks');
 
-            // DECOMPOSITION_ANALYSIS.md should be preserved
+            // DECOMPOSITION_ANALYSIS.json should be preserved
             expect(fs.unlinkSync).not.toHaveBeenCalledWith(
-                expect.stringContaining('DECOMPOSITION_ANALYSIS.md'),
+                expect.stringContaining('DECOMPOSITION_ANALYSIS.json'),
             );
-            expect(logger.info).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.md preserved for debugging');
+            expect(logger.info).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.json preserved for debugging');
         });
 
-        test('should preserve DECOMPOSITION_ANALYSIS.md when validation fails', async () => {
+        test('should preserve DECOMPOSITION_ANALYSIS.json when validation fails', async () => {
             // Arrange
             process.env.NODE_ENV = 'production';
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt.md')) return true;
                 if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return true;
-                if (filePath.includes('DECOMPOSITION_ANALYSIS.md')) return true;
+                if (filePath.includes('DECOMPOSITION_ANALYSIS.json')) return true;
                 return false;
             });
 
@@ -595,11 +595,11 @@ describe('step2', () => {
             // Act & Assert
             await expect(step2()).rejects.toThrow('Validation failed');
 
-            // DECOMPOSITION_ANALYSIS.md should be preserved for debugging
+            // DECOMPOSITION_ANALYSIS.json should be preserved for debugging
             expect(fs.unlinkSync).not.toHaveBeenCalledWith(
-                expect.stringContaining('DECOMPOSITION_ANALYSIS.md'),
+                expect.stringContaining('DECOMPOSITION_ANALYSIS.json'),
             );
-            expect(logger.info).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.md preserved for debugging');
+            expect(logger.info).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.json preserved for debugging');
         });
     });
 });
