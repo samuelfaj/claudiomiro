@@ -4,6 +4,8 @@ const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { getLocalLLMService } = require('../../../../shared/services/local-llm');
+const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
+const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system/context-generator');
 
 /**
  * Step 2: Task Decomposition
@@ -16,8 +18,27 @@ const step2 = async () => {
     logger.newline();
     logger.startSpinner('Creating tasks...');
 
+    // Build context once for all tasks
+    const legacyContext = generateLegacySystemContext();
+    let optimizedContext = '';
+    try {
+        const result = await buildOptimizedContextAsync(
+            state.claudiomiroFolder,
+            null, // No specific task yet - we're decomposing
+            state.folder,
+            'task decomposition',
+        );
+        optimizedContext = result.context || '';
+    } catch (error) {
+        // Fallback to empty context if building fails
+        logger.debug(`[Step2] Context building failed: ${error.message}`);
+    }
+
     const replace = (text) => {
-        return text.replaceAll('{{claudiomiroFolder}}', `${state.claudiomiroFolder}`);
+        return text
+            .replaceAll('{{claudiomiroFolder}}', `${state.claudiomiroFolder}`)
+            .replaceAll('{{legacySystemContext}}', legacyContext || 'None - no legacy systems configured')
+            .replaceAll('{{optimizedContext}}', optimizedContext || '');
     };
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
@@ -28,10 +49,10 @@ const step2 = async () => {
 
     // Check if tasks were created, but only in non-test environment
     if (process.env.NODE_ENV !== 'test') {
-        if (
-            !fs.existsSync(path.join(state.claudiomiroFolder, 'TASK0')) &&
-            !fs.existsSync(path.join(state.claudiomiroFolder, 'TASK1'))
-        ) {
+        const task0BlueprintExists = fs.existsSync(path.join(state.claudiomiroFolder, 'TASK0', 'BLUEPRINT.md'));
+        const task1BlueprintExists = fs.existsSync(path.join(state.claudiomiroFolder, 'TASK1', 'BLUEPRINT.md'));
+
+        if (!task0BlueprintExists && !task1BlueprintExists) {
             throw new Error('Error creating tasks');
         }
 
@@ -61,10 +82,10 @@ const validateDecompositionWithLLM = async () => {
 
         const tasks = [];
         for (const taskFolder of taskFolders) {
-            const taskMdPath = path.join(state.claudiomiroFolder, taskFolder, 'TASK.md');
-            if (!fs.existsSync(taskMdPath)) continue;
+            const blueprintPath = path.join(state.claudiomiroFolder, taskFolder, 'BLUEPRINT.md');
+            if (!fs.existsSync(blueprintPath)) continue;
 
-            const content = fs.readFileSync(taskMdPath, 'utf-8');
+            const content = fs.readFileSync(blueprintPath, 'utf-8');
 
             // Extract dependencies
             const depsMatch = content.match(/@dependencies\s*\[?([^\]\n]*)\]?/i);

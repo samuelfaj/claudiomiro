@@ -5,6 +5,7 @@ jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro/task-executor',
+    folder: '/test/project',
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     newline: jest.fn(),
@@ -17,11 +18,24 @@ jest.mock('../../../../shared/utils/logger', () => ({
     debug: jest.fn(),
     info: jest.fn(),
 }));
+jest.mock('../../../../shared/services/context-cache/context-collector', () => ({
+    buildOptimizedContextAsync: jest.fn().mockResolvedValue({
+        context: 'mocked optimized context',
+        tokenSavings: 100,
+        filesIncluded: 5,
+        method: 'fallback',
+    }),
+}));
+jest.mock('../../../../shared/services/legacy-system/context-generator', () => ({
+    generateLegacySystemContext: jest.fn().mockReturnValue(''),
+}));
 
 // Import after mocks are defined
 const { step2 } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
+const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
+const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system/context-generator');
 
 describe('step2', () => {
     const originalNodeEnv = process.env.NODE_ENV;
@@ -75,13 +89,13 @@ describe('step2', () => {
             );
         });
 
-        test('should validate task creation in non-test environment when TASK0 exists', async () => {
+        test('should validate task creation in non-test environment when TASK0/BLUEPRINT.md exists', async () => {
             // Arrange
             process.env.NODE_ENV = 'production';
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath.includes('TASK0')) return true;
+                if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return true;
                 // TASK1 won't be checked because short-circuit evaluation
                 return false;
             });
@@ -103,10 +117,13 @@ describe('step2', () => {
             expect(fs.existsSync).toHaveBeenCalledWith(
                 expect.stringContaining('TASK0'),
             );
+            expect(fs.existsSync).toHaveBeenCalledWith(
+                expect.stringContaining('BLUEPRINT.md'),
+            );
             expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
         });
 
-        test('should validate task creation in non-test environment when TASK1 exists (TASK0 does not)', async () => {
+        test('should validate task creation in non-test environment when TASK1/BLUEPRINT.md exists (TASK0 does not)', async () => {
             // Arrange
             process.env.NODE_ENV = 'production';
             let callOrder = [];
@@ -114,8 +131,8 @@ describe('step2', () => {
             fs.existsSync.mockImplementation((filePath) => {
                 callOrder.push(filePath);
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath.includes('TASK0')) return false;
-                if (filePath.includes('TASK1')) return true;
+                if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return false;
+                if (filePath.includes('TASK1') && filePath.includes('BLUEPRINT.md')) return true;
                 return false;
             });
 
@@ -142,19 +159,19 @@ describe('step2', () => {
             expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
 
             // Verify TASK0 was checked before TASK1
-            const task0Index = callOrder.findIndex(path => path.includes('TASK0'));
-            const task1Index = callOrder.findIndex(path => path.includes('TASK1'));
+            const task0Index = callOrder.findIndex(path => path.includes('TASK0') && path.includes('BLUEPRINT.md'));
+            const task1Index = callOrder.findIndex(path => path.includes('TASK1') && path.includes('BLUEPRINT.md'));
             expect(task0Index).toBeLessThan(task1Index);
         });
 
-        test('should throw error when tasks not created in non-test environment', async () => {
+        test('should throw error when no BLUEPRINT.md created in non-test environment', async () => {
             // Arrange
             process.env.NODE_ENV = 'production';
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt.md')) return true;
-                if (filePath.includes('TASK0')) return false;
-                if (filePath.includes('TASK1')) return false;
+                if (filePath.includes('TASK0') && filePath.includes('BLUEPRINT.md')) return false;
+                if (filePath.includes('TASK1') && filePath.includes('BLUEPRINT.md')) return false;
                 return false;
             });
 
@@ -287,6 +304,135 @@ describe('step2', () => {
             expect(fs.existsSync).not.toHaveBeenCalledWith(
                 expect.stringContaining('TASK1'),
             );
+        });
+
+        test('should inject legacy context when available', async () => {
+            // Arrange
+            generateLegacySystemContext.mockReturnValue('## Legacy Systems Reference\nLegacy backend at /legacy/backend');
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return 'Legacy: {{legacySystemContext}}, Folder: {{claudiomiroFolder}}';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step2();
+
+            // Assert
+            expect(generateLegacySystemContext).toHaveBeenCalled();
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('## Legacy Systems Reference'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('Legacy backend at /legacy/backend'),
+            );
+        });
+
+        test('should inject optimized context', async () => {
+            // Arrange
+            buildOptimizedContextAsync.mockResolvedValue({
+                context: 'optimized project context here',
+                tokenSavings: 200,
+                filesIncluded: 10,
+                method: 'llm',
+            });
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return 'Context: {{optimizedContext}}, Folder: {{claudiomiroFolder}}';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step2();
+
+            // Assert
+            expect(buildOptimizedContextAsync).toHaveBeenCalledWith(
+                '/test/.claudiomiro/task-executor',
+                null,
+                '/test/project',
+                'task decomposition',
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('optimized project context here'),
+            );
+        });
+
+        test('should handle empty legacy context gracefully', async () => {
+            // Arrange
+            generateLegacySystemContext.mockReturnValue('');
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return 'Legacy: {{legacySystemContext}}, Folder: {{claudiomiroFolder}}';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step2();
+
+            // Assert
+            expect(generateLegacySystemContext).toHaveBeenCalled();
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('None - no legacy systems configured'),
+            );
+            expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
+        });
+
+        test('should handle context building failure gracefully', async () => {
+            // Arrange
+            buildOptimizedContextAsync.mockRejectedValue(new Error('Context build failed'));
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return 'Context: {{optimizedContext}}, Folder: {{claudiomiroFolder}}';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step2();
+
+            // Assert
+            expect(buildOptimizedContextAsync).toHaveBeenCalled();
+            expect(logger.debug).toHaveBeenCalledWith(
+                expect.stringContaining('Context building failed'),
+            );
+            // Should still complete successfully with empty context
+            expect(executeClaude).toHaveBeenCalled();
+            expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
         });
     });
 });

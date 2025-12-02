@@ -41,7 +41,7 @@ Each individual task should have MORE context than the original AI_PROMPT.md (be
 ## CORE PRINCIPLES
 
 ### 🚨 1. NO INFORMATION LOSS (Requirements + Context)
-Every requirement, bullet, or implied behavior from `AI_PROMPT.md` must appear explicitly in **at least one TASK.md**.
+Every requirement, bullet, or implied behavior from `AI_PROMPT.md` must appear explicitly in **at least one BLUEPRINT.md**.
 
 **Critical:** Every task must also preserve relevant context:
 - **Environment context** (tech stack, architecture, patterns) must be propagated to ALL tasks
@@ -61,14 +61,14 @@ You are not summarizing — you are **preserving structure AND context through d
 
 ## Task Scope (Multi-Repository Projects)
 
-When working with multi-repository projects (backend + frontend), every TASK.md MUST include an `@scope` tag on the second line:
+When working with multi-repository projects (backend + frontend), every BLUEPRINT.md MUST include an `@scope` tag on the second line:
 
 ### Format
 ```markdown
 @dependencies [TASK0, TASK1]
 @scope backend
 
-# Task: Title Here
+# BLUEPRINT: TASKX
 ...
 ```
 
@@ -94,20 +94,6 @@ When working with multi-repository projects (backend + frontend), every TASK.md 
 3. If a task touches BOTH or verifies their interaction → `@scope integration`
 4. When in doubt, prefer `@scope integration`
 
-### Example
-
-```markdown
-@dependencies []
-@scope backend
-
-# Task: Create User API Endpoint
-
-## Summary
-Implement POST /api/users endpoint for user registration.
-
-...
-```
-
 **Note:** Missing @scope in multi-repo mode will cause task execution to fail.
 
 ---
@@ -117,7 +103,7 @@ Implement POST /api/users endpoint for user registration.
 ### 1. Recursive Breakdown
 - Identify all top-level goals from `AI_PROMPT.md`.
 - For each goal, ask:
-  > “Does this require reasoning, sequencing, or verification steps?”
+  > "Does this require reasoning, sequencing, or verification steps?"
    - If *yes*, expand into clear subtasks with their own reasoning context.
    - If *no*, keep it atomic — one task, one verification.
 
@@ -140,11 +126,11 @@ Each task must clearly declare its layer and dependencies.
 ### 3. Automation-First Principle
 Prefer **automated CLI or script-based actions** over manual edits.
 
-✅ Automated actions  
- e.g. `bunx prisma migrate dev`, `npm run build`, `bunx tsc --noEmit`
+✅ Automated actions
+ e.g. `bunx prisma migrate dev`, `npm run build`, `bunx tsc --noEmit`
 
-❌ Manual edits  
- e.g. editing generated code, copy-pasting build files
+❌ Manual edits
+ e.g. editing generated code, copy-pasting build files
 
 If manual edits are unavoidable:
 - Document **why** automation is unsafe or impossible.
@@ -156,12 +142,12 @@ This ensures reproducibility and consistent automation pipelines.
 
 ### 4. Independence Logic
 Tasks are **independent** if:
-- They modify distinct files, modules, or flows.  
+- They modify distinct files, modules, or flows.
 - Their outputs do not serve as inputs for one another.
 
 Tasks are **dependent** if:
-- One’s output is required for another’s input.
-- One validates or extends another’s behavior.
+- One's output is required for another's input.
+- One validates or extends another's behavior.
 
 Always express dependencies explicitly.
 
@@ -179,7 +165,7 @@ Granularity should scale with complexity — never too fragmented, never too bro
 ---
 
 ### 6. Documentation Rules
-Every `TASK.md` must be self-contained and readable in isolation:
+Every `BLUEPRINT.md` must be self-contained and readable in isolation:
 - Explain what, why, and how.
 - Document assumptions, dependencies, acceptance criteria, and reasoning.
 - Include review and validation checklists.
@@ -205,108 +191,161 @@ This is the **mandatory system-level validation** step.
 
 ---
 
+## INJECTED CONTEXT
+
+### Legacy System Context (Priority 0)
+{{legacySystemContext}}
+
+### Optimized Project Context (Priorities 1-3)
+{{optimizedContext}}
+
+---
+
 ## ⚙️ OUTPUT REQUIREMENTS
 
-### A) `{{claudiomiroFolder}}/TASKX/TASK.md`
+### `{{claudiomiroFolder}}/TASKX/BLUEPRINT.md`
+
 ```markdown
+<!-- BLUEPRINT: Read-only after creation -->
 @dependencies [Tasks]  // Task name MUST BE COMPLETE AND FOLLOW THE PATTERN "TASK{number}"
-# Task: [Concise title]
+@scope [backend|frontend|integration]  // Only required for multi-repo projects
 
-## Summary
-Explain clearly what must be done and why. Focus on reasoning and context.
+# BLUEPRINT: TASKX
 
-## Context Reference
-**For complete environment context, see:**
-- `../AI_PROMPT.md` - Contains full tech stack, architecture, coding conventions, and related code patterns
+## 1. IDENTITY
 
-**Task-Specific Context:**
-[Include ONLY context unique to this specific task - what makes THIS task different]
-- Specific files this task will modify/create: [list with line ranges]
-- Specific patterns this task must follow: [reference with file:line-range]
-- Task-specific constraints or considerations: [unique to this task]
+### This Task IS:
+- [Explicit scope item 1 - what this task WILL accomplish]
+- [Explicit scope item 2 - specific functionality being implemented]
+- [Explicit scope item 3 - files/modules being created or modified]
 
-## Complexity
-Low / Medium / High
+### This Task IS NOT:
+- [Out of scope item 1 with reason why it's excluded]
+- [Out of scope item 2 - clearly state what belongs to other tasks]
 
-## Dependencies
-Depends on: [Tasks]  // Task name MUST BE COMPLETE AND FOLLOW THE PATTERN "TASK{number}"
-Blocks: [Tasks] // Task name MUST BE COMPLETE AND FOLLOW THE PATTERN "TASK{number}"
-Parallel with: [Tasks] // Task name MUST BE COMPLETE AND FOLLOW THE PATTERN "TASK{number}"
+### Anti-Hallucination Anchors:
+- [Condition] → [Action if unmet]
+- Example: "If pattern not found in reference file → BLOCKED"
+- Example: "If dependency function doesn't exist → Create issue, don't invent"
 
-## Detailed Steps
-1. [Detailed steps if needed]
+## 2. CONTEXT CHAIN
 
-## Acceptance Criteria
-- [ ] Clear, testable result #1
-- [ ] ...
+### Priority 0 - LEGACY REFERENCE (If Available):
+[Legacy system paths and files if configured, otherwise "None - no legacy systems configured"]
 
-## Code Review Checklist
-- [ ] Clear naming, no dead code.
-- [ ] Errors handled consistently.
-- [ ] Follows project conventions (see Environment Context above).
-- [ ] ...
+### Priority 1 - READ FIRST (Required):
+- `../AI_PROMPT.md` - Full tech stack, architecture, coding conventions
+- [Critical context files with line numbers specific to this task]
 
-## Reasoning Trace
-Explain design logic and trade-offs.
+### Priority 2 - READ BEFORE CODING:
+- [Pattern reference files with line:range]
+- [Related implementation examples]
+
+### Priority 3 - REFERENCE IF NEEDED:
+- [Supporting files for edge cases]
+- [Documentation or specs]
+
+### Inherited From Dependencies:
+- [Prior task contributions - what TASK0, TASK1 etc. provide]
+- "None" if this is Layer 0 / no dependencies
+
+## 3. EXECUTION CONTRACT
+
+### 3.1 Pre-Conditions (VERIFY BEFORE ANY CODE):
+| Check | Command | Expected |
+|-------|---------|----------|
+| Dependency exists | `test -f path/to/file` | File exists |
+| Module available | `node -e "require('module')"` | No error |
+| Tests pass | `npm test -- --testPathPattern="affected"` | Exit 0 |
+
+**HARD STOP:** If ANY check fails → status: blocked
+
+### 3.2 Success Criteria (VERIFY AFTER COMPLETE):
+| Criterion | Command |
+|-----------|---------|
+| Tests pass | `npm test -- --testPathPattern="module" --silent` |
+| No lint errors | `eslint path/to/files --quiet` |
+| Feature works | [Specific verification command] |
+
+### 3.3 Output Artifacts:
+| Artifact | Type | Path | Verification |
+|----------|------|------|--------------|
+| [File name] | CREATE/MODIFY | [Full path] | `test -f path` |
+
+## 4. IMPLEMENTATION STRATEGY
+
+### Phase 1: Preparation
+1. [Read required context files]
+2. [Verify pre-conditions]
+3. [Set up any required scaffolding]
+
+**Gate:** All pre-conditions verified, context understood
+
+### Phase 2: Core Implementation
+1. [Detailed implementation step 1]
+2. [Detailed implementation step 2]
+3. [Follow pattern from file:line-range]
+
+**Gate:** Core functionality implemented, compiles without errors
+
+### Phase 3: Testing
+1. [Write/update unit tests]
+2. [Run affected tests only]
+3. [Fix any failures]
+
+**Gate:** All affected tests pass
+
+### Phase 4: Integration
+1. [Verify integration points]
+2. [Check imports/exports work]
+3. [Validate with dependent modules]
+
+**Gate:** Integration verified, no breaking changes
+
+### Phase 5: Validation
+1. [Final success criteria check]
+2. [Verify output artifacts exist]
+3. [Mark task complete]
+
+## 5. UNCERTAINTY LOG
+
+| ID | Topic | Assumption | Confidence | Evidence |
+|----|-------|------------|------------|----------|
+| U1 | [Topic] | [What we assume] | LOW/MEDIUM/HIGH | [Why we think this] |
+
+### Stop Rule:
+LOW confidence on critical decision → BLOCKED (do not proceed with guesses)
+
+## 6. INTEGRATION IMPACT
+
+### Files Modified:
+| File | Modification | Who Imports | Impact |
+|------|--------------|-------------|--------|
+| [path] | [What changes] | [Importers] | [Effect] |
+
+### Files Created:
+| File | Imports From | Exports |
+|------|--------------|---------|
+| [path] | [Dependencies] | [Public API] |
+
+### Breaking Changes:
+[None or detailed description of what breaks and migration path]
 ```
 
-🚨 CRITICAL: First line must be @dependencies [...]
-🚨 CRITICAL: Context Reference section must point to AI_PROMPT.md (don't duplicate content)
+🚨 CRITICAL BLUEPRINT RULES:
+- First line must be `<!-- BLUEPRINT: Read-only after creation -->`
+- Second line must be `@dependencies [...]`
+- Third line is `@scope [...]` for multi-repo projects only
+- All 6 sections (IDENTITY, CONTEXT CHAIN, EXECUTION CONTRACT, IMPLEMENTATION STRATEGY, UNCERTAINTY LOG, INTEGRATION IMPACT) are REQUIRED
+- Context Chain must include legacy reference section (even if "None")
+- Pre-conditions table must have at least one verifiable check
+- Anti-hallucination anchors prevent the agent from inventing code
 
-### B) `{{claudiomiroFolder}}/TASKX/PROMPT.md`
-```markdown
-## PROMPT
-Refined AI prompt for execution.
+---
 
-## COMPLEXITY
-Low / Medium / High
+🧩 EXAMPLES (Showing BLUEPRINT Pattern)
 
-## CONTEXT REFERENCE
-**For complete environment context, read:**
-- `{{claudiomiroFolder}}/AI_PROMPT.md` - Contains full tech stack, architecture, project structure, coding conventions, and related code patterns
-
-**You MUST read AI_PROMPT.md before executing this task to understand the environment.**
-
-## TASK-SPECIFIC CONTEXT
-[Include ONLY information unique to this specific task]
-
-### Files This Task Will Touch
-- [Exact files to create/modify with line ranges if applicable]
-
-### Patterns to Follow
-- [Specific code patterns with file:line-range references]
-- [Only patterns directly relevant to this task]
-
-### Integration Points
-- [How this task integrates with other parts of the system]
-- [Dependencies on other tasks or modules]
-
-## EXTRA DOCUMENTATION
-[...]
-
-## LAYER
-0 / 1 / 2 / N
-
-## PARALLELIZATION
-Parallel with: [Tasks]
-
-## CONSTRAINTS
-- IMPORTANT: Do not perform any git commit or git push.
-- Prefer CLI or script-based actions over manual edits
-- Automate everything possible (installation, configuration, generation)
-- Manual edits only when automation is impossible — must be justified
-- Must include automated validation ONLY FOR CHANGED FILES (unit, smoke, or functional tests)
-- Never include global tests or checks.
-- No manual steps or external deployment needed
-- Multi-repo / multi-directory support is fully supported (not a blocker)
-- **Follow conventions from ENVIRONMENT CONTEXT above** - consistency is critical
-```
-
------
-
-🧩 EXAMPLES (Showing Context Reference Pattern)
-
-**Example 1: CRUD Flow - Context References**
+**Example 1: CRUD Flow - BLUEPRINT Structure**
 
 AI_PROMPT.md contains:
 ```
@@ -324,42 +363,45 @@ AI_PROMPT.md contains:
 - Service layer pattern: src/services/userService.ts
 ```
 
-Decomposition:
-- TASK1 – Setup DB schema + base route structure (Layer 0)
-  - **Context Reference:** See ../AI_PROMPT.md for tech stack and conventions
-  - **Task-Specific:** Will create schema.prisma and src/routes/products.ts base
+Decomposition into BLUEPRINTs:
 
-- TASK2 – Create endpoint (Layer 1, parallel)
-  - **Context Reference:** See ../AI_PROMPT.md for tech stack and conventions
-  - **Task-Specific:** Follow create pattern from users.ts:20-35, use userValidator.ts pattern
+**TASK0/BLUEPRINT.md** – Setup DB schema + base route structure (Layer 0)
+```markdown
+<!-- BLUEPRINT: Read-only after creation -->
+@dependencies []
 
-- TASK3 – Read endpoint (Layer 1, parallel)
-  - **Context Reference:** See ../AI_PROMPT.md for tech stack and conventions
-  - **Task-Specific:** Follow read pattern from users.ts:36-50
+# BLUEPRINT: TASK0
 
-- TASK4 – Update endpoint (Layer 1, parallel)
-  - **Context Reference:** See ../AI_PROMPT.md for tech stack and conventions
-  - **Task-Specific:** Follow update pattern from users.ts:51-65
+## 1. IDENTITY
+### This Task IS:
+- Creating Prisma schema for products table
+- Setting up base route file src/routes/products.ts
+- Establishing service layer pattern for products
 
-- TASK5 – Delete endpoint (Layer 1, parallel)
-  - **Context Reference:** See ../AI_PROMPT.md for tech stack and conventions
-  - **Task-Specific:** Follow delete pattern from users.ts:66-80
+### This Task IS NOT:
+- Implementing CRUD operations (TASK1-4)
+- Integration testing (TASK5)
 
-- TASK6 – Integration validation (Layer 2)
-  - **Context Reference:** See ../AI_PROMPT.md for tech stack and conventions
-  - **Task-Specific:** Test all CRUD endpoints together with integration test patterns
+### Anti-Hallucination Anchors:
+- If Prisma schema pattern differs from users model → Follow users model exactly
+- If route structure unclear → Reference users.ts:1-15 for setup pattern
+```
 
-- TASK7 – Final Ω assembly verification
-  - **Context Reference:** See ../AI_PROMPT.md for tech stack and conventions
-  - **Task-Specific:** Cross-validate all endpoints for consistency
+**TASK1/BLUEPRINT.md** – Create endpoint (Layer 1, parallel)
+```markdown
+<!-- BLUEPRINT: Read-only after creation -->
+@dependencies [TASK0]
 
-**Key Pattern:**
-- **Universal context** (tech stack, architecture, conventions) → Referenced from AI_PROMPT.md (NOT copied)
-- **Task-specific context** (which files to touch, which patterns to follow) → Included in each task
-- **References are precise** (file:line-range), not vague ("follow best practices")
-- **No duplication** - context lives in ONE place (AI_PROMPT.md)
+# BLUEPRINT: TASK1
 
-----
+## 1. IDENTITY
+### This Task IS:
+- Implementing POST /api/products endpoint
+- Adding input validation with productValidator
+- Following create pattern from users.ts:20-35
+```
+
+---
 
 🚫 ANTI-PATTERNS
 
@@ -369,51 +411,59 @@ Decomposition:
 ❌ Treating parallel tasks as sequential without cause.
 ❌ Merging distinct requirements into a single task.
 
-**Context Propagation Anti-patterns:**
-❌ **Vague references:** "Follow best practices" instead of "Follow pattern in src/auth.ts:45-60"
-❌ **Missing context reference:** Task doesn't point to AI_PROMPT.md (agent has no way to find context)
-❌ **Copy-paste duplication:** Copying tech stack/conventions from AI_PROMPT.md to every task (bloat, noise, maintenance burden)
-❌ **Lost task-specific context:** Not specifying which files THIS task will touch
-❌ **Assumed knowledge:** "Use the standard approach" (which standard? show me!)
-❌ **Generic guidance:** "Handle errors properly" instead of "Use AppError pattern from src/errors/AppError.ts"
+**BLUEPRINT Anti-patterns:**
+❌ **Missing sections:** Not including all 6 required sections
+❌ **Vague identity:** "Implement the feature" instead of explicit scope
+❌ **No anti-hallucination anchors:** Letting agent invent code without guards
+❌ **Empty pre-conditions:** Not verifying dependencies before coding
+❌ **Copy-paste context:** Duplicating AI_PROMPT.md instead of referencing
+❌ **Missing legacy reference:** Not including Priority 0 section
 
 **Good Practices:**
 ✅ Decompose only when it increases clarity, autonomy, or testability.
 ✅ Each task should represent a single verifiable truth from the user's request.
-✅ **Every task is self-contained:** Agent reads AI_PROMPT.md + TASK.md to have full context.
-✅ **Context is not duplicated:** Universal context lives in AI_PROMPT.md (single source of truth).
-✅ **Task-specific context is included:** Which files to touch, which patterns to follow for THIS task.
-✅ **References are actionable:** Agent knows to read AI_PROMPT.md, then knows exactly what to do.
+✅ **Every BLUEPRINT is self-contained:** Agent reads AI_PROMPT.md + BLUEPRINT.md to have full context.
+✅ **Anti-hallucination anchors prevent guessing:** Agent knows when to stop vs. proceed.
+✅ **Pre-conditions are verifiable:** Commands that return pass/fail.
+✅ **Legacy reference is explicit:** Agent knows if legacy systems exist.
 
-⸻
+---
 
 ## FINAL REQUIREMENT
 
 Before finishing, perform these validations:
 
 ### ✅ Completeness Checklist
-- [ ] Every requirement from AI_PROMPT.md is covered by at least one task
+- [ ] Every requirement from AI_PROMPT.md is covered by at least one BLUEPRINT
 - [ ] No requirements were merged, summarized, or skipped
 - [ ] Final Ω validation task exists and depends on all other tasks
 
-### ✅ Context Reference Checklist (NO DUPLICATION)
-- [ ] **All tasks reference AI_PROMPT.md** for universal context (tech stack, architecture, conventions)
-- [ ] **No tasks duplicate** the environment context from AI_PROMPT.md (reference, don't copy)
-- [ ] **Task-specific context** (files to touch, patterns to follow) is included in each relevant task
-- [ ] References are precise (file:line-range), not vague ("follow best practices")
-- [ ] Each task can be understood by reading AI_PROMPT.md + TASK.md (no other dependencies)
-- [ ] No generic guidance like "handle errors properly" - all guidance is concrete and actionable
+### ✅ BLUEPRINT Structure Checklist
+- [ ] All BLUEPRINTs have read-only header comment
+- [ ] All BLUEPRINTs have @dependencies declaration
+- [ ] All BLUEPRINTs contain all 6 required sections
+- [ ] IDENTITY section has IS, IS NOT, and Anti-Hallucination Anchors
+- [ ] CONTEXT CHAIN includes Priority 0 (legacy) through Priority 3
+- [ ] EXECUTION CONTRACT has pre-conditions, success criteria, and artifacts
+- [ ] IMPLEMENTATION STRATEGY has 5 phases with gates
+- [ ] UNCERTAINTY LOG has stop rule
+- [ ] INTEGRATION IMPACT lists files modified and created
+
+### ✅ Context Reference Checklist
+- [ ] All tasks reference AI_PROMPT.md in Priority 1
+- [ ] Legacy system context appears in Priority 0 (when configured)
+- [ ] Task-specific context (files to touch, patterns to follow) is included
+- [ ] References are precise (file:line-range), not vague
+- [ ] No duplication of universal context from AI_PROMPT.md
 
 ### ✅ Structure Validation
-- [ ] All tasks follow the TASK.md template with Context Reference section (pointing to AI_PROMPT.md)
-- [ ] All prompts follow the PROMPT.md template with CONTEXT REFERENCE section (pointing to AI_PROMPT.md)
 - [ ] Dependencies are correctly declared using TASK{number} format
 - [ ] Layer assignments allow maximum parallelism
-- [ ] All tasks include acceptance criteria and code review checklists
+- [ ] Pre-conditions are verifiable with actual commands
 
 ### 📤 Output
 Output all tasks as Markdown files inside {{claudiomiroFolder}}/TASK{number}/:
-- Each directory contains: TASK.md + PROMPT.md
+- Each directory contains: BLUEPRINT.md (single file)
 - Files are numbered sequentially (TASK0, TASK1, TASK2, ...)
 - Final validation task is named TASKΩ or last numbered task
 
@@ -423,14 +473,17 @@ Output all tasks as Markdown files inside {{claudiomiroFolder}}/TASK{number}/:
 ## OUTPUT
 Multiple directories:
 ```
+   {{claudiomiroFolder}}/TASK0/
+      └── BLUEPRINT.md
    {{claudiomiroFolder}}/TASK1/
+      └── BLUEPRINT.md
    {{claudiomiroFolder}}/TASK2/
+      └── BLUEPRINT.md
    ...
    {{claudiomiroFolder}}/TASKΩ/
+      └── BLUEPRINT.md
 ```
-Each containing:
-	- TASK.md
-	- PROMPT.md
+Each containing a single BLUEPRINT.md file with all 6 sections.
 
 ## PURPOSE
-This process ensures 100% coverage of user intent, full reasoning traceability, and consistent modular execution by autonomous agents.
+This process ensures 100% coverage of user intent, full reasoning traceability, anti-hallucination safeguards, and consistent modular execution by autonomous agents.
