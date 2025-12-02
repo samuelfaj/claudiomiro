@@ -104,6 +104,29 @@ describe('help command', () => {
             expect(output).toContain('--level=2');
             expect(output).toContain('--level=3');
         });
+
+        test('should display legacy system examples', () => {
+            showHelp();
+
+            const output = consoleLogSpy.mock.calls.map(call => call[0] || '').join('\n');
+            expect(output).toContain('--legacy-system=');
+            expect(output).toContain('--legacy-backend=');
+            expect(output).toContain('--legacy-frontend=');
+        });
+
+        test('should mention READ-ONLY for legacy systems', () => {
+            showHelp();
+
+            const output = consoleLogSpy.mock.calls.map(call => call[0] || '').join('\n');
+            expect(output).toContain('READ-ONLY');
+        });
+
+        test('should show legacy flags can be combined', () => {
+            showHelp();
+
+            const output = consoleLogSpy.mock.calls.map(call => call[0] || '').join('\n');
+            expect(output).toContain('Legacy flags can be combined');
+        });
     });
 
     describe('showVersion', () => {
@@ -198,6 +221,27 @@ describe('help command', () => {
             const configCmd = COMMANDS.find(cmd => cmd.name.includes('--config'));
             const keyValueOption = configCmd.options.find(opt => opt.flag.includes('KEY=VALUE'));
             expect(keyValueOption).toBeDefined();
+        });
+
+        test('should have --legacy-system option', () => {
+            const taskExecutor = COMMANDS.find(cmd => cmd.name.includes('claudiomiro [folder]'));
+            const legacySystemOption = taskExecutor.options.find(opt => opt.flag.includes('--legacy-system'));
+            expect(legacySystemOption).toBeDefined();
+            expect(legacySystemOption.description).toContain('READ-ONLY');
+        });
+
+        test('should have --legacy-backend option', () => {
+            const taskExecutor = COMMANDS.find(cmd => cmd.name.includes('claudiomiro [folder]'));
+            const legacyBackendOption = taskExecutor.options.find(opt => opt.flag.includes('--legacy-backend'));
+            expect(legacyBackendOption).toBeDefined();
+            expect(legacyBackendOption.description).toContain('READ-ONLY');
+        });
+
+        test('should have --legacy-frontend option', () => {
+            const taskExecutor = COMMANDS.find(cmd => cmd.name.includes('claudiomiro [folder]'));
+            const legacyFrontendOption = taskExecutor.options.find(opt => opt.flag.includes('--legacy-frontend'));
+            expect(legacyFrontendOption).toBeDefined();
+            expect(legacyFrontendOption.description).toContain('READ-ONLY');
         });
     });
 

@@ -3,6 +3,9 @@ const _path = require('path');
 
 jest.mock('fs');
 jest.mock('../../../../shared/executors/claude-executor');
+jest.mock('../../../../shared/services/legacy-system', () => ({
+    generateLegacySystemContext: jest.fn(() => ''),
+}));
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro/task-executor',
     isMultiRepo: jest.fn(() => false),
@@ -23,6 +26,7 @@ const { step1, generateMultiRepoContext } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
 const state = require('../../../../shared/config/state');
+const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system');
 
 describe('step1', () => {
     beforeEach(() => {
@@ -332,6 +336,164 @@ describe('step1', () => {
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('Base prompt Single-repo task'),
+            );
+        });
+    });
+
+    describe('step1 with legacy system context', () => {
+        test('should include legacy context in prompt when legacy systems configured', async () => {
+            // Arrange
+            const mockLegacyContext = '\n\n## Legacy System Reference\n\n**⚠️ REFERENCE ONLY - DO NOT MODIFY**\n\nLegacy system: /path/to/legacy';
+            generateLegacySystemContext.mockReturnValue(mockLegacyContext);
+            state.isMultiRepo.mockReturnValue(false);
+
+            let existsCallCount = 0;
+            fs.existsSync.mockImplementation((filePath) => {
+                if(filePath.includes('AI_PROMPT.md')) {
+                    existsCallCount++;
+                    return existsCallCount > 1;
+                }
+                if(filePath.includes('INITIAL_PROMPT.md')) return true;
+                if(filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if(filePath.includes('INITIAL_PROMPT.md')) return 'Task with legacy system';
+                if(filePath.includes('prompt.md')) return 'Base prompt {{TASK}}';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step1(true);
+
+            // Assert
+            expect(generateLegacySystemContext).toHaveBeenCalled();
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('## Legacy System Reference'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('⚠️ REFERENCE ONLY - DO NOT MODIFY'),
+            );
+        });
+
+        test('should not include legacy context when no legacy systems configured', async () => {
+            // Arrange
+            generateLegacySystemContext.mockReturnValue('');
+            state.isMultiRepo.mockReturnValue(false);
+
+            let existsCallCount = 0;
+            fs.existsSync.mockImplementation((filePath) => {
+                if(filePath.includes('AI_PROMPT.md')) {
+                    existsCallCount++;
+                    return existsCallCount > 1;
+                }
+                if(filePath.includes('INITIAL_PROMPT.md')) return true;
+                if(filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if(filePath.includes('INITIAL_PROMPT.md')) return 'Task without legacy';
+                if(filePath.includes('prompt.md')) return 'Base prompt {{TASK}}';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step1(true);
+
+            // Assert
+            expect(generateLegacySystemContext).toHaveBeenCalled();
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.not.stringContaining('## Legacy System Reference'),
+            );
+        });
+
+        test('should append legacy context AFTER multi-repo context', async () => {
+            // Arrange
+            const mockLegacyContext = '\n\n## Legacy System Reference\n\nLegacy content here';
+            generateLegacySystemContext.mockReturnValue(mockLegacyContext);
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => `/project/${scope}`);
+            state.getGitMode.mockReturnValue('separate');
+
+            let existsCallCount = 0;
+            fs.existsSync.mockImplementation((filePath) => {
+                if(filePath.includes('AI_PROMPT.md')) {
+                    existsCallCount++;
+                    return existsCallCount > 1;
+                }
+                if(filePath.includes('INITIAL_PROMPT.md')) return true;
+                if(filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if(filePath.includes('INITIAL_PROMPT.md')) return 'Multi-repo task with legacy';
+                if(filePath.includes('prompt.md')) return 'Base prompt {{TASK}}';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step1(true);
+
+            // Assert - legacy context appears AFTER multi-repo context
+            const promptArg = executeClaude.mock.calls[0][0];
+            const multiRepoIndex = promptArg.indexOf('## Multi-Repository Context');
+            const legacyIndex = promptArg.indexOf('## Legacy System Reference');
+            expect(multiRepoIndex).toBeGreaterThan(-1);
+            expect(legacyIndex).toBeGreaterThan(-1);
+            expect(legacyIndex).toBeGreaterThan(multiRepoIndex);
+        });
+
+        test('should combine both multi-repo and legacy contexts correctly', async () => {
+            // Arrange
+            const mockLegacyContext = '\n\n## Legacy System Reference\n\nLegacy system at /legacy';
+            generateLegacySystemContext.mockReturnValue(mockLegacyContext);
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => `/project/${scope}`);
+            state.getGitMode.mockReturnValue('monorepo');
+
+            let existsCallCount = 0;
+            fs.existsSync.mockImplementation((filePath) => {
+                if(filePath.includes('AI_PROMPT.md')) {
+                    existsCallCount++;
+                    return existsCallCount > 1;
+                }
+                if(filePath.includes('INITIAL_PROMPT.md')) return true;
+                if(filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if(filePath.includes('INITIAL_PROMPT.md')) return 'Complex task';
+                if(filePath.includes('prompt.md')) return 'Base prompt {{TASK}}';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step1(true);
+
+            // Assert - both contexts are present
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('## Multi-Repository Context'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('## Legacy System Reference'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('/project/backend'),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('/legacy'),
             );
         });
     });
