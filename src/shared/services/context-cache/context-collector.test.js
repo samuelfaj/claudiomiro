@@ -26,6 +26,7 @@ const {
     getTaskOrder,
     getTaskFolders,
     isTaskCompleted,
+    detectTaskFormat,
     extractContextSummary,
     extractContextSummaryAsync,
     extractResearchPatterns,
@@ -129,17 +130,59 @@ describe('context-collector', () => {
         });
     });
 
-    describe('extractContextSummary', () => {
-        test('should return null if file does not exist', () => {
+    describe('detectTaskFormat', () => {
+        test('should return "new" when BLUEPRINT.md exists', () => {
+            fs.existsSync.mockImplementation((p) => p.includes('BLUEPRINT.md'));
+
+            const format = detectTaskFormat('/test/.claudiomiro/TASK1');
+
+            expect(format).toBe('new');
+        });
+
+        test('should return "old" when BLUEPRINT.md does not exist', () => {
             fs.existsSync.mockReturnValue(false);
 
-            const summary = extractContextSummary('/test/CONTEXT.md');
+            const format = detectTaskFormat('/test/.claudiomiro/TASK1');
+
+            expect(format).toBe('old');
+        });
+
+        test('should return "old" for empty folder', () => {
+            fs.existsSync.mockReturnValue(false);
+
+            const format = detectTaskFormat('/test/.claudiomiro/TASK_EMPTY');
+
+            expect(format).toBe('old');
+        });
+
+        test('should prefer new format when both formats exist', () => {
+            // When BLUEPRINT.md exists, it should return 'new' regardless of old files
+            fs.existsSync.mockImplementation((p) => {
+                return p.includes('BLUEPRINT.md') ||
+                       p.includes('CONTEXT.md') ||
+                       p.includes('RESEARCH.md');
+            });
+
+            const format = detectTaskFormat('/test/.claudiomiro/TASK1');
+
+            expect(format).toBe('new');
+        });
+    });
+
+    describe('extractContextSummary', () => {
+        test('should return null if neither BLUEPRINT.md nor CONTEXT.md exist (old format)', () => {
+            fs.existsSync.mockReturnValue(false);
+
+            const summary = extractContextSummary('/test/.claudiomiro/TASK1');
 
             expect(summary).toBeNull();
         });
 
-        test('should extract files modified and decisions', () => {
-            fs.existsSync.mockReturnValue(true);
+        test('should extract files modified and decisions from CONTEXT.md (old format)', () => {
+            fs.existsSync.mockImplementation((p) => {
+                // BLUEPRINT.md does not exist, CONTEXT.md does
+                return p.includes('CONTEXT.md');
+            });
             fs.readFileSync.mockReturnValue(`
 ## Files Modified
 - src/auth/index.js
@@ -153,25 +196,86 @@ describe('context-collector', () => {
 Content here
 `);
 
-            const summary = extractContextSummary('/test/CONTEXT.md');
+            const summary = extractContextSummary('/test/.claudiomiro/TASK1');
 
             expect(summary.filesModified).toContain('src/auth/index.js');
             expect(summary.decisions).toContain('JWT');
-            expect(summary.fullPath).toBe('/test/CONTEXT.md');
+            expect(summary.fullPath).toContain('CONTEXT.md');
         });
-    });
 
-    describe('extractContextSummaryAsync (with fallback)', () => {
-        test('should return null if file does not exist', async () => {
-            fs.existsSync.mockReturnValue(false);
+        test('should read from execution.json for new format', () => {
+            fs.existsSync.mockImplementation((p) => {
+                return p.includes('BLUEPRINT.md') || p.includes('execution.json');
+            });
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                completion: {
+                    summary: ['Added authentication module', 'Configured JWT tokens'],
+                    deviations: [],
+                    forFutureTasks: [],
+                },
+            }));
 
-            const summary = await extractContextSummaryAsync('/test/CONTEXT.md');
+            const summary = extractContextSummary('/test/.claudiomiro/TASK1');
+
+            expect(summary.summary).toBe('Added authentication module\nConfigured JWT tokens');
+            expect(summary.fullPath).toContain('execution.json');
+        });
+
+        test('should return empty summary when execution.json has empty summary array', () => {
+            fs.existsSync.mockImplementation((p) => {
+                return p.includes('BLUEPRINT.md') || p.includes('execution.json');
+            });
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                completion: {
+                    summary: [],
+                    deviations: [],
+                    forFutureTasks: [],
+                },
+            }));
+
+            const summary = extractContextSummary('/test/.claudiomiro/TASK1');
+
+            expect(summary.summary).toBe('');
+            expect(summary.fullPath).toContain('execution.json');
+        });
+
+        test('should return null when execution.json is malformed', () => {
+            fs.existsSync.mockImplementation((p) => {
+                return p.includes('BLUEPRINT.md') || p.includes('execution.json');
+            });
+            fs.readFileSync.mockReturnValue('{ invalid json }');
+
+            const summary = extractContextSummary('/test/.claudiomiro/TASK1');
 
             expect(summary).toBeNull();
         });
 
-        test('should fallback to heuristic extraction when Ollama unavailable', async () => {
-            fs.existsSync.mockReturnValue(true);
+        test('should return null when execution.json missing but BLUEPRINT.md exists', () => {
+            fs.existsSync.mockImplementation((p) => {
+                // BLUEPRINT.md exists but execution.json doesn't
+                return p.includes('BLUEPRINT.md');
+            });
+
+            const summary = extractContextSummary('/test/.claudiomiro/TASK1');
+
+            expect(summary).toBeNull();
+        });
+    });
+
+    describe('extractContextSummaryAsync (with fallback)', () => {
+        test('should return null if no context files exist (old format)', async () => {
+            fs.existsSync.mockReturnValue(false);
+
+            const summary = await extractContextSummaryAsync('/test/.claudiomiro/TASK1');
+
+            expect(summary).toBeNull();
+        });
+
+        test('should fallback to heuristic extraction when Ollama unavailable (old format)', async () => {
+            fs.existsSync.mockImplementation((p) => {
+                // BLUEPRINT.md does not exist, CONTEXT.md does
+                return p.includes('CONTEXT.md');
+            });
             fs.readFileSync.mockReturnValue(`
 ## Files Modified
 - src/auth/index.js
@@ -180,22 +284,42 @@ Content here
 - Used JWT
 `);
 
-            const summary = await extractContextSummaryAsync('/test/CONTEXT.md');
+            const summary = await extractContextSummaryAsync('/test/.claudiomiro/TASK1');
 
             // Should use fallback (heuristic extraction)
             expect(summary.filesModified).toContain('src/auth/index.js');
             expect(summary.decisions).toContain('JWT');
-            expect(summary.fullPath).toBe('/test/CONTEXT.md');
+            expect(summary.fullPath).toContain('CONTEXT.md');
             expect(summary.llmEnhanced).toBeUndefined(); // No LLM enhancement
         });
 
-        test('should include fullPath in result', async () => {
-            fs.existsSync.mockReturnValue(true);
+        test('should include fullPath in result (old format)', async () => {
+            fs.existsSync.mockImplementation((p) => p.includes('CONTEXT.md'));
             fs.readFileSync.mockReturnValue('## Files Modified\n- test.js');
 
-            const summary = await extractContextSummaryAsync('/test/path/CONTEXT.md');
+            const summary = await extractContextSummaryAsync('/test/.claudiomiro/TASK1');
 
-            expect(summary.fullPath).toBe('/test/path/CONTEXT.md');
+            expect(summary.fullPath).toContain('CONTEXT.md');
+        });
+
+        test('should read from execution.json for new format (skip LLM)', async () => {
+            fs.existsSync.mockImplementation((p) => {
+                return p.includes('BLUEPRINT.md') || p.includes('execution.json');
+            });
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                completion: {
+                    summary: ['Implemented new feature', 'Added tests'],
+                    deviations: [],
+                    forFutureTasks: [],
+                },
+            }));
+
+            const summary = await extractContextSummaryAsync('/test/.claudiomiro/TASK1');
+
+            // Should skip LLM and return execution.json data directly
+            expect(summary.summary).toBe('Implemented new feature\nAdded tests');
+            expect(summary.fullPath).toContain('execution.json');
+            expect(summary.llmEnhanced).toBeUndefined(); // No LLM for new format
         });
     });
 
@@ -480,8 +604,11 @@ More content
     });
 
     describe('markTaskCompleted', () => {
-        test('should add task to cache with summary', () => {
-            fs.existsSync.mockReturnValue(true);
+        test('should add task to cache with summary (old format)', () => {
+            fs.existsSync.mockImplementation((p) => {
+                // Old format: no BLUEPRINT.md, but CONTEXT.md and RESEARCH.md exist
+                return p.includes('CONTEXT.md') || p.includes('RESEARCH.md');
+            });
             fs.readFileSync.mockImplementation((p) => {
                 if (p.includes('CONTEXT.md')) return '## Files Modified\n- test.js';
                 if (p.includes('RESEARCH.md')) return '## Patterns\n- testing';
@@ -495,6 +622,41 @@ More content
                 'TASK1',
                 expect.objectContaining({
                     completedAt: expect.any(String),
+                }),
+            );
+        });
+
+        test('should extract summary from execution.json for new format', () => {
+            fs.existsSync.mockImplementation((p) => {
+                // New format: BLUEPRINT.md and execution.json exist
+                return p.includes('BLUEPRINT.md') ||
+                       p.includes('execution.json') ||
+                       p.includes('RESEARCH.md');
+            });
+            fs.readFileSync.mockImplementation((p) => {
+                if (p.includes('execution.json')) {
+                    return JSON.stringify({
+                        completion: {
+                            summary: ['Implemented feature X', 'Added tests'],
+                            deviations: [],
+                            forFutureTasks: [],
+                        },
+                    });
+                }
+                if (p.includes('RESEARCH.md')) return '## Patterns\n- testing';
+                return '';
+            });
+
+            markTaskCompleted(mockClaudiomiroFolder, 'TASK1');
+
+            expect(cacheManager.addCompletedTask).toHaveBeenCalledWith(
+                mockClaudiomiroFolder,
+                'TASK1',
+                expect.objectContaining({
+                    completedAt: expect.any(String),
+                    context: expect.objectContaining({
+                        summary: 'Implemented feature X\nAdded tests',
+                    }),
                 }),
             );
         });
@@ -540,6 +702,72 @@ More content
             });
 
             expect(paths).toEqual([]);
+        });
+
+        test('should return BLUEPRINT.md + execution.json for new format tasks', () => {
+            fs.existsSync.mockImplementation((p) => {
+                if (p.includes('BLUEPRINT.md')) return true;
+                if (p.includes('execution.json')) return true;
+                if (p.includes('TODO.md')) return true;
+                if (p === mockClaudiomiroFolder) return true;
+                return false;
+            });
+            fs.readdirSync.mockReturnValue(['TASK1']);
+            fs.statSync.mockReturnValue({ isDirectory: () => true });
+            fs.readFileSync.mockReturnValue('Fully implemented: YES');
+
+            const paths = getContextFilePaths(mockClaudiomiroFolder, 'TASK2');
+
+            expect(paths.some(p => p.includes('BLUEPRINT.md'))).toBe(true);
+            expect(paths.some(p => p.includes('execution.json'))).toBe(true);
+            // Old format files should NOT be included for new format tasks
+            expect(paths.some(p => p.includes('CONTEXT.md'))).toBe(false);
+            expect(paths.some(p => p.includes('RESEARCH.md'))).toBe(false);
+        });
+
+        test('should filter out non-existent files for new format', () => {
+            fs.existsSync.mockImplementation((p) => {
+                // BLUEPRINT.md exists but execution.json doesn't
+                if (p.includes('BLUEPRINT.md')) return true;
+                if (p.includes('TODO.md')) return true;
+                if (p === mockClaudiomiroFolder) return true;
+                return false;
+            });
+            fs.readdirSync.mockReturnValue(['TASK1']);
+            fs.statSync.mockReturnValue({ isDirectory: () => true });
+            fs.readFileSync.mockReturnValue('Fully implemented: YES');
+
+            const paths = getContextFilePaths(mockClaudiomiroFolder, 'TASK2');
+
+            expect(paths.some(p => p.includes('BLUEPRINT.md'))).toBe(true);
+            expect(paths.some(p => p.includes('execution.json'))).toBe(false);
+        });
+
+        test('should handle mixed old and new format tasks', () => {
+            // Set up so TASK1 has new format, TASK2 has old format
+            fs.existsSync.mockImplementation((p) => {
+                if (p === mockClaudiomiroFolder) return true;
+                if (p.includes('TODO.md')) return true;
+                // TASK1 - new format
+                if (p.includes('TASK1') && p.includes('BLUEPRINT.md')) return true;
+                if (p.includes('TASK1') && p.includes('execution.json')) return true;
+                // TASK2 - old format
+                if (p.includes('TASK2') && p.includes('CONTEXT.md')) return true;
+                if (p.includes('TASK2') && p.includes('RESEARCH.md')) return true;
+                return false;
+            });
+            fs.readdirSync.mockReturnValue(['TASK1', 'TASK2']);
+            fs.statSync.mockReturnValue({ isDirectory: () => true });
+            fs.readFileSync.mockReturnValue('Fully implemented: YES');
+
+            const paths = getContextFilePaths(mockClaudiomiroFolder, 'TASK3');
+
+            // TASK1 (new format) should have BLUEPRINT.md + execution.json
+            expect(paths.some(p => p.includes('TASK1') && p.includes('BLUEPRINT.md'))).toBe(true);
+            expect(paths.some(p => p.includes('TASK1') && p.includes('execution.json'))).toBe(true);
+            // TASK2 (old format) should have CONTEXT.md + RESEARCH.md
+            expect(paths.some(p => p.includes('TASK2') && p.includes('CONTEXT.md'))).toBe(true);
+            expect(paths.some(p => p.includes('TASK2') && p.includes('RESEARCH.md'))).toBe(true);
         });
     });
 

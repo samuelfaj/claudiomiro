@@ -94,11 +94,60 @@ const isTaskCompleted = (claudiomiroFolder, taskId) => {
 };
 
 /**
- * Extracts summary from a CONTEXT.md file (sync, heuristic version)
- * @param {string} contextPath - Path to CONTEXT.md
+ * Detects if a task folder uses the new format (BLUEPRINT.md + execution.json)
+ * or old format (CONTEXT.md + RESEARCH.md + TODO.md)
+ * @param {string} taskFolder - Full path to task folder
+ * @returns {'new' | 'old'} Format identifier
+ */
+const detectTaskFormat = (taskFolder) => {
+    const blueprintPath = path.join(taskFolder, 'BLUEPRINT.md');
+    return fs.existsSync(blueprintPath) ? 'new' : 'old';
+};
+
+/**
+ * Extracts summary from execution.json completion section (internal helper)
+ * @param {string} executionPath - Path to execution.json
+ * @returns {object|null} Summary object or null if missing/malformed
+ */
+const extractContextSummaryFromExecutionJson = (executionPath) => {
+    if (!fs.existsSync(executionPath)) {
+        return null;
+    }
+
+    try {
+        const content = fs.readFileSync(executionPath, 'utf8');
+        const execution = JSON.parse(content);
+
+        if (execution.completion && Array.isArray(execution.completion.summary)) {
+            return {
+                summary: execution.completion.summary.join('\n'),
+                fullPath: executionPath,
+            };
+        }
+        // completion.summary exists but empty
+        return { summary: '', fullPath: executionPath };
+    } catch {
+        // JSON parse error - return null
+        return null;
+    }
+};
+
+/**
+ * Extracts summary from a task folder - handles both new and old formats
+ * @param {string} taskFolder - Full path to task folder
  * @returns {object|null} Summary object or null
  */
-const extractContextSummary = (contextPath) => {
+const extractContextSummary = (taskFolder) => {
+    const format = detectTaskFormat(taskFolder);
+
+    if (format === 'new') {
+        // New format: read from execution.json
+        const executionPath = path.join(taskFolder, 'execution.json');
+        return extractContextSummaryFromExecutionJson(executionPath);
+    }
+
+    // Old format: read from CONTEXT.md
+    const contextPath = path.join(taskFolder, 'CONTEXT.md');
     if (!fs.existsSync(contextPath)) {
         return null;
     }
@@ -126,13 +175,23 @@ const extractContextSummaryFromContent = (content, contextPath = '') => {
 };
 
 /**
- * Extracts summary from a CONTEXT.md file using LLM for better summarization
+ * Extracts summary from a task folder using LLM for better summarization
  * Falls back to heuristic extraction if LLM unavailable
- * @param {string} contextPath - Path to CONTEXT.md
+ * @param {string} taskFolder - Full path to task folder
  * @param {string} taskDescription - Optional task context for relevance
  * @returns {Promise<object|null>} Summary object or null
  */
-const extractContextSummaryAsync = async (contextPath, _taskDescription = null) => {
+const extractContextSummaryAsync = async (taskFolder, _taskDescription = null) => {
+    const format = detectTaskFormat(taskFolder);
+
+    if (format === 'new') {
+        // New format: read from execution.json (skip LLM - data already structured)
+        const executionPath = path.join(taskFolder, 'execution.json');
+        return extractContextSummaryFromExecutionJson(executionPath);
+    }
+
+    // Old format: read from CONTEXT.md with optional LLM enhancement
+    const contextPath = path.join(taskFolder, 'CONTEXT.md');
     if (!fs.existsSync(contextPath)) {
         return null;
     }
@@ -468,23 +527,32 @@ const getIncrementalContext = (claudiomiroFolder, currentTask, options = {}) => 
 
         if (!isTaskCompleted(claudiomiroFolder, taskId)) continue;
 
-        const contextPath = path.join(claudiomiroFolder, taskId, 'CONTEXT.md');
-        const researchPath = path.join(claudiomiroFolder, taskId, 'RESEARCH.md');
+        const taskFolder = path.join(claudiomiroFolder, taskId);
+        const researchPath = path.join(taskFolder, 'RESEARCH.md');
 
         // Determine if this is a "new" task (processed after lastProcessed)
         const isNewTask = taskOrder > lastProcessedOrder;
 
         if (isNewTask) {
-            // Full summary for new tasks
+            // Full summary for new tasks - extractContextSummary now takes taskFolder
             context.newTasks[taskId] = {
-                context: extractContextSummary(contextPath),
+                context: extractContextSummary(taskFolder),
                 research: extractResearchPatterns(researchPath),
             };
         }
 
-        // Add to context files list
-        if (fs.existsSync(contextPath)) {
-            context.contextFiles.push(contextPath);
+        // Add to context files list - check format for appropriate file
+        const format = detectTaskFormat(taskFolder);
+        if (format === 'new') {
+            const blueprintPath = path.join(taskFolder, 'BLUEPRINT.md');
+            if (fs.existsSync(blueprintPath)) {
+                context.contextFiles.push(blueprintPath);
+            }
+        } else {
+            const contextPath = path.join(taskFolder, 'CONTEXT.md');
+            if (fs.existsSync(contextPath)) {
+                context.contextFiles.push(contextPath);
+            }
         }
     }
 
@@ -585,15 +653,16 @@ const buildConsolidatedContextAsync = async (claudiomiroFolder, currentTask, pro
 
 /**
  * Marks a task as completed and updates cache
+ * Handles both new format (execution.json) and old format (CONTEXT.md)
  * @param {string} claudiomiroFolder - Path to .claudiomiro folder
  * @param {string} taskId - Task identifier
  */
 const markTaskCompleted = (claudiomiroFolder, taskId) => {
-    const contextPath = path.join(claudiomiroFolder, taskId, 'CONTEXT.md');
-    const researchPath = path.join(claudiomiroFolder, taskId, 'RESEARCH.md');
+    const taskFolder = path.join(claudiomiroFolder, taskId);
+    const researchPath = path.join(taskFolder, 'RESEARCH.md');
 
     const taskSummary = {
-        context: extractContextSummary(contextPath),
+        context: extractContextSummary(taskFolder),
         research: extractResearchPatterns(researchPath),
         completedAt: new Date().toISOString(),
     };
@@ -707,6 +776,7 @@ const getFileSummary = async (projectFolder, filePath) => {
 
 /**
  * Gets context file paths without reading content (for reference only)
+ * Handles both new format (BLUEPRINT.md + execution.json) and old format (CONTEXT.md + RESEARCH.md)
  * @param {string} claudiomiroFolder - Path to .claudiomiro folder
  * @param {string} currentTask - Current task
  * @param {object} options - Filter options
@@ -733,26 +803,43 @@ const getContextFilePaths = (claudiomiroFolder, currentTask, options = {}) => {
             continue;
         }
 
-        if (includeContext) {
-            const contextPath = path.join(taskPath, 'CONTEXT.md');
-            if (fs.existsSync(contextPath)) {
-                paths.push(contextPath);
-            }
-        }
+        // Detect format for this task
+        const format = detectTaskFormat(taskPath);
 
-        if (includeResearch) {
-            const researchPath = path.join(taskPath, 'RESEARCH.md');
-            if (fs.existsSync(researchPath)) {
-                paths.push(researchPath);
-            }
-        }
+        if (format === 'new') {
+            // New format: return BLUEPRINT.md + execution.json
+            const blueprintPath = path.join(taskPath, 'BLUEPRINT.md');
+            const executionPath = path.join(taskPath, 'execution.json');
 
-        if (includeTodo) {
-            const todoPath = path.join(taskPath, 'TODO.md');
-            if (fs.existsSync(todoPath)) {
-                const content = fs.readFileSync(todoPath, 'utf8');
-                if (content.startsWith('Fully implemented: YES')) {
-                    paths.push(todoPath);
+            if (fs.existsSync(blueprintPath)) {
+                paths.push(blueprintPath);
+            }
+            if (fs.existsSync(executionPath)) {
+                paths.push(executionPath);
+            }
+        } else {
+            // Old format: CONTEXT.md + RESEARCH.md + TODO.md
+            if (includeContext) {
+                const contextPath = path.join(taskPath, 'CONTEXT.md');
+                if (fs.existsSync(contextPath)) {
+                    paths.push(contextPath);
+                }
+            }
+
+            if (includeResearch) {
+                const researchPath = path.join(taskPath, 'RESEARCH.md');
+                if (fs.existsSync(researchPath)) {
+                    paths.push(researchPath);
+                }
+            }
+
+            if (includeTodo) {
+                const todoPath = path.join(taskPath, 'TODO.md');
+                if (fs.existsSync(todoPath)) {
+                    const content = fs.readFileSync(todoPath, 'utf8');
+                    if (content.startsWith('Fully implemented: YES')) {
+                        paths.push(todoPath);
+                    }
                 }
             }
         }
@@ -916,6 +1003,8 @@ module.exports = {
     getTaskOrder,
     getTaskFolders,
     isTaskCompleted,
+    // Format detection
+    detectTaskFormat,
     // Context extraction (sync + async with LLM)
     extractContextSummary,
     extractContextSummaryAsync,
