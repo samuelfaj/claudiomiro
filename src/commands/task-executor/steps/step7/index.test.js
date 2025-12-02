@@ -7,6 +7,7 @@ jest.mock('path');
 jest.mock('child_process');
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro/task-executor',
+    _claudiomiroRoot: '/test/.claudiomiro/task-executor',
     folder: '/test',
     branch: 'test-branch',
     isMultiRepo: jest.fn(() => false),
@@ -43,6 +44,7 @@ describe('step7', () => {
 
         // Default state
         state.claudiomiroFolder = '/test/.claudiomiro/task-executor';
+        state._claudiomiroRoot = '/test/.claudiomiro/task-executor';
         state.folder = '/test';
         state.branch = 'test-branch';
         state.isMultiRepo.mockReturnValue(false);

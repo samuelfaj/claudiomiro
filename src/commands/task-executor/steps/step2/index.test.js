@@ -14,6 +14,8 @@ jest.mock('../../../../shared/utils/logger', () => ({
     error: jest.fn(),
     warning: jest.fn(),
     warn: jest.fn(),
+    debug: jest.fn(),
+    info: jest.fn(),
 }));
 
 // Import after mocks are defined

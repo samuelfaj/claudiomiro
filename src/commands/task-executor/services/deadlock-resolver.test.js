@@ -1,5 +1,3 @@
-const { detectCycles, parseDependencies, rebuildTaskGraphFromFiles, resolveDeadlock } = require('./deadlock-resolver');
-
 // Mock dependencies
 jest.mock('fs');
 jest.mock('../../../shared/executors/claude-executor');
@@ -7,6 +5,13 @@ jest.mock('../../../shared/utils/logger');
 jest.mock('../../../shared/config/state', () => ({
     claudiomiroFolder: '/mock/claudiomiro',
 }));
+
+// Mock local-llm to avoid Ollama connection attempts
+jest.mock('../../../shared/services/local-llm', () => ({
+    getLocalLLMService: jest.fn(() => null),
+}));
+
+const { detectCycles, parseDependencies, rebuildTaskGraphFromFiles, resolveDeadlock } = require('./deadlock-resolver');
 
 const fs = require('fs');
 const { executeClaude } = require('../../../shared/executors/claude-executor');
