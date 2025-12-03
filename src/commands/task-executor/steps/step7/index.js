@@ -4,37 +4,40 @@ const { execSync } = require('child_process');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { run: runFixBranch } = require('../../../fix-branch');
-const { verifyIntegration } = require('../../../../shared/services/integration-verifier');
+const { verifyAndFixIntegration } = require('../../../../shared/services/integration-verifier');
 
 /**
- * Runs integration verification for multi-repo projects
+ * Runs integration verification for multi-repo projects with auto-fix
+ * @param {number} [maxFixAttempts=3] - Maximum number of auto-fix attempts
  * @returns {Promise<void>}
- * @throws {Error} If verification fails with mismatch details
+ * @throws {Error} If verification fails after all fix attempts
  */
-const runIntegrationVerification = async () => {
+const runIntegrationVerification = async (maxFixAttempts = 3) => {
     if (!state.isMultiRepo()) {
         return; // Single-repo mode: skip verification
     }
 
     logger.info('Running integration verification for multi-repo project...');
 
-    const result = await verifyIntegration({
+    const result = await verifyAndFixIntegration({
         backendPath: state.getRepository('backend'),
         frontendPath: state.getRepository('frontend'),
+        maxIterations: maxFixAttempts,
     });
 
     if (!result.success) {
         const errorDetails = result.mismatches
-            .map(m => `  - ${m.type}: ${m.description}`)
-            .join('\n');
+            ? result.mismatches.map(m => `  - ${m.type}: ${m.description}`).join('\n')
+            : '  - No detailed mismatch information available';
 
         throw new Error(
-            `Integration verification failed:\n${errorDetails}\n\n` +
-            'Please fix the API mismatches before proceeding.',
+            `Integration verification failed after ${result.iterations} attempt(s):\n${errorDetails}\n\n` +
+            'Auto-fix was unable to resolve all API mismatches.\n' +
+            'Please fix the remaining mismatches manually before proceeding.',
         );
     }
 
-    logger.info('Integration verification passed');
+    logger.info(`✅ ${result.message}`);
 };
 
 /**

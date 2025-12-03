@@ -23,7 +23,7 @@ jest.mock('../../../fix-branch', () => ({
     run: jest.fn(),
 }));
 jest.mock('../../../../shared/services/integration-verifier', () => ({
-    verifyIntegration: jest.fn(),
+    verifyAndFixIntegration: jest.fn(),
 }));
 
 // Import after mocks
@@ -31,7 +31,7 @@ const { step7, runIntegrationVerification } = require('./index');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { run: runFixBranch } = require('../../../fix-branch');
-const { verifyIntegration } = require('../../../../shared/services/integration-verifier');
+const { verifyAndFixIntegration } = require('../../../../shared/services/integration-verifier');
 
 describe('step7', () => {
     const passedPath = '/test/.claudiomiro/task-executor/CRITICAL_REVIEW_PASSED.md';
@@ -61,7 +61,7 @@ describe('step7', () => {
         runFixBranch.mockResolvedValue();
 
         // Default integration-verifier mock
-        verifyIntegration.mockResolvedValue({ success: true, mismatches: [] });
+        verifyAndFixIntegration.mockResolvedValue({ success: true, iterations: 1, message: 'Integration verification passed on first check' });
     });
 
     describe('Skip Conditions', () => {
@@ -491,34 +491,40 @@ describe('step7', () => {
         });
     });
 
-    describe('Integration Verification', () => {
+    describe('Integration Verification with Auto-Fix', () => {
         test('should skip integration verification in single-repo mode', async () => {
             state.isMultiRepo.mockReturnValue(false);
 
             await runIntegrationVerification();
 
-            expect(verifyIntegration).not.toHaveBeenCalled();
+            expect(verifyAndFixIntegration).not.toHaveBeenCalled();
             expect(logger.info).not.toHaveBeenCalledWith('Running integration verification for multi-repo project...');
         });
 
-        test('should run integration verification in multi-repo mode', async () => {
+        test('should run integration verification with auto-fix in multi-repo mode', async () => {
             state.isMultiRepo.mockReturnValue(true);
-            verifyIntegration.mockResolvedValue({ success: true, mismatches: [] });
+            verifyAndFixIntegration.mockResolvedValue({
+                success: true,
+                iterations: 1,
+                message: 'Integration verification passed on first check',
+            });
 
             await runIntegrationVerification();
 
-            expect(verifyIntegration).toHaveBeenCalledWith({
+            expect(verifyAndFixIntegration).toHaveBeenCalledWith({
                 backendPath: '/backend',
                 frontendPath: '/frontend',
+                maxIterations: 3,
             });
             expect(logger.info).toHaveBeenCalledWith('Running integration verification for multi-repo project...');
-            expect(logger.info).toHaveBeenCalledWith('Integration verification passed');
+            expect(logger.info).toHaveBeenCalledWith('✅ Integration verification passed on first check');
         });
 
-        test('should throw error when integration verification fails', async () => {
+        test('should throw error when auto-fix fails after all attempts', async () => {
             state.isMultiRepo.mockReturnValue(true);
-            verifyIntegration.mockResolvedValue({
+            verifyAndFixIntegration.mockResolvedValue({
                 success: false,
+                iterations: 3,
                 mismatches: [
                     {
                         type: 'endpoint_mismatch',
@@ -527,16 +533,18 @@ describe('step7', () => {
                         frontendFile: 'api.js',
                     },
                 ],
+                message: 'Integration verification failed after 3 fix attempts',
             });
 
-            await expect(runIntegrationVerification()).rejects.toThrow('Integration verification failed:');
+            await expect(runIntegrationVerification()).rejects.toThrow('Integration verification failed after 3 attempt(s):');
             await expect(runIntegrationVerification()).rejects.toThrow('endpoint_mismatch: Frontend calls /api/users but backend only has /api/user');
         });
 
         test('should format multiple mismatches in error message', async () => {
             state.isMultiRepo.mockReturnValue(true);
-            verifyIntegration.mockResolvedValue({
+            verifyAndFixIntegration.mockResolvedValue({
                 success: false,
+                iterations: 2,
                 mismatches: [
                     {
                         type: 'endpoint_mismatch',
@@ -551,20 +559,23 @@ describe('step7', () => {
                         frontendFile: 'components/Form.tsx',
                     },
                 ],
+                message: 'Integration verification failed after 2 fix attempts',
             });
 
             await expect(runIntegrationVerification()).rejects.toThrow('endpoint_mismatch: Endpoint /api/v1/items not found');
             await expect(runIntegrationVerification()).rejects.toThrow('payload_mismatch: Frontend sends { name } but backend expects { title }');
         });
 
-        test('should include fix instruction in error message', async () => {
+        test('should include auto-fix failure message in error', async () => {
             state.isMultiRepo.mockReturnValue(true);
-            verifyIntegration.mockResolvedValue({
+            verifyAndFixIntegration.mockResolvedValue({
                 success: false,
+                iterations: 3,
                 mismatches: [{ type: 'test', description: 'test issue', backendFile: null, frontendFile: null }],
+                message: 'Integration verification failed after 3 fix attempts',
             });
 
-            await expect(runIntegrationVerification()).rejects.toThrow('Please fix the API mismatches before proceeding.');
+            await expect(runIntegrationVerification()).rejects.toThrow('Auto-fix was unable to resolve all API mismatches');
         });
 
         test('should call integration verification after fix-branch in step7', async () => {
@@ -576,16 +587,20 @@ describe('step7', () => {
                 return false;
             });
             execSync.mockReturnValue('M src/test.js');
-            verifyIntegration.mockResolvedValue({ success: true, mismatches: [] });
+            verifyAndFixIntegration.mockResolvedValue({
+                success: true,
+                iterations: 2,
+                message: 'Integration verification passed after 1 fix attempt(s)',
+            });
 
             await step7();
 
             expect(runFixBranch).toHaveBeenCalled();
-            expect(verifyIntegration).toHaveBeenCalled();
+            expect(verifyAndFixIntegration).toHaveBeenCalled();
             expect(logger.success).toHaveBeenCalledWith('✅ Step 7 completed - Critical review passed!');
         });
 
-        test('should fail step7 when integration verification fails', async () => {
+        test('should fail step7 when integration auto-fix fails', async () => {
             state.isMultiRepo.mockReturnValue(true);
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('CRITICAL_REVIEW_PASSED.md')) return false;
@@ -594,12 +609,14 @@ describe('step7', () => {
                 return false;
             });
             execSync.mockReturnValue('M src/test.js');
-            verifyIntegration.mockResolvedValue({
+            verifyAndFixIntegration.mockResolvedValue({
                 success: false,
+                iterations: 3,
                 mismatches: [{ type: 'test_error', description: 'API mismatch detected', backendFile: null, frontendFile: null }],
+                message: 'Integration verification failed after 3 fix attempts',
             });
 
-            await expect(step7()).rejects.toThrow('Integration verification failed:');
+            await expect(step7()).rejects.toThrow('Integration verification failed after 3 attempt(s):');
             expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('Step 7 failed:'));
         });
 
@@ -612,7 +629,7 @@ describe('step7', () => {
 
             await step7();
 
-            expect(verifyIntegration).not.toHaveBeenCalled();
+            expect(verifyAndFixIntegration).not.toHaveBeenCalled();
         });
 
         test('should use state.getRepository to get paths', async () => {
@@ -622,15 +639,49 @@ describe('step7', () => {
                 if (scope === 'frontend') return '/custom/frontend/path';
                 return '/default';
             });
-            verifyIntegration.mockResolvedValue({ success: true, mismatches: [] });
+            verifyAndFixIntegration.mockResolvedValue({
+                success: true,
+                iterations: 1,
+                message: 'Integration verification passed on first check',
+            });
 
             await runIntegrationVerification();
 
             expect(state.getRepository).toHaveBeenCalledWith('backend');
             expect(state.getRepository).toHaveBeenCalledWith('frontend');
-            expect(verifyIntegration).toHaveBeenCalledWith({
+            expect(verifyAndFixIntegration).toHaveBeenCalledWith({
                 backendPath: '/custom/backend/path',
                 frontendPath: '/custom/frontend/path',
+                maxIterations: 3,
+            });
+        });
+
+        test('should handle result without mismatches array gracefully', async () => {
+            state.isMultiRepo.mockReturnValue(true);
+            verifyAndFixIntegration.mockResolvedValue({
+                success: false,
+                iterations: 1,
+                message: 'Fix attempt failed: no fixable mismatches',
+                // No mismatches array
+            });
+
+            await expect(runIntegrationVerification()).rejects.toThrow('No detailed mismatch information available');
+        });
+
+        test('should accept custom maxFixAttempts parameter', async () => {
+            state.isMultiRepo.mockReturnValue(true);
+            verifyAndFixIntegration.mockResolvedValue({
+                success: true,
+                iterations: 1,
+                message: 'Integration verification passed on first check',
+            });
+
+            await runIntegrationVerification(5);
+
+            expect(verifyAndFixIntegration).toHaveBeenCalledWith({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+                maxIterations: 5,
             });
         });
     });

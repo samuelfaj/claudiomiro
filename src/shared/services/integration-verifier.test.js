@@ -3,7 +3,10 @@ const path = require('path');
 const { executeClaude } = require('../executors/claude-executor');
 const {
     verifyIntegration,
+    verifyAndFixIntegration,
+    fixIntegrationMismatches,
     buildVerificationPrompt,
+    buildFixPrompt,
     parseVerificationResult,
     extractBalancedJson,
 } = require('./integration-verifier');
@@ -295,6 +298,247 @@ describe('integration-verifier', () => {
 
             expect(result.success).toBe(false);
             expect(result.mismatches[0].type).toBe('parse_error');
+        });
+    });
+
+    describe('buildFixPrompt', () => {
+        test('should include backend and frontend paths', () => {
+            const prompt = buildFixPrompt('/path/to/backend', '/path/to/frontend', []);
+            expect(prompt).toContain('/path/to/backend');
+            expect(prompt).toContain('/path/to/frontend');
+        });
+
+        test('should include all mismatches in numbered list', () => {
+            const mismatches = [
+                { type: 'endpoint_mismatch', description: 'Missing GET endpoint', backendFile: 'api.js', frontendFile: 'hooks.ts' },
+                { type: 'payload_mismatch', description: 'Wrong HTTP method', backendFile: null, frontendFile: 'service.ts' },
+            ];
+
+            const prompt = buildFixPrompt('/backend', '/frontend', mismatches);
+
+            expect(prompt).toContain('1. **endpoint_mismatch**: Missing GET endpoint');
+            expect(prompt).toContain('2. **payload_mismatch**: Wrong HTTP method');
+            expect(prompt).toContain('Backend file: api.js');
+            expect(prompt).toContain('Frontend file: hooks.ts');
+            expect(prompt).toContain('Backend file: N/A');
+        });
+
+        test('should include decision rules for fixing', () => {
+            const prompt = buildFixPrompt('/backend', '/frontend', []);
+
+            expect(prompt).toContain('endpoint_mismatch (missing GET endpoints)');
+            expect(prompt).toContain('payload_mismatch (wrong HTTP method)');
+            expect(prompt).toContain('endpoint_mismatch (path prefix issues)');
+            expect(prompt).toContain('response_mismatch');
+        });
+
+        test('should include critical rules', () => {
+            const prompt = buildFixPrompt('/backend', '/frontend', []);
+
+            expect(prompt).toContain('**MUST** fix ALL mismatches');
+            expect(prompt).toContain('**MUST** read files before modifying');
+            expect(prompt).toContain('**PREFER** fixing frontend over backend');
+        });
+    });
+
+    describe('fixIntegrationMismatches', () => {
+        test('should return success when Claude executes without error', async () => {
+            executeClaude.mockResolvedValue(undefined);
+
+            const result = await fixIntegrationMismatches({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+                mismatches: [
+                    { type: 'endpoint_mismatch', description: 'Missing endpoint' },
+                ],
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.fixedCount).toBe(1);
+        });
+
+        test('should call executeClaude with integration-fix context', async () => {
+            executeClaude.mockResolvedValue(undefined);
+
+            await fixIntegrationMismatches({
+                backendPath: '/my/backend',
+                frontendPath: '/my/frontend',
+                mismatches: [{ type: 'payload_mismatch', description: 'Wrong method' }],
+            });
+
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('Wrong method'),
+                'integration-fix',
+                { cwd: '/my/backend' },
+            );
+        });
+
+        test('should filter out parse_error mismatches', async () => {
+            executeClaude.mockResolvedValue(undefined);
+
+            const result = await fixIntegrationMismatches({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+                mismatches: [
+                    { type: 'parse_error', description: 'Failed to parse' },
+                    { type: 'endpoint_mismatch', description: 'Missing endpoint' },
+                ],
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.fixedCount).toBe(1);
+        });
+
+        test('should return failure when only parse errors exist', async () => {
+            const result = await fixIntegrationMismatches({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+                mismatches: [
+                    { type: 'parse_error', description: 'Failed to parse' },
+                    { type: 'execution_error', description: 'Claude failed' },
+                ],
+            });
+
+            expect(result.success).toBe(false);
+            expect(result.message).toContain('No fixable mismatches');
+            expect(executeClaude).not.toHaveBeenCalled();
+        });
+
+        test('should return failure when executeClaude throws', async () => {
+            executeClaude.mockRejectedValue(new Error('Claude crashed'));
+
+            const result = await fixIntegrationMismatches({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+                mismatches: [{ type: 'endpoint_mismatch', description: 'Missing endpoint' }],
+            });
+
+            expect(result.success).toBe(false);
+            expect(result.message).toContain('Fix attempt failed');
+        });
+    });
+
+    describe('verifyAndFixIntegration', () => {
+        test('should return success on first check if no mismatches', async () => {
+            executeClaude.mockImplementation(async (prompt) => {
+                if (prompt.includes('Analyze the integration')) {
+                    writeResultToPromptPath(prompt, JSON.stringify({
+                        success: true,
+                        mismatches: [],
+                    }));
+                }
+            });
+
+            const result = await verifyAndFixIntegration({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.iterations).toBe(1);
+            expect(result.message).toContain('passed on first check');
+        });
+
+        test('should attempt fix and re-verify on failure', async () => {
+            let callCount = 0;
+
+            executeClaude.mockImplementation(async (prompt) => {
+                if (prompt.includes('Analyze the integration')) {
+                    callCount++;
+                    if (callCount === 1) {
+                        // First verify fails
+                        writeResultToPromptPath(prompt, JSON.stringify({
+                            success: false,
+                            mismatches: [{ type: 'endpoint_mismatch', description: 'Missing endpoint' }],
+                        }));
+                    } else {
+                        // Second verify succeeds (after fix)
+                        writeResultToPromptPath(prompt, JSON.stringify({
+                            success: true,
+                            mismatches: [],
+                        }));
+                    }
+                }
+                // Fix prompt succeeds silently
+            });
+
+            const result = await verifyAndFixIntegration({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+                maxIterations: 3,
+            });
+
+            expect(result.success).toBe(true);
+            expect(result.iterations).toBe(2);
+            expect(result.message).toContain('after 1 fix attempt');
+        });
+
+        test('should fail after max iterations exhausted', async () => {
+            executeClaude.mockImplementation(async (prompt) => {
+                if (prompt.includes('Analyze the integration')) {
+                    writeResultToPromptPath(prompt, JSON.stringify({
+                        success: false,
+                        mismatches: [{ type: 'endpoint_mismatch', description: 'Persistent issue' }],
+                    }));
+                }
+            });
+
+            const result = await verifyAndFixIntegration({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+                maxIterations: 2,
+            });
+
+            expect(result.success).toBe(false);
+            expect(result.iterations).toBe(2);
+            expect(result.mismatches).toHaveLength(1);
+            expect(result.message).toContain('failed after 2 fix attempts');
+        });
+
+        test('should stop immediately if fix returns failure', async () => {
+            let verifyCount = 0;
+
+            executeClaude.mockImplementation(async (prompt) => {
+                if (prompt.includes('Analyze the integration')) {
+                    verifyCount++;
+                    writeResultToPromptPath(prompt, JSON.stringify({
+                        success: false,
+                        mismatches: [{ type: 'parse_error', description: 'Only parse error' }],
+                    }));
+                }
+            });
+
+            const result = await verifyAndFixIntegration({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+                maxIterations: 5,
+            });
+
+            expect(result.success).toBe(false);
+            expect(verifyCount).toBe(1); // Only one verify, no retries
+            expect(result.message).toContain('No fixable mismatches');
+        });
+
+        test('should default to 3 max iterations', async () => {
+            let iterations = 0;
+
+            executeClaude.mockImplementation(async (prompt) => {
+                if (prompt.includes('Analyze the integration')) {
+                    iterations++;
+                    writeResultToPromptPath(prompt, JSON.stringify({
+                        success: false,
+                        mismatches: [{ type: 'endpoint_mismatch', description: 'Issue' }],
+                    }));
+                }
+            });
+
+            const result = await verifyAndFixIntegration({
+                backendPath: '/backend',
+                frontendPath: '/frontend',
+            });
+
+            expect(result.success).toBe(false);
+            expect(iterations).toBe(3); // Default maxIterations
         });
     });
 });
