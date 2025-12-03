@@ -340,13 +340,22 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
     execution.status = 'in_progress';
     saveExecution(executionPath, execution);
 
-    // Execute with BLUEPRINT as context
+    // Load step5 prompt with execution.json tracking instructions
+    const step5PromptPath = path.join(__dirname, 'prompt.md');
+    const step5Prompt = fs.existsSync(step5PromptPath)
+        ? fs.readFileSync(step5PromptPath, 'utf-8')
+        : '';
+
+    // Load shell command rule
     const shellCommandRule = fs.readFileSync(
         path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'),
         'utf-8',
     );
 
-    const prompt = blueprintContent + '\n\n' + shellCommandRule;
+    // Combine: step5 instructions + BLUEPRINT + shell rules
+    const prompt = step5Prompt
+        ? `${step5Prompt}\n\n---\n\n## BLUEPRINT.md (Your Implementation Spec)\n\n${blueprintContent}\n\n---\n\n${shellCommandRule}`
+        : `${blueprintContent}\n\n${shellCommandRule}`;
     const result = await executeClaude(prompt, task, { cwd });
 
     // Mark task as completed in cache
