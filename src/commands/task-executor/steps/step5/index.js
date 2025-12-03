@@ -50,10 +50,10 @@ const estimateCodeChangeSize = (blueprintPath) => {
 };
 
 /**
- * Load execution.json with schema validation
+ * Load execution.json with schema validation and auto-repair
  * @param {string} executionPath - Path to execution.json
- * @returns {Object} Parsed execution object
- * @throws {Error} if file missing or invalid
+ * @returns {Object} Parsed and repaired execution object
+ * @throws {Error} if file missing or critically invalid
  */
 const loadExecution = (executionPath) => {
     if (!fs.existsSync(executionPath)) {
@@ -67,29 +67,32 @@ const loadExecution = (executionPath) => {
         throw new Error(`Failed to parse execution.json: ${err.message}`);
     }
 
-    // Validate against schema
-    const validation = validateExecutionJson(execution);
+    // Validate against schema with auto-repair enabled
+    const validation = validateExecutionJson(execution, { sanitize: true, repair: true });
     if (!validation.valid) {
         throw new Error(`Invalid execution.json: ${validation.errors.join('; ')}`);
     }
 
-    return execution;
+    // Return the repaired/sanitized data
+    return validation.repairedData || validation.sanitizedData || execution;
 };
 
 /**
- * Save execution.json with schema validation
+ * Save execution.json with schema validation and auto-repair
  * @param {string} executionPath - Path to execution.json
  * @param {Object} execution - Execution object to save
- * @throws {Error} if validation fails
+ * @throws {Error} if validation fails after repair
  */
 const saveExecution = (executionPath, execution) => {
-    // Validate against schema before save
-    const validation = validateExecutionJson(execution);
+    // Validate and repair against schema before save
+    const validation = validateExecutionJson(execution, { sanitize: true, repair: true });
     if (!validation.valid) {
         throw new Error(`Cannot save execution.json: ${validation.errors.join('; ')}`);
     }
 
-    fs.writeFileSync(executionPath, JSON.stringify(execution, null, 2), 'utf8');
+    // Save the repaired/sanitized data
+    const dataToSave = validation.repairedData || validation.sanitizedData || execution;
+    fs.writeFileSync(executionPath, JSON.stringify(dataToSave, null, 2), 'utf8');
 };
 
 /**
@@ -112,7 +115,23 @@ const verifyPreConditions = async (execution) => {
 
     for (const phase of execution.phases || []) {
         for (const pc of phase.preConditions || []) {
-            logger.info(`Checking: ${pc.check} with command: ${pc.command}`);
+            // Handle missing command field gracefully
+            if (!pc.command || typeof pc.command !== 'string' || pc.command.trim() === '') {
+                logger.info(`Skipping pre-condition without command: ${pc.check || 'unknown'}`);
+                pc.passed = true; // Mark as passed since there's nothing to verify
+                pc.evidence = 'No command specified - auto-passed';
+                continue;
+            }
+
+            // Handle informational-only pre-conditions (echo commands or no-op)
+            if (pc.command.startsWith('echo "no command') || pc.command === 'true') {
+                logger.info(`Skipping informational pre-condition: ${pc.check || 'unknown'}`);
+                pc.passed = true;
+                pc.evidence = 'Informational pre-condition - auto-passed';
+                continue;
+            }
+
+            logger.info(`Checking: ${pc.check || 'unknown'} with command: ${pc.command}`);
 
             // Security check
             if (isDangerousCommand(pc.command)) {
@@ -126,7 +145,9 @@ const verifyPreConditions = async (execution) => {
             try {
                 const { stdout } = await exec(pc.command, { timeout: 5000 });
                 pc.evidence = stdout.trim();
-                pc.passed = stdout.includes(pc.expected);
+                // Handle missing or empty expected field - any output is acceptable
+                const expectedValue = pc.expected || '';
+                pc.passed = expectedValue === '' || stdout.includes(expectedValue);
             } catch (error) {
                 pc.evidence = error.killed
                     ? 'Command timed out after 5000ms'

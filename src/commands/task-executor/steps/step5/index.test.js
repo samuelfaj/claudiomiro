@@ -545,12 +545,12 @@ describe('step5', () => {
 
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(JSON.stringify(validExecution));
-            validateExecutionJson.mockReturnValue({ valid: true, errors: [] });
+            validateExecutionJson.mockReturnValue({ valid: true, errors: [], repairedData: validExecution, sanitizedData: validExecution });
 
             const result = loadExecution('/test/execution.json');
 
             expect(result).toEqual(validExecution);
-            expect(validateExecutionJson).toHaveBeenCalledWith(validExecution);
+            expect(validateExecutionJson).toHaveBeenCalledWith(validExecution, { sanitize: true, repair: true });
         });
 
         test('should throw error when file not found', () => {
@@ -608,11 +608,11 @@ describe('step5', () => {
             };
 
             fs.writeFileSync.mockImplementation(() => {});
-            validateExecutionJson.mockReturnValue({ valid: true, errors: [] });
+            validateExecutionJson.mockReturnValue({ valid: true, errors: [], repairedData: validExecution, sanitizedData: validExecution });
 
             saveExecution('/test/execution.json', validExecution);
 
-            expect(validateExecutionJson).toHaveBeenCalledWith(validExecution);
+            expect(validateExecutionJson).toHaveBeenCalledWith(validExecution, { sanitize: true, repair: true });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 '/test/execution.json',
                 JSON.stringify(validExecution, null, 2),

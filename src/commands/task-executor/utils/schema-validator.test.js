@@ -560,11 +560,332 @@ describe('schema-validator', () => {
             mockValidate.errors = null;
 
             const input = { status: 'pending', undefinedField: undefined };
-            const result = schemaValidator.validateExecutionJson(input, { sanitize: false });
+            const result = schemaValidator.validateExecutionJson(input, { sanitize: false, repair: false });
 
             expect(result.valid).toBe(true);
             // When sanitize is false, sanitizedData is not returned
             expect(result.sanitizedData).toBeUndefined();
+        });
+    });
+
+    describe('repairExecutionJson', () => {
+        test('should return data unchanged if null or not object', () => {
+            expect(schemaValidator.repairExecutionJson(null)).toBeNull();
+            expect(schemaValidator.repairExecutionJson(undefined)).toBeUndefined();
+            expect(schemaValidator.repairExecutionJson('string')).toBe('string');
+        });
+
+        test('should add missing required top-level fields', () => {
+            const input = {};
+            const result = schemaValidator.repairExecutionJson(input);
+
+            expect(result.$schema).toBe('execution-schema-v1');
+            expect(result.version).toBe('1.0');
+            expect(result.task).toBe('TASK0');
+            expect(result.title).toBe('Untitled Task');
+            expect(result.status).toBe('pending');
+            expect(result.started).toBeDefined();
+            expect(result.attempts).toBe(0);
+        });
+
+        test('should preserve valid existing fields', () => {
+            const input = {
+                $schema: 'execution-schema-v1',
+                version: '2.0',
+                task: 'TASK5',
+                title: 'My Task',
+                status: 'completed',
+                started: '2025-01-01T00:00:00Z',
+                attempts: 3,
+            };
+            const result = schemaValidator.repairExecutionJson(input);
+
+            expect(result.version).toBe('2.0');
+            expect(result.task).toBe('TASK5');
+            expect(result.title).toBe('My Task');
+            expect(result.status).toBe('completed');
+            expect(result.attempts).toBe(3);
+        });
+
+        test('should normalize invalid status to pending', () => {
+            const input = { status: 'invalid_status' };
+            const result = schemaValidator.repairExecutionJson(input);
+
+            expect(result.status).toBe('pending');
+        });
+
+        test('should repair phases array', () => {
+            const input = {
+                phases: [
+                    { name: 'Phase 1' }, // missing id and status
+                    null, // invalid entry
+                    { id: 2, status: 'invalid' }, // invalid status
+                ],
+            };
+            const result = schemaValidator.repairExecutionJson(input);
+
+            expect(result.phases[0].id).toBe(1);
+            expect(result.phases[0].status).toBe('pending');
+            expect(result.phases[1].id).toBe(2);
+            expect(result.phases[1].name).toBe('Phase 2');
+            expect(result.phases[2].status).toBe('pending');
+        });
+    });
+
+    describe('repairPreCondition', () => {
+        test('should add missing required fields', () => {
+            const input = { check: 'Test check' };
+            const result = schemaValidator.repairPreCondition(input);
+
+            expect(result.check).toBe('Test check');
+            expect(result.command).toBe('echo "no command specified"');
+            expect(result.expected).toBe('');
+            expect(result.passed).toBe(false);
+        });
+
+        test('should handle null or undefined input', () => {
+            const result = schemaValidator.repairPreCondition(null);
+
+            expect(result.check).toBe('Unknown check');
+            expect(result.command).toBe('echo "no command specified"');
+            expect(result.expected).toBe('');
+            expect(result.passed).toBe(false);
+        });
+
+        test('should preserve valid existing fields', () => {
+            const input = {
+                check: 'File exists',
+                command: 'test -f file.txt',
+                expected: 'true',
+                passed: true,
+                evidence: 'File found',
+            };
+            const result = schemaValidator.repairPreCondition(input);
+
+            expect(result.check).toBe('File exists');
+            expect(result.command).toBe('test -f file.txt');
+            expect(result.expected).toBe('true');
+            expect(result.passed).toBe(true);
+            expect(result.evidence).toBe('File found');
+        });
+
+        test('should convert non-string expected to string', () => {
+            const input = {
+                check: 'Test',
+                command: 'echo 123',
+                expected: 123,
+            };
+            const result = schemaValidator.repairPreCondition(input);
+
+            expect(result.expected).toBe('123');
+        });
+
+        test('should use description or name as fallback for check', () => {
+            const input1 = { description: 'From description' };
+            const result1 = schemaValidator.repairPreCondition(input1);
+            expect(result1.check).toBe('From description');
+
+            const input2 = { name: 'From name' };
+            const result2 = schemaValidator.repairPreCondition(input2);
+            expect(result2.check).toBe('From name');
+        });
+    });
+
+    describe('repairPhaseItem', () => {
+        test('should add missing required fields', () => {
+            const input = {};
+            const result = schemaValidator.repairPhaseItem(input);
+
+            expect(result.description).toBe('Unknown item');
+            expect(result.completed).toBe(false);
+        });
+
+        test('should handle null input', () => {
+            const result = schemaValidator.repairPhaseItem(null);
+
+            expect(result.description).toBe('Unknown item');
+            expect(result.completed).toBe(false);
+        });
+
+        test('should use name or task as fallback for description', () => {
+            const input = { name: 'Task name' };
+            const result = schemaValidator.repairPhaseItem(input);
+
+            expect(result.description).toBe('Task name');
+        });
+    });
+
+    describe('repairArtifact', () => {
+        test('should add missing required fields', () => {
+            const input = {};
+            const result = schemaValidator.repairArtifact(input);
+
+            expect(result.type).toBe('modified');
+            expect(result.path).toBe('unknown');
+            expect(result.verified).toBe(false);
+        });
+
+        test('should normalize invalid type', () => {
+            const input = { type: 'deleted' }; // deleted is not valid
+            const result = schemaValidator.repairArtifact(input);
+
+            expect(result.type).toBe('modified');
+        });
+
+        test('should use file as fallback for path', () => {
+            const input = { file: 'src/test.js' };
+            const result = schemaValidator.repairArtifact(input);
+
+            expect(result.path).toBe('src/test.js');
+        });
+    });
+
+    describe('repairUncertainty', () => {
+        test('should add missing required fields', () => {
+            const input = {};
+            const result = schemaValidator.repairUncertainty(input, 0);
+
+            expect(result.id).toBe('U1');
+            expect(result.topic).toBe('Unknown');
+            expect(result.assumption).toBe('Unknown');
+            expect(result.confidence).toBe('MEDIUM');
+            expect(result.resolution).toBeNull();
+            expect(result.resolvedConfidence).toBeNull();
+        });
+
+        test('should normalize invalid confidence', () => {
+            const input = { confidence: 'VERY_HIGH' };
+            const result = schemaValidator.repairUncertainty(input, 0);
+
+            expect(result.confidence).toBe('MEDIUM');
+        });
+
+        test('should clear invalid resolvedConfidence', () => {
+            const input = { resolvedConfidence: 'INVALID' };
+            const result = schemaValidator.repairUncertainty(input, 0);
+
+            expect(result.resolvedConfidence).toBeNull();
+        });
+    });
+
+    describe('repairSuccessCriterion', () => {
+        test('should add missing required fields', () => {
+            const input = {};
+            const result = schemaValidator.repairSuccessCriterion(input);
+
+            expect(result.criterion).toBe('Unknown criterion');
+            expect(result.passed).toBe(false);
+        });
+
+        test('should use check or description as fallback', () => {
+            const input = { check: 'From check' };
+            const result = schemaValidator.repairSuccessCriterion(input);
+
+            expect(result.criterion).toBe('From check');
+        });
+
+        test('should normalize invalid testType', () => {
+            const input = { testType: 'INVALID' };
+            const result = schemaValidator.repairSuccessCriterion(input);
+
+            expect(result.testType).toBeNull();
+        });
+    });
+
+    describe('repairCompletion', () => {
+        test('should add missing required status', () => {
+            const input = {};
+            const result = schemaValidator.repairCompletion(input);
+
+            expect(result.status).toBe('pending_validation');
+        });
+
+        test('should normalize invalid status', () => {
+            const input = { status: 'done' };
+            const result = schemaValidator.repairCompletion(input);
+
+            expect(result.status).toBe('pending_validation');
+        });
+
+        test('should convert non-array fields to arrays', () => {
+            const input = {
+                summary: 'Single summary',
+                deviations: 'Single deviation',
+            };
+            const result = schemaValidator.repairCompletion(input);
+
+            expect(result.summary).toEqual(['Single summary']);
+            expect(result.deviations).toEqual(['Single deviation']);
+        });
+    });
+
+    describe('repairBeyondTheBasics', () => {
+        test('should handle null input', () => {
+            const result = schemaValidator.repairBeyondTheBasics(null);
+            expect(result).toEqual({});
+        });
+
+        test('should repair cleanup flags', () => {
+            const input = {
+                cleanup: {
+                    debugLogsRemoved: 'yes', // wrong type
+                },
+            };
+            const result = schemaValidator.repairBeyondTheBasics(input);
+
+            expect(result.cleanup.debugLogsRemoved).toBe(false);
+            expect(result.cleanup.formattingConsistent).toBe(false);
+            expect(result.cleanup.deadCodeRemoved).toBe(false);
+        });
+    });
+
+    describe('validateExecutionJson with repair', () => {
+        test('should repair preConditions with missing command/expected', () => {
+            mockValidate.mockReturnValue(true);
+            mockValidate.errors = null;
+
+            const input = {
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Phase 1',
+                        status: 'pending',
+                        preConditions: [
+                            { check: 'Test without command' }, // missing command and expected
+                        ],
+                    },
+                ],
+            };
+
+            const result = schemaValidator.validateExecutionJson(input, { repair: true });
+
+            expect(result.valid).toBe(true);
+            expect(result.repairedData.phases[0].preConditions[0].command).toBe('echo "no command specified"');
+            expect(result.repairedData.phases[0].preConditions[0].expected).toBe('');
+            expect(result.repairedData.phases[0].preConditions[0].passed).toBe(false);
+        });
+
+        test('should return repairedData on successful validation with repair enabled', () => {
+            mockValidate.mockReturnValue(true);
+            mockValidate.errors = null;
+
+            const input = { status: 'completed' };
+            const result = schemaValidator.validateExecutionJson(input, { repair: true });
+
+            expect(result.valid).toBe(true);
+            expect(result.repairedData).toBeDefined();
+            expect(result.repairedData.$schema).toBe('execution-schema-v1');
+        });
+
+        test('should not repair when repair option is false', () => {
+            mockValidate.mockReturnValue(true);
+            mockValidate.errors = null;
+
+            const input = { status: 'completed' };
+            const result = schemaValidator.validateExecutionJson(input, { repair: false, sanitize: false });
+
+            expect(result.valid).toBe(true);
+            expect(result.repairedData).toBeUndefined();
         });
     });
 });
