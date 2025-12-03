@@ -16,8 +16,11 @@ describe('TerminalRenderer', () => {
         originalColumns = process.stdout.columns;
         process.stdout.columns = 120;
 
-        cursorToSpy = jest.spyOn(readline, 'cursorTo').mockImplementation(() => { });
-        clearScreenDownSpy = jest.spyOn(readline, 'clearScreenDown').mockImplementation(() => { });
+        // Mock isTTY to true for tests that expect TTY behavior
+        process.stdout.isTTY = true;
+
+        cursorToSpy = jest.spyOn(readline, 'cursorTo').mockImplementation(() => true);
+        clearScreenDownSpy = jest.spyOn(readline, 'clearScreenDown').mockImplementation(() => true);
 
         renderer = new TerminalRenderer();
     });
@@ -349,6 +352,49 @@ describe('TerminalRenderer', () => {
         test('should handle lines with special characters', () => {
             renderer.renderBlock(['Line with \t tab', 'Line with "quotes"', 'Line with \\backslash']);
             expect(mockWrite).toHaveBeenCalledWith('Line with \t tab\nLine with "quotes"\nLine with \\backslash\n');
+        });
+
+        test('should not attempt to clear when not in TTY mode', () => {
+            // First render
+            renderer.renderBlock(['Line 1', 'Line 2']);
+            mockWrite.mockClear();
+            cursorToSpy.mockClear();
+            clearScreenDownSpy.mockClear();
+
+            // Set non-TTY mode
+            process.stdout.isTTY = false;
+
+            // Second render should NOT attempt to clear (just append)
+            renderer.renderBlock(['New line 1', 'New line 2']);
+
+            // Should not call readline cursor methods
+            expect(cursorToSpy).not.toHaveBeenCalled();
+            expect(clearScreenDownSpy).not.toHaveBeenCalled();
+
+            // Should only write the new content
+            expect(mockWrite).toHaveBeenCalledWith('New line 1\nNew line 2\n');
+        });
+
+        test('should skip clearing when cursorTo returns false', () => {
+            // First render
+            renderer.renderBlock(['Line 1', 'Line 2']);
+            mockWrite.mockClear();
+            cursorToSpy.mockClear();
+            clearScreenDownSpy.mockClear();
+
+            // Mock cursorTo to return false (simulating failure)
+            cursorToSpy.mockImplementation(() => false);
+
+            // Second render should skip clearing when cursorTo fails
+            renderer.renderBlock(['New line 1', 'New line 2']);
+
+            // cursorTo was called but failed
+            expect(cursorToSpy).toHaveBeenCalledTimes(1);
+            // moveCursorUp and clearScreenDown should not be called
+            expect(clearScreenDownSpy).not.toHaveBeenCalled();
+
+            // Should only write the new content
+            expect(mockWrite).toHaveBeenCalledWith('New line 1\nNew line 2\n');
         });
     });
 

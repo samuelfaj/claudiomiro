@@ -89,19 +89,21 @@ class TerminalRenderer {
 
         // Clear previous content if any
         if (this.lastLineCount > 0) {
-            const canUseTTYControls = typeof process.stdout.isTTY === 'boolean' ? process.stdout.isTTY : true;
-            if (canUseTTYControls) {
-                try {
-                    readline.cursorTo(process.stdout, 0);
+            // Only use TTY controls if explicitly a TTY (default to false for safety)
+            const isTTY = process.stdout.isTTY === true;
+            if (isTTY) {
+                // readline methods return false on failure, so check return values
+                const cursorMoved = readline.cursorTo(process.stdout, 0);
+                if (cursorMoved !== false) {
                     this.moveCursorUp(this.lastLineCount);
                     readline.cursorTo(process.stdout, 0);
                     readline.clearScreenDown(process.stdout);
-                } catch (error) {
-                    process.stdout.write('\x1b[2J\x1b[H');
                 }
-            } else {
-                process.stdout.write('\x1b[2J\x1b[H');
+                // If cursorTo failed, skip clearing - don't fall back to clear screen
+                // as that would cause flickering
             }
+            // For non-TTY, simply don't clear - let output append
+            // This is intentional to avoid breaking piped output
         }
 
         // Render new lines
