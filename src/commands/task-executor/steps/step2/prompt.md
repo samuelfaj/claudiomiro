@@ -677,11 +677,18 @@ Explicit constraints inherited from AI_PROMPT.md + task-specific prohibitions.
 **HARD STOP:** If ANY check fails → status: blocked
 
 ### 3.2 Success Criteria (VERIFY AFTER COMPLETE):
-| Criterion | Command |
-|-----------|---------|
-| Tests pass | `npm test -- --testPathPattern="module" --silent` |
-| No lint errors | `eslint path/to/files --quiet` |
-| Feature works | [Specific verification command] |
+
+**MANDATORY FORMAT - 5 COLUMNS:**
+| Criterion | Source | Testable? | Command | Manual Check |
+|-----------|--------|-----------|---------|--------------|
+| Tests pass | AI_PROMPT:§AC:L10 | AUTO | `npm test --testPathPattern="module" --silent` | - |
+| No lint errors | AI_PROMPT:§AC:L12 | AUTO | `eslint path/to/files --quiet` | - |
+| Feature works | AI_PROMPT:§AC:L15 | BOTH | `curl -s http://localhost/api/endpoint` | Verify response contains expected data |
+
+**COLUMN RULES:**
+- **Testable?** MUST be: `AUTO`, `MANUAL`, or `BOTH` (exactly these values)
+- **Command** MUST be executable shell command (not description) or `-` for MANUAL
+- **Manual Check** describes human verification steps or `-` for AUTO
 
 ### 3.3 Output Artifacts:
 | Artifact | Type | Path | Verification |
@@ -690,38 +697,43 @@ Explicit constraints inherited from AI_PROMPT.md + task-specific prohibitions.
 
 ## 4. IMPLEMENTATION STRATEGY
 
+**MANDATORY FORMAT:**
+- Use EXACTLY `### Phase N: Name` format (### + space + Phase + space + number + colon + space + name)
+- Steps MUST be numbered (1., 2., 3.) not bullets (-)
+- Each phase MUST end with `**Gate:** [criteria]`
+
 ### Phase 1: Preparation
-1. [Read required context files]
-2. [Verify pre-conditions]
-3. [Set up any required scaffolding]
+1. Read required context files
+2. Verify pre-conditions
+3. Set up any required scaffolding
 
 **Gate:** All pre-conditions verified, context understood
 
 ### Phase 2: Core Implementation
-1. [Detailed implementation step 1]
-2. [Detailed implementation step 2]
-3. [Follow pattern from file:line-range]
+1. Detailed implementation step 1
+2. Detailed implementation step 2
+3. Follow pattern from file:line-range
 
 **Gate:** Core functionality implemented, compiles without errors
 
 ### Phase 3: Testing
-1. [Write/update unit tests]
-2. [Run affected tests only]
-3. [Fix any failures]
+1. Write/update unit tests
+2. Run affected tests only
+3. Fix any failures
 
 **Gate:** All affected tests pass
 
 ### Phase 4: Integration
-1. [Verify integration points]
-2. [Check imports/exports work]
-3. [Validate with dependent modules]
+1. Verify integration points
+2. Check imports/exports work
+3. Validate with dependent modules
 
 **Gate:** Integration verified, no breaking changes
 
 ### Phase 5: Validation
-1. [Final success criteria check]
-2. [Verify output artifacts exist]
-3. [Mark task complete]
+1. Final success criteria check
+2. Verify output artifacts exist
+3. Mark task complete
 
 ## 5. UNCERTAINTY LOG
 
@@ -1196,6 +1208,25 @@ Before finishing, perform these validations:
 - [ ] Dependencies are correctly declared using TASK{number} format
 - [ ] Layer assignments allow maximum parallelism
 - [ ] Pre-conditions are verifiable with actual commands
+
+### ✅ FORMAT SELF-VALIDATION (MANDATORY)
+
+Before saving EACH BLUEPRINT.md, verify these format rules:
+
+**§3.2 Success Criteria:**
+- [ ] Table has EXACTLY 5 columns: Criterion | Source | Testable? | Command | Manual Check
+- [ ] "Testable?" column contains ONLY: `AUTO`, `MANUAL`, or `BOTH`
+- [ ] "Command" column has REAL shell commands (not descriptions like "Check logs")
+- [ ] "Command" column uses `-` for MANUAL-only criteria
+- [ ] "Manual Check" column uses `-` for AUTO-only criteria
+
+**§4 Implementation Strategy:**
+- [ ] Each phase uses format: `### Phase N: Name` (with ### prefix)
+- [ ] All steps are NUMBERED (1., 2., 3.) not bullets (-)
+- [ ] Each phase ends with `**Gate:** [criteria]`
+- [ ] Phase numbers are sequential (1, 2, 3, 4, 5)
+
+**If ANY check fails → FIX before saving the BLUEPRINT.md**
 
 ### 📤 Output
 Output all tasks as Markdown files inside {{claudiomiroFolder}}/TASK{number}/:

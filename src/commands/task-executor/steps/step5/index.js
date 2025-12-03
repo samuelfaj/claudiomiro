@@ -464,18 +464,22 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
     // Load and validate execution.json
     const execution = loadExecution(executionPath);
 
-    // Track attempts for diagnostics
-    execution.attempts = (execution.attempts || 0) + 1;
-    const attemptsBeforeClaude = execution.attempts;
+    // Track attempts count BEFORE any increment (for diagnostics)
+    const attemptsBeforeClaude = execution.attempts || 0;
 
-    logger.info(`Loaded execution.json: status=${execution.status}, phase=${execution.currentPhase?.id || 1}`);
+    logger.info(`Loaded execution.json: status=${execution.status}, phase=${execution.currentPhase?.id || 1}, attempts=${attemptsBeforeClaude}`);
 
     // Phase 1: Pre-condition verification (HARD STOP)
+    // NOTE: We do NOT increment attempts here - pre-condition failures are not real execution attempts
     const { blocked } = await verifyPreConditions(execution);
     if (blocked) {
+        // Don't increment attempts for pre-condition failures (they're not real Claude executions)
         saveExecution(executionPath, execution);
         throw new Error('Pre-conditions failed. Task blocked.');
     }
+
+    // Only increment attempts AFTER pre-conditions pass (this is a real execution attempt)
+    execution.attempts = attemptsBeforeClaude + 1;
 
     // Phase gate enforcement - may reset currentPhase if previous phase incomplete
     const phaseGatePassed = enforcePhaseGate(execution);
@@ -491,7 +495,7 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
 
     // Load step5 prompt with execution.json tracking instructions
     const step5PromptPath = path.join(__dirname, 'prompt.md');
-    const step5Prompt = fs.existsSync(step5PromptPath)
+    let step5Prompt = fs.existsSync(step5PromptPath)
         ? fs.readFileSync(step5PromptPath, 'utf-8')
         : '';
 
@@ -500,6 +504,11 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
         path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'),
         'utf-8',
     );
+
+    // Replace path placeholders in prompt (CRITICAL: Claude needs to know where files are)
+    step5Prompt = step5Prompt
+        .replace(/\{\{taskFolder\}\}/g, taskFolder)
+        .replace(/\{\{claudiomiroFolder\}\}/g, state.claudiomiroFolder);
 
     // Combine: step5 instructions + BLUEPRINT + shell rules
     const prompt = step5Prompt
@@ -514,10 +523,12 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
     const latestExecution = loadExecution(executionPath);
 
     // Preserve incremented attempt count if Claude rewrites execution.json
+    // attemptsBeforeClaude is the count BEFORE this execution, so the current attempt is +1
+    const currentAttempt = attemptsBeforeClaude + 1;
     const latestAttempts = Number.isInteger(latestExecution.attempts)
         ? latestExecution.attempts
         : 0;
-    latestExecution.attempts = Math.max(latestAttempts, attemptsBeforeClaude);
+    latestExecution.attempts = Math.max(latestAttempts, currentAttempt);
 
     // 🆕 LAYER 1.5: Validate Implementation Strategy (BLUEPRINT.md §4)
     logger.info('Validating Implementation Strategy from BLUEPRINT.md §4...');

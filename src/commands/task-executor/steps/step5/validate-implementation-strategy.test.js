@@ -2,6 +2,8 @@ const {
     validateImplementationStrategy,
     parseImplementationStrategy,
     cleanDescription,
+    isDocumentationItem,
+    findPhasesWithFallback,
 } = require('./validate-implementation-strategy');
 const fs = require('fs');
 
@@ -103,18 +105,19 @@ describe('validate-implementation-strategy', () => {
 ## 4. IMPLEMENTATION STRATEGY
 
 ### Phase 1: Preparation
-1. Read file
+1. Read the configuration file and understand context
 \`\`\`php
 $code = "should be ignored";
 \`\`\`
-2. Verify something
+2. Verify the implementation is correct
             `;
 
             const phases = parseImplementationStrategy(blueprintContent);
 
+            // Note: Only descriptions > 15 chars are extracted
             expect(phases[0].steps).toHaveLength(2);
-            expect(phases[0].steps[0].description).toBe('Read file');
-            expect(phases[0].steps[1].description).toBe('Verify something');
+            expect(phases[0].steps[0].description).toContain('Read the configuration file');
+            expect(phases[0].steps[1].description).toContain('Verify the implementation');
         });
 
         test('should return empty array if §4 not found', () => {
@@ -130,7 +133,9 @@ Some content here
             expect(phases).toEqual([]);
         });
 
-        test('should handle dash items as steps', () => {
+        test('should skip dash items by default (they are typically documentation)', () => {
+            // Dash items are now skipped by design - they're usually documentation bullets
+            // Real implementation steps should use numbered format (1., 2., 3.)
             const blueprintContent = `
 ## 4. IMPLEMENTATION STRATEGY
 
@@ -142,8 +147,132 @@ Some content here
 
             const phases = parseImplementationStrategy(blueprintContent);
 
-            expect(phases[0].steps).toHaveLength(3);
-            expect(phases[0].steps[0].description).toContain('Read autopay.php');
+            // Dash items are skipped - should have 0 steps
+            expect(phases[0].steps).toHaveLength(0);
+        });
+
+        test('should skip documentation-like items', () => {
+            const blueprintContent = `
+## 4. IMPLEMENTATION STRATEGY
+
+### Phase 1: Implementation
+1. If the user is not authenticated, return error
+2. Modify the handler to process requests
+3. This is a description of the feature
+4. You can also use the alternative approach
+            `;
+
+            const phases = parseImplementationStrategy(blueprintContent);
+
+            // Items starting with "If", "This is", "You can" are filtered out
+            // Only real implementation steps remain
+            expect(phases[0].steps).toHaveLength(1);
+            expect(phases[0].steps[0].description).toContain('Modify the handler');
+        });
+    });
+
+    describe('isDocumentationItem', () => {
+        test('should identify documentation patterns', () => {
+            expect(isDocumentationItem('If the file exists...')).toBe(true);
+            expect(isDocumentationItem('When doing this...')).toBe(true);
+            expect(isDocumentationItem('This is how it works')).toBe(true);
+            expect(isDocumentationItem('You should verify...')).toBe(true);
+            expect(isDocumentationItem('See the documentation...')).toBe(true);
+        });
+
+        test('should not flag real implementation steps', () => {
+            expect(isDocumentationItem('Modify the handler function')).toBe(false);
+            expect(isDocumentationItem('Read autopay.php lines 90-302')).toBe(false);
+            expect(isDocumentationItem('Create new validation logic')).toBe(false);
+        });
+    });
+
+    describe('findPhasesWithFallback (tolerant parsing)', () => {
+        test('should find phases with ## Phase format', () => {
+            const content = `
+## Phase 1: Preparation
+1. Step one
+2. Step two
+
+## Phase 2: Implementation
+1. Step one
+            `;
+            const matches = findPhasesWithFallback(content);
+            expect(matches.length).toBe(2);
+            expect(matches[0][1]).toBe('1');
+            expect(matches[0][2]).toBe('Preparation');
+        });
+
+        test('should find phases with **Phase** format', () => {
+            const content = `
+**Phase 1: Preparation**
+1. Step one
+
+**Phase 2: Implementation**
+1. Step one
+            `;
+            const matches = findPhasesWithFallback(content);
+            expect(matches.length).toBe(2);
+        });
+
+        test('should find phases with ### 1. format', () => {
+            const content = `
+### 1. Preparation
+1. Step one
+
+### 2. Implementation
+1. Step one
+            `;
+            const matches = findPhasesWithFallback(content);
+            expect(matches.length).toBe(2);
+            expect(matches[0][1]).toBe('1');
+            expect(matches[0][2]).toBe('Preparation');
+        });
+
+        test('should find phases with dash separator', () => {
+            const content = `
+### Phase 1 - Preparation
+1. Step one
+
+### Phase 2 - Implementation
+1. Step one
+            `;
+            const matches = findPhasesWithFallback(content);
+            expect(matches.length).toBe(2);
+        });
+    });
+
+    describe('parseImplementationStrategy (alternative section formats)', () => {
+        test('should find section with "## Implementation Strategy" format', () => {
+            const blueprintContent = `
+# BLUEPRINT
+
+## Implementation Strategy
+
+### Phase 1: Preparation
+1. Read files to understand context
+2. Verify pre-conditions pass
+            `;
+
+            const phases = parseImplementationStrategy(blueprintContent);
+            expect(phases.length).toBe(1);
+            expect(phases[0].name).toBe('Preparation');
+        });
+
+        test('should find section with "## 4) Implementation Strategy" format', () => {
+            const blueprintContent = `
+# BLUEPRINT
+
+## 4) Implementation Strategy
+
+### Phase 1: Setup
+1. Initialize the project
+2. Configure dependencies
+            `;
+
+            const phases = parseImplementationStrategy(blueprintContent);
+            expect(phases.length).toBe(1);
+            expect(phases[0].name).toBe('Setup');
         });
     });
 
@@ -229,7 +358,8 @@ Some content here
             expect(result.missing).toEqual([]);
         });
 
-        test('should fail if phase has no items', async () => {
+        test('should pass if phase has status=completed even with no items (lenient)', async () => {
+            // Lenient validation: if phase.status === 'completed', we trust it
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockImplementation((path) => {
                 if (path.includes('BLUEPRINT.md')) {
@@ -237,8 +367,8 @@ Some content here
 ## 4. IMPLEMENTATION STRATEGY
 
 ### Phase 1: Preparation
-1. Read file A
-2. Read file B
+1. Read the file and understand the context
+2. Verify the configuration is correct
                     `;
                 }
                 if (path.includes('execution.json')) {
@@ -247,6 +377,40 @@ Some content here
                             {
                                 id: 1,
                                 name: 'Preparation',
+                                status: 'completed',  // ✅ Status is completed - trust it
+                                items: [],
+                            },
+                        ],
+                    });
+                }
+            });
+
+            const result = await validateImplementationStrategy('TASK0', {
+                claudiomiroFolder: '/.claudiomiro',
+            });
+
+            expect(result.valid).toBe(true);  // Pass because status=completed
+        });
+
+        test('should fail if phase has no items and status is not completed', async () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockImplementation((path) => {
+                if (path.includes('BLUEPRINT.md')) {
+                    return `
+## 4. IMPLEMENTATION STRATEGY
+
+### Phase 1: Preparation
+1. Read the file and understand the context
+2. Verify the configuration is correct
+                    `;
+                }
+                if (path.includes('execution.json')) {
+                    return JSON.stringify({
+                        phases: [
+                            {
+                                id: 1,
+                                name: 'Preparation',
+                                status: 'in_progress',  // ❌ Not completed
                                 items: [],  // ❌ No items!
                             },
                         ],
@@ -260,7 +424,7 @@ Some content here
 
             expect(result.valid).toBe(false);
             expect(result.missing).toHaveLength(1);
-            expect(result.missing[0].reason).toBe('No items tracked for this phase');
+            expect(result.missing[0].reason).toContain('no items tracked');
         });
 
         test('should fail if phase is missing from execution.json', async () => {
@@ -301,7 +465,7 @@ Some content here
             expect(result.missing[0].reason).toBe('Phase missing from execution.json');
         });
 
-        test('should fail if items are not completed', async () => {
+        test('should warn (not fail) if less than half items are incomplete (lenient)', async () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockImplementation((path) => {
                 if (path.includes('BLUEPRINT.md')) {
@@ -319,9 +483,10 @@ Some content here
                             {
                                 id: 1,
                                 name: 'Preparation',
+                                status: 'in_progress',  // Not completed
                                 items: [
                                     { description: 'Read file A', completed: true },
-                                    { description: 'Read file B', completed: false },  // ❌ Not completed!
+                                    { description: 'Read file B', completed: false },  // 1 out of 2 incomplete (50%)
                                 ],
                             },
                         ],
@@ -333,10 +498,51 @@ Some content here
                 claudiomiroFolder: '/.claudiomiro',
             });
 
+            // 50% incomplete = NOT more than half, so it's a warning, not a failure
+            expect(result.valid).toBe(true);
+            expect(result.warnings).toHaveLength(1);
+            expect(result.warnings[0].reason).toBe('1/2 items pending');
+        });
+
+        test('should fail if more than half items are incomplete', async () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockImplementation((path) => {
+                if (path.includes('BLUEPRINT.md')) {
+                    return `
+## 4. IMPLEMENTATION STRATEGY
+
+### Phase 1: Preparation
+1. Read file A
+2. Read file B
+3. Read file C
+                    `;
+                }
+                if (path.includes('execution.json')) {
+                    return JSON.stringify({
+                        phases: [
+                            {
+                                id: 1,
+                                name: 'Preparation',
+                                status: 'in_progress',  // Not completed
+                                items: [
+                                    { description: 'Read file A', completed: true },
+                                    { description: 'Read file B', completed: false },  // 2 out of 3 incomplete (66%)
+                                    { description: 'Read file C', completed: false },
+                                ],
+                            },
+                        ],
+                    });
+                }
+            });
+
+            const result = await validateImplementationStrategy('TASK0', {
+                claudiomiroFolder: '/.claudiomiro',
+            });
+
+            // 66% incomplete = more than half, so it's a failure
             expect(result.valid).toBe(false);
             expect(result.missing).toHaveLength(1);
-            expect(result.missing[0].reason).toBe('Item not completed');
-            expect(result.missing[0].item).toBe('Read file B');
+            expect(result.missing[0].reason).toBe('2/3 items not completed');
         });
     });
 });

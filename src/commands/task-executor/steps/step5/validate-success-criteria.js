@@ -30,7 +30,115 @@ const detectNonExecutableCommand = (command) => {
 };
 
 /**
- * Parses BLUEPRINT.md §3.2 Success Criteria table (5-column format)
+ * Attempts to find §3.2 section using multiple regex patterns (tolerant parsing)
+ * @param {string} content - BLUEPRINT.md content
+ * @returns {string|null} Section content or null
+ */
+const findSection32WithFallback = (content) => {
+    const sectionPatterns = [
+        /###\s*3\.2\s+Success Criteria.*?\n([\s\S]*?)(?=\n###|\n##|$)/i,
+        /##\s*3\.2\s+Success Criteria.*?\n([\s\S]*?)(?=\n##|$)/i,
+        /###\s*Success Criteria.*?\n([\s\S]*?)(?=\n###|\n##|$)/i,
+        /##\s*Success Criteria.*?\n([\s\S]*?)(?=\n##|$)/i,
+        /\*\*Success Criteria\*\*.*?\n([\s\S]*?)(?=\n##|\n\*\*|$)/i,
+        /3\.2[.)]\s*Success Criteria.*?\n([\s\S]*?)(?=\n##|\n###|$)/i,
+    ];
+
+    for (const pattern of sectionPatterns) {
+        const match = content.match(pattern);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+
+    return null;
+};
+
+/**
+ * Attempts to find table in section using multiple patterns (tolerant parsing)
+ * Returns table rows and detected column count
+ * @param {string} sectionContent - Section content to parse
+ * @returns {Object} {rows: Array<string>, columnCount: number}
+ */
+const findTableWithFallback = (sectionContent) => {
+    // Pattern for detecting tables with different column counts
+    // Try to find any table-like structure
+    const tablePatterns = [
+        // 5-column table (new format)
+        {
+            pattern: /\|\s*Criterion\s*\|[\s\S]*?\n\|[\s-]+\|[\s-]+\|[\s-]+\|[\s-]+\|[\s-]+\|\s*\n((?:\|.*\|.*\|.*\|.*\|.*\|\s*\n?)+)/i,
+            columns: 5,
+        },
+        // 4-column table
+        {
+            pattern: /\|\s*Criterion\s*\|[\s\S]*?\n\|[\s-]+\|[\s-]+\|[\s-]+\|[\s-]+\|\s*\n((?:\|.*\|.*\|.*\|.*\|\s*\n?)+)/i,
+            columns: 4,
+        },
+        // 3-column table
+        {
+            pattern: /\|\s*Criterion\s*\|[\s\S]*?\n\|[\s-]+\|[\s-]+\|[\s-]+\|\s*\n((?:\|.*\|.*\|.*\|\s*\n?)+)/i,
+            columns: 3,
+        },
+        // 2-column table (old format)
+        {
+            pattern: /\|.*Criterion.*\|.*\n\|[\s-]+\|[\s-]+\|\s*\n((?:\|.*\|.*\|\s*\n?)+)/i,
+            columns: 2,
+        },
+        // Generic table fallback - any markdown table
+        {
+            pattern: /\|[^|\n]+\|[^|\n]*\|\s*\n\|[\s:-]+\|[\s:-]+\|\s*\n((?:\|[^|\n]+\|[^|\n]*\|\s*\n?)+)/i,
+            columns: 0, // Will detect from actual content
+        },
+    ];
+
+    for (const { pattern, columns } of tablePatterns) {
+        const match = sectionContent.match(pattern);
+        if (match && match[1]) {
+            const rows = match[1].trim().split('\n').filter(row => row.trim());
+            return { rows, columnCount: columns };
+        }
+    }
+
+    return { rows: [], columnCount: 0 };
+};
+
+/**
+ * Extracts command from a cell (handles backticks, shell patterns)
+ * @param {string} cell - Cell content
+ * @returns {string|null} Extracted command or null
+ */
+const extractCommandFromCell = (cell) => {
+    if (!cell || cell.trim() === '-' || cell.trim() === '') {
+        return null;
+    }
+
+    // Remove backticks and clean
+    const cleaned = cell.replace(/`/g, '').trim();
+
+    // Check if it looks like an executable command
+    const commandPatterns = [
+        /^(grep|find|test|npm|yarn|python|php|node|go|java|cargo|ruby|bash|sh|cat|echo|awk|sed|curl|wget|mysql|psql)/i,
+        /^\//,  // Absolute path
+        /^\.\//,  // Relative path
+    ];
+
+    for (const pattern of commandPatterns) {
+        if (pattern.test(cleaned)) {
+            return cleaned;
+        }
+    }
+
+    // If it contains shell operators, likely a command
+    if (/[|&><;]/.test(cleaned)) {
+        return cleaned;
+    }
+
+    return cleaned;
+};
+
+/**
+ * Parses BLUEPRINT.md §3.2 Success Criteria table (flexible format)
+ * Supports 2, 3, 4, and 5-column formats with fallback patterns
  * @param {string} blueprintContent - BLUEPRINT.md content
  * @returns {Array<Object>} Array of success criteria objects
  */
@@ -38,28 +146,21 @@ const parseSuccessCriteriaTable = (blueprintContent) => {
     const criteria = [];
     const logger = require('../../../../shared/utils/logger');
 
-    // Find §3.2 section
-    const section32Match = blueprintContent.match(/###\s*3\.2\s+Success Criteria.*?\n([\s\S]*?)(?=\n###|\n##|$)/i);
-    if (!section32Match) {
+    // Find §3.2 section using fallback patterns
+    const section32Content = findSection32WithFallback(blueprintContent);
+    if (!section32Content) {
         return criteria;
     }
 
-    const section32Content = section32Match[1];
+    // Find table using fallback patterns
+    const { rows: tableRows, columnCount } = findTableWithFallback(section32Content);
 
-    // Try new 5-column format first: | Criterion | Source | Testable? | Command | Manual Check |
-    let tableMatch = section32Content.match(/\|\s*Criterion\s*\|[\s\S]*?\n\|[\s-]+\|[\s-]+\|[\s-]+\|[\s-]+\|[\s-]+\|\s*\n((?:\|.*\|.*\|.*\|.*\|.*\|\s*\n)+)/i);
-    const isFiveColumn = !!tableMatch;
-
-    // Fallback to old 2-column format: | Criterion | Command |
-    if (!tableMatch) {
-        tableMatch = section32Content.match(/\|.*Criterion.*\|.*Command.*\|\s*\n\|[\s\S]*?\n((?:\|.*\|.*\|\s*\n)+)/i);
-    }
-
-    if (!tableMatch) {
+    if (tableRows.length === 0) {
         return criteria;
     }
 
-    const tableRows = tableMatch[1].trim().split('\n');
+    // Determine format type
+    const isFiveColumn = columnCount === 5;
 
     for (const row of tableRows) {
         const cells = row.split('|').map(cell => cell.trim()).filter(Boolean);
@@ -69,16 +170,21 @@ const parseSuccessCriteriaTable = (blueprintContent) => {
             continue;
         }
 
-        if (isFiveColumn && cells.length >= 5) {
-            // New format: | Criterion | Source | Testable? | Command | Manual Check |
-            const [criterion, source, testable, command, manualCheck] = cells;
+        // Skip if first cell is empty or separator
+        if (!cells[0] || cells[0].match(/^[-:]+$/)) {
+            continue;
+        }
 
-            const commandClean = command.replace(/`/g, '').trim();
-            const manualCheckClean = manualCheck.trim();
-            const testableType = testable.toUpperCase();
+        const criterion = cells[0];
+        const cellCount = cells.length;
 
-            // Skip empty criteria
-            if (!criterion) continue;
+        if (isFiveColumn && cellCount >= 5) {
+            // 5-column format: | Criterion | Source | Testable? | Command | Manual Check |
+            const [, source, testable, command, manualCheck] = cells;
+
+            const commandClean = command ? command.replace(/`/g, '').trim() : '';
+            const manualCheckClean = manualCheck ? manualCheck.trim() : '';
+            const testableType = (testable || 'AUTO').toUpperCase();
 
             // Determine test type
             const isAuto = testableType === 'AUTO' || testableType === 'BOTH';
@@ -99,25 +205,99 @@ const parseSuccessCriteriaTable = (blueprintContent) => {
                     command: commandClean,
                     source: source || 'BLUEPRINT.md §3.2',
                     testType: isManual ? 'BOTH' : 'AUTO',
-                    manualCheck: isManual ? manualCheckClean : null,
+                    manualCheck: isManual && manualCheckClean !== '-' ? manualCheckClean : null,
                 });
             } else if (isManual && manualCheckClean && manualCheckClean !== '-') {
                 // Manual check only (no automated command)
                 criteria.push({
                     criterion,
-                    command: null, // No automated command
+                    command: null,
                     source: source || 'BLUEPRINT.md §3.2',
                     testType: 'MANUAL',
                     manualCheck: manualCheckClean,
                 });
             }
 
-        } else if (!isFiveColumn && cells.length >= 2) {
-            // Old format: | Criterion | Command |
-            const criterion = cells[0];
+        } else if (columnCount === 4 && cellCount >= 4) {
+            // 4-column format: | Criterion | Testable? | Command | Manual Check |
+            // OR: | Criterion | Source | Command | Notes |
+            const [, col2, col3, col4] = cells;
+
+            // Try to detect which format
+            const col2Upper = (col2 || '').toUpperCase();
+            const isTestableCol = col2Upper === 'AUTO' || col2Upper === 'MANUAL' || col2Upper === 'BOTH';
+
+            if (isTestableCol) {
+                // Format: | Criterion | Testable? | Command | Manual Check |
+                const testableType = col2Upper;
+                const commandClean = col3 ? col3.replace(/`/g, '').trim() : '';
+                const manualCheckClean = col4 ? col4.trim() : '';
+
+                const isAuto = testableType === 'AUTO' || testableType === 'BOTH';
+                const isManual = testableType === 'MANUAL' || testableType === 'BOTH';
+
+                if (isAuto && commandClean && commandClean !== '-') {
+                    criteria.push({
+                        criterion,
+                        command: commandClean,
+                        source: 'BLUEPRINT.md §3.2',
+                        testType: isManual ? 'BOTH' : 'AUTO',
+                        manualCheck: isManual && manualCheckClean !== '-' ? manualCheckClean : null,
+                    });
+                } else if (isManual && manualCheckClean && manualCheckClean !== '-') {
+                    criteria.push({
+                        criterion,
+                        command: null,
+                        source: 'BLUEPRINT.md §3.2',
+                        testType: 'MANUAL',
+                        manualCheck: manualCheckClean,
+                    });
+                }
+            } else {
+                // Format: | Criterion | Source | Command | Notes | (or similar)
+                const source = col2;
+                const commandClean = extractCommandFromCell(col3);
+
+                if (commandClean && commandClean !== '-') {
+                    criteria.push({
+                        criterion,
+                        command: commandClean,
+                        source: source || 'BLUEPRINT.md §3.2',
+                        testType: 'AUTO',
+                        manualCheck: null,
+                    });
+                }
+            }
+
+        } else if (columnCount === 3 && cellCount >= 3) {
+            // 3-column format: | Criterion | Command | Notes |
+            // OR: | Criterion | Source | Command |
+            const [, col2, col3] = cells;
+
+            // Try to detect command location
+            const cmd2 = extractCommandFromCell(col2);
+            const cmd3 = extractCommandFromCell(col3);
+
+            // If col3 looks more like a command, use it
+            const commandClean = cmd3 && /^(grep|find|test|npm|yarn|python|php|node|go|java|cargo)/i.test(cmd3.replace(/`/g, ''))
+                ? cmd3
+                : (cmd2 || cmd3);
+
+            if (commandClean && commandClean !== '-') {
+                criteria.push({
+                    criterion,
+                    command: commandClean.replace(/`/g, '').trim(),
+                    source: 'BLUEPRINT.md §3.2',
+                    testType: 'AUTO',
+                    manualCheck: null,
+                });
+            }
+
+        } else if (cellCount >= 2) {
+            // 2-column format: | Criterion | Command |
             const command = cells[1];
 
-            const commandClean = command.replace(/`/g, '').trim();
+            const commandClean = command ? command.replace(/`/g, '').trim() : '';
 
             if (commandClean && criterion) {
                 // Warn if command looks like a human description
@@ -320,4 +500,7 @@ module.exports = {
     parseSuccessCriteriaTable,
     evaluateExpected,
     detectNonExecutableCommand,
+    findSection32WithFallback,
+    findTableWithFallback,
+    extractCommandFromCell,
 };

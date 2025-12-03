@@ -3,6 +3,9 @@ const {
     parseSuccessCriteriaTable,
     evaluateExpected,
     detectNonExecutableCommand,
+    findSection32WithFallback,
+    findTableWithFallback,
+    extractCommandFromCell,
 } = require('./validate-success-criteria');
 const fs = require('fs');
 
@@ -148,6 +151,215 @@ Just text, no table
             expect(criteria).toHaveLength(1);
             expect(criteria[0].criterion).toBe('Test passes');
             expect(criteria[0].command).toBe('npm test');
+        });
+
+        test('should handle 4-column table with Testable column', () => {
+            const blueprintContent = `
+### 3.2 Success Criteria:
+| Criterion | Testable? | Command | Manual Check |
+|-----------|-----------|---------|--------------|
+| Query works | AUTO | \`grep "SELECT" file.sql\` | - |
+| Logs valid | MANUAL | - | Review cloud logs |
+            `;
+
+            const criteria = parseSuccessCriteriaTable(blueprintContent);
+
+            expect(criteria).toHaveLength(2);
+            expect(criteria[0]).toMatchObject({
+                criterion: 'Query works',
+                command: 'grep "SELECT" file.sql',
+                testType: 'AUTO',
+            });
+            expect(criteria[1]).toMatchObject({
+                criterion: 'Logs valid',
+                command: null,
+                testType: 'MANUAL',
+                manualCheck: 'Review cloud logs',
+            });
+        });
+
+        test('should handle 4-column table with Source column', () => {
+            const blueprintContent = `
+### 3.2 Success Criteria:
+| Criterion | Source | Command | Notes |
+|-----------|--------|---------|-------|
+| API responds | AI_PROMPT:L10 | \`curl localhost:3000/health\` | Should return 200 |
+            `;
+
+            const criteria = parseSuccessCriteriaTable(blueprintContent);
+
+            expect(criteria).toHaveLength(1);
+            expect(criteria[0]).toMatchObject({
+                criterion: 'API responds',
+                command: 'curl localhost:3000/health',
+                source: 'AI_PROMPT:L10',
+            });
+        });
+
+        test('should handle 3-column table (Criterion | Command | Notes)', () => {
+            const blueprintContent = `
+### 3.2 Success Criteria:
+| Criterion | Command | Notes |
+|-----------|---------|-------|
+| Build passes | \`npm run build\` | No errors |
+| Tests pass | \`npm test\` | All green |
+            `;
+
+            const criteria = parseSuccessCriteriaTable(blueprintContent);
+
+            expect(criteria).toHaveLength(2);
+            expect(criteria[0].criterion).toBe('Build passes');
+            expect(criteria[0].command).toBe('npm run build');
+            expect(criteria[1].criterion).toBe('Tests pass');
+            expect(criteria[1].command).toBe('npm test');
+        });
+    });
+
+    describe('findSection32WithFallback (tolerant parsing)', () => {
+        test('should find section with ## Success Criteria format', () => {
+            const content = `
+# BLUEPRINT
+
+## Success Criteria
+
+| Criterion | Command |
+|-----------|---------|
+| Test passes | \`npm test\` |
+            `;
+
+            const section = findSection32WithFallback(content);
+            expect(section).toBeTruthy();
+            expect(section).toContain('Criterion');
+        });
+
+        test('should find section with **Success Criteria** format', () => {
+            const content = `
+# BLUEPRINT
+
+**Success Criteria**
+
+| Criterion | Command |
+|-----------|---------|
+| Build ok | \`npm run build\` |
+            `;
+
+            const section = findSection32WithFallback(content);
+            expect(section).toBeTruthy();
+            expect(section).toContain('Criterion');
+        });
+
+        test('should find section with 3.2) format', () => {
+            const content = `
+# BLUEPRINT
+
+3.2) Success Criteria
+
+| Criterion | Command |
+|-----------|---------|
+| Lint passes | \`npm run lint\` |
+            `;
+
+            const section = findSection32WithFallback(content);
+            expect(section).toBeTruthy();
+            expect(section).toContain('Criterion');
+        });
+
+        test('should return null if no section found', () => {
+            const content = `
+# BLUEPRINT
+
+## Other Section
+Some content
+            `;
+
+            const section = findSection32WithFallback(content);
+            expect(section).toBeNull();
+        });
+    });
+
+    describe('findTableWithFallback', () => {
+        test('should detect 5-column table', () => {
+            const sectionContent = `
+| Criterion | Source | Testable? | Command | Manual Check |
+|-----------|--------|-----------|---------|--------------|
+| Test | AI:L1 | AUTO | \`npm test\` | - |
+            `;
+
+            const { rows, columnCount } = findTableWithFallback(sectionContent);
+            expect(columnCount).toBe(5);
+            expect(rows.length).toBeGreaterThan(0);
+        });
+
+        test('should detect 4-column table', () => {
+            const sectionContent = `
+| Criterion | Testable? | Command | Manual Check |
+|-----------|-----------|---------|--------------|
+| Test | AUTO | \`npm test\` | - |
+            `;
+
+            const { rows, columnCount } = findTableWithFallback(sectionContent);
+            expect(columnCount).toBe(4);
+            expect(rows.length).toBeGreaterThan(0);
+        });
+
+        test('should detect 3-column table', () => {
+            const sectionContent = `
+| Criterion | Command | Notes |
+|-----------|---------|-------|
+| Test | \`npm test\` | Should pass |
+            `;
+
+            const { rows, columnCount } = findTableWithFallback(sectionContent);
+            expect(columnCount).toBe(3);
+            expect(rows.length).toBeGreaterThan(0);
+        });
+
+        test('should detect 2-column table', () => {
+            const sectionContent = `
+| Criterion | Command |
+|-----------|---------|
+| Test | \`npm test\` |
+            `;
+
+            const { rows, columnCount } = findTableWithFallback(sectionContent);
+            expect(columnCount).toBe(2);
+            expect(rows.length).toBeGreaterThan(0);
+        });
+
+        test('should return empty for non-table content', () => {
+            const sectionContent = `
+Just some text without a table.
+- Item 1
+- Item 2
+            `;
+
+            const { rows, columnCount } = findTableWithFallback(sectionContent);
+            expect(rows.length).toBe(0);
+            expect(columnCount).toBe(0);
+        });
+    });
+
+    describe('extractCommandFromCell', () => {
+        test('should extract command from backticks', () => {
+            expect(extractCommandFromCell('`npm test`')).toBe('npm test');
+            expect(extractCommandFromCell('`grep "pattern" file.txt`')).toBe('grep "pattern" file.txt');
+        });
+
+        test('should recognize shell commands', () => {
+            expect(extractCommandFromCell('npm test')).toBe('npm test');
+            expect(extractCommandFromCell('python -m pytest')).toBe('python -m pytest');
+            expect(extractCommandFromCell('go test ./...')).toBe('go test ./...');
+        });
+
+        test('should recognize paths as commands', () => {
+            expect(extractCommandFromCell('/usr/bin/node script.js')).toBe('/usr/bin/node script.js');
+            expect(extractCommandFromCell('./run-tests.sh')).toBe('./run-tests.sh');
+        });
+
+        test('should return null for dash or empty', () => {
+            expect(extractCommandFromCell('-')).toBeNull();
+            expect(extractCommandFromCell('')).toBeNull();
+            expect(extractCommandFromCell('  ')).toBeNull();
         });
     });
 

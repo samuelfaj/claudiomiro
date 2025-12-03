@@ -29,15 +29,22 @@ You are a **Senior Software Engineer** implementing a task based on the BLUEPRIN
 
 ## 📚 CONTEXT FILES (READ THESE FIRST)
 
+**CRITICAL: Task folder location:**
+- **Task folder:** `{{taskFolder}}`
+- **All task files (BLUEPRINT.md, execution.json, review-checklist.json) are in this folder**
+
 Before starting implementation, you MUST read:
 
 1. **BLUEPRINT.md** (provided above)
+   - Location: `{{taskFolder}}/BLUEPRINT.md`
    - Contains: Task identity, execution contract, implementation strategy
    - Use for: Understanding what to build, how to build it, and success criteria
 
-2. **execution.json** (in same directory as BLUEPRINT.md)
+2. **execution.json** (in task folder)
+   - Location: `{{taskFolder}}/execution.json`
    - Contains: Current execution state, phases, artifacts, completion status
    - Use for: Tracking your progress, recording changes, validation status
+   - **CRITICAL: Always use this exact path when updating execution.json**
 
 3. **Context files from BLUEPRINT.md §2 (Priority 1 and 2)**
    - Read all files listed under "Priority 1 - READ FIRST" section
@@ -316,7 +323,7 @@ If you make assumptions during implementation:
 
 **MANDATORY:** For EVERY file you create/modify, immediately add review questions to `review-checklist.json`.
 
-**Location:** Same directory as BLUEPRINT.md and execution.json
+**Location:** `{{taskFolder}}/review-checklist.json`
 
 **Initial structure (create if doesn't exist):**
 ```json
@@ -803,8 +810,9 @@ Before marking task as complete, verify YOUR OWN work:
 You MUST produce/update these files:
 
 ### 1. execution.json (MANDATORY)
-**Location:** Same directory as BLUEPRINT.md
+**Location:** `{{taskFolder}}/execution.json`
 **Action:** Update continuously as you work
+**CRITICAL:** Always use the exact path above - do NOT create execution.json in any other location!
 
 **Required fields:**
 ```json
