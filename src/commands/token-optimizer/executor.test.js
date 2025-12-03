@@ -513,7 +513,12 @@ describe('src/commands/token-optimizer/executor.js', () => {
             state.claudiomiroFolder = '/test/.claudiomiro';
             fs.existsSync.mockReturnValue(true);
 
-            const result = saveOutput('test output content', 'npm test');
+            const result = saveOutput({
+                content: 'test output content',
+                command: 'npm test',
+                filteredOutput: 'filtered output',
+                filterInstruction: 'return only errors',
+            });
 
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 expect.stringMatching(/\/test\/\.claudiomiro\/token-optimizer\/output-.*\.txt$/),
@@ -537,7 +542,12 @@ describe('src/commands/token-optimizer/executor.js', () => {
             state.claudiomiroFolder = '/test/.claudiomiro';
             fs.existsSync.mockReturnValue(false);
 
-            saveOutput('content', 'command');
+            saveOutput({
+                content: 'content',
+                command: 'command',
+                filteredOutput: 'filtered',
+                filterInstruction: 'filter',
+            });
 
             expect(fs.mkdirSync).toHaveBeenCalledWith(
                 '/test/.claudiomiro/token-optimizer',
