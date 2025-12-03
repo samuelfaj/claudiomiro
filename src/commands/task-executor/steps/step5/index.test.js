@@ -837,16 +837,19 @@ describe('step5', () => {
     });
 
     describe('enforcePhaseGate', () => {
-        test('should not block Phase 1', () => {
+        test('should return true for Phase 1 (no gate check needed)', () => {
             const execution = {
                 currentPhase: { id: 1, name: 'Phase 1' },
                 phases: [{ id: 1, status: 'pending' }],
             };
 
-            expect(() => enforcePhaseGate(execution)).not.toThrow();
+            const result = enforcePhaseGate(execution);
+
+            expect(result).toBe(true);
+            expect(execution.currentPhase.id).toBe(1); // No change
         });
 
-        test('should not block when previous phase is completed', () => {
+        test('should return true when previous phase is completed', () => {
             const execution = {
                 currentPhase: { id: 2, name: 'Phase 2' },
                 phases: [
@@ -855,34 +858,61 @@ describe('step5', () => {
                 ],
             };
 
-            expect(() => enforcePhaseGate(execution)).not.toThrow();
+            const result = enforcePhaseGate(execution);
+
+            expect(result).toBe(true);
+            expect(execution.currentPhase.id).toBe(2); // No change
         });
 
-        test('should block when previous phase is in_progress', () => {
+        test('should reset currentPhase when previous phase is in_progress', () => {
             const execution = {
                 currentPhase: { id: 2, name: 'Phase 2' },
                 phases: [
-                    { id: 1, status: 'in_progress' },
-                    { id: 2, status: 'pending' },
+                    { id: 1, name: 'Phase 1', status: 'in_progress' },
+                    { id: 2, name: 'Phase 2', status: 'pending' },
                 ],
             };
 
-            expect(() => enforcePhaseGate(execution))
-                .toThrow('Phase 1 must be completed before Phase 2');
+            const result = enforcePhaseGate(execution);
+
+            expect(result).toBe(false); // Reset occurred
+            expect(execution.currentPhase.id).toBe(1); // Reset to Phase 1
+            expect(execution.currentPhase.name).toBe('Phase 1');
         });
 
-        test('should block when previous phase is pending', () => {
+        test('should reset currentPhase when previous phase is pending', () => {
             const execution = {
                 currentPhase: { id: 3, name: 'Phase 3' },
                 phases: [
-                    { id: 1, status: 'completed' },
-                    { id: 2, status: 'pending' },
-                    { id: 3, status: 'pending' },
+                    { id: 1, name: 'Phase 1', status: 'completed' },
+                    { id: 2, name: 'Phase 2', status: 'pending' },
+                    { id: 3, name: 'Phase 3', status: 'pending' },
                 ],
             };
 
-            expect(() => enforcePhaseGate(execution))
-                .toThrow('Phase 2 must be completed before Phase 3');
+            const result = enforcePhaseGate(execution);
+
+            expect(result).toBe(false); // Reset occurred
+            expect(execution.currentPhase.id).toBe(2); // Reset to first incomplete phase (Phase 2)
+            expect(execution.currentPhase.name).toBe('Phase 2');
+        });
+
+        test('should reset to first incomplete phase when multiple phases are incomplete', () => {
+            const execution = {
+                currentPhase: { id: 4, name: 'Phase 4' },
+                phases: [
+                    { id: 1, name: 'Phase 1', status: 'pending' },
+                    { id: 2, name: 'Phase 2', status: 'pending' },
+                    { id: 3, name: 'Phase 3', status: 'pending' },
+                    { id: 4, name: 'Phase 4', status: 'pending' },
+                ],
+            };
+
+            const result = enforcePhaseGate(execution);
+
+            expect(result).toBe(false); // Reset occurred
+            expect(execution.currentPhase.id).toBe(1); // Reset to first incomplete phase (Phase 1)
+            expect(execution.currentPhase.name).toBe('Phase 1');
         });
 
         test('should handle single-phase task', () => {
@@ -891,7 +921,33 @@ describe('step5', () => {
                 phases: [{ id: 1, status: 'pending' }],
             };
 
-            expect(() => enforcePhaseGate(execution)).not.toThrow();
+            const result = enforcePhaseGate(execution);
+
+            expect(result).toBe(true);
+            expect(execution.currentPhase.id).toBe(1); // No change
+        });
+
+        test('should return true when currentPhase is undefined', () => {
+            const execution = {
+                phases: [{ id: 1, status: 'pending' }],
+            };
+
+            const result = enforcePhaseGate(execution);
+
+            expect(result).toBe(true);
+        });
+
+        test('should return true when previous phase does not exist in phases array', () => {
+            const execution = {
+                currentPhase: { id: 5, name: 'Phase 5' },
+                phases: [
+                    { id: 5, name: 'Phase 5', status: 'pending' },
+                ],
+            };
+
+            const result = enforcePhaseGate(execution);
+
+            expect(result).toBe(true);
         });
     });
 

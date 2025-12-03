@@ -242,30 +242,58 @@ const verifyPreConditions = async (execution) => {
 
 /**
  * Enforce phase gate - Phase N requires Phase N-1 completed
- * @param {Object} execution - execution.json content
- * @throws {Error} if previous phase not completed
+ * If previous phase is not completed, resets currentPhase to the incomplete phase
+ * This prevents infinite retry loops where the DAG executor keeps retrying step5
+ * but the execution.json state never changes.
+ *
+ * @param {Object} execution - execution.json content (will be mutated if reset needed)
+ * @returns {boolean} true if phase gate passed, false if currentPhase was reset
  */
 const enforcePhaseGate = (execution) => {
     const logger = require('../../../../shared/utils/logger');
     const currentPhaseId = execution.currentPhase?.id;
 
     if (!currentPhaseId || currentPhaseId <= 1) {
-        return; // Phase 1 or no phase, no gate check needed
+        return true; // Phase 1 or no phase, no gate check needed
     }
 
     const prevPhase = (execution.phases || []).find(p => p.id === currentPhaseId - 1);
 
     if (!prevPhase) {
         // Single-phase task or phases not sequential
-        return;
+        return true;
     }
 
     logger.info(`Phase gate check: Phase ${currentPhaseId - 1} status is ${prevPhase.status}`);
 
     if (prevPhase.status !== 'completed') {
-        logger.warning(`Phase gate BLOCKED: Phase ${currentPhaseId - 1} not completed`);
-        throw new Error(`Phase ${currentPhaseId - 1} must be completed before Phase ${currentPhaseId}`);
+        // Instead of throwing, reset currentPhase to the incomplete phase
+        // This allows step5 to re-execute the incomplete phase on retry
+        logger.warning(`Phase gate: Phase ${currentPhaseId - 1} not completed, resetting currentPhase from ${currentPhaseId} to ${currentPhaseId - 1}`);
+
+        // Find the first incomplete phase (could be earlier than currentPhaseId - 1)
+        const firstIncompletePhase = (execution.phases || [])
+            .filter(p => p.status !== 'completed')
+            .sort((a, b) => a.id - b.id)[0];
+
+        if (firstIncompletePhase) {
+            execution.currentPhase = {
+                id: firstIncompletePhase.id,
+                name: firstIncompletePhase.name || `Phase ${firstIncompletePhase.id}`,
+            };
+            logger.info(`Phase gate: Reset currentPhase to Phase ${firstIncompletePhase.id} (${firstIncompletePhase.name || 'unnamed'})`);
+        } else {
+            // Fallback to previous phase if no incomplete phase found
+            execution.currentPhase = {
+                id: currentPhaseId - 1,
+                name: prevPhase.name || `Phase ${currentPhaseId - 1}`,
+            };
+        }
+
+        return false; // Indicate that reset occurred
     }
+
+    return true; // Phase gate passed
 };
 
 /**
@@ -449,8 +477,13 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
         throw new Error('Pre-conditions failed. Task blocked.');
     }
 
-    // Phase gate enforcement
-    enforcePhaseGate(execution);
+    // Phase gate enforcement - may reset currentPhase if previous phase incomplete
+    const phaseGatePassed = enforcePhaseGate(execution);
+    if (!phaseGatePassed) {
+        // currentPhase was reset, save and continue execution from the reset phase
+        logger.info('Phase gate reset currentPhase, saving execution.json and continuing...');
+        saveExecution(executionPath, execution);
+    }
 
     // Update status to in_progress
     execution.status = 'in_progress';
@@ -709,18 +742,59 @@ const step5 = async (task) => {
 
         return result;
     } catch (error) {
-        // Update execution.json with error if it exists
+        // Reset execution.json to fresh state on error, preserving critical data
         const executionPath = folder('execution.json');
         if (fs.existsSync(executionPath)) {
             try {
-                const execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
-                if (!execution.errorHistory) execution.errorHistory = [];
-                execution.errorHistory.push({
+                const oldExecution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
+
+                // Preserve attempts counter and error history
+                const currentAttempts = (oldExecution.attempts || 0);
+                const errorHistory = oldExecution.errorHistory || [];
+
+                // Preserve blockedBy from step6 code review failures
+                // This is CRITICAL so step5 knows what to fix on retry
+                const blockedBy = oldExecution.completion?.blockedBy || [];
+
+                // Add current error to history
+                errorHistory.push({
                     timestamp: new Date().toISOString(),
                     message: error.message,
                     stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : null,
                 });
-                fs.writeFileSync(executionPath, JSON.stringify(execution, null, 2), 'utf8');
+
+                // Create brand new execution.json with fresh state
+                const freshExecution = {
+                    $schema: oldExecution.$schema || './execution-schema.json',
+                    taskId: oldExecution.taskId || task,
+                    status: 'pending',
+                    attempts: currentAttempts,
+                    errorHistory,
+                    currentPhase: { id: 1, name: 'Phase 1' },
+                    phases: (oldExecution.phases || []).map(phase => ({
+                        ...phase,
+                        status: 'pending',
+                        items: (phase.items || []).map(item => ({
+                            ...item,
+                            completed: false,
+                        })),
+                        preConditions: (phase.preConditions || []).map(pc => ({
+                            ...pc,
+                            passed: undefined,
+                            evidence: undefined,
+                        })),
+                    })),
+                    artifacts: [],
+                    uncertainties: [],
+                    successCriteria: [],
+                    completion: {
+                        status: 'pending_validation',
+                        blockedBy, // Preserve blockedBy from step6 so step5 knows what to fix
+                    },
+                };
+
+                logger.warning(`[Step5] Error occurred, resetting to fresh execution.json (attempts: ${currentAttempts}, blockedBy: ${blockedBy.length} issues)`);
+                fs.writeFileSync(executionPath, JSON.stringify(freshExecution, null, 2), 'utf8');
             } catch (_saveErr) {
                 // Ignore save errors
             }

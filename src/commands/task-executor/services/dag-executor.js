@@ -388,7 +388,39 @@ class DAGExecutor {
                     this.stateManager.updateTaskStep(taskName, 'Step 6 - Code review');
 
                     const shouldPush = !process.argv.some(arg => arg === '--push=false');
-                    await step6(taskName, shouldPush);
+
+                    try {
+                        await step6(taskName, shouldPush);
+                    } catch (step6Error) {
+                        // If step6 says task is not ready for review, it means phases are incomplete
+                        // Reset completion status and go back to step5
+                        if (step6Error.message.includes('Task not ready for review')) {
+                            logger.warning(`${taskName} Step 6: Task not ready for review, returning to Step 5`);
+                            logger.warning(`  Reason: ${step6Error.message}`);
+
+                            // Reset the completion status in execution.json so step5 re-executes
+                            try {
+                                const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                                execution.status = 'in_progress';
+                                if (execution.completion) {
+                                    execution.completion.status = 'pending_validation';
+                                }
+                                fs.writeFileSync(executionPath, JSON.stringify(execution, null, 2), 'utf-8');
+                                logger.info(`${taskName}: Reset execution.json status to in_progress`);
+                            } catch (resetError) {
+                                logger.warning(`${taskName}: Could not reset execution.json: ${resetError.message}`);
+                            }
+
+                            // Small delay before retry
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            continue; // Go back to step5
+                        }
+
+                        // For other step6 errors, log and continue the loop
+                        logger.warning(`${taskName} Step 6 failed (attempt ${attempts}): ${step6Error.message}`);
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        continue;
+                    }
 
                     // Se ainda não foi aprovado, continua o loop
                     if (!(await isTaskApproved())) {

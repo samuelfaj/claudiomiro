@@ -46,6 +46,58 @@ Before starting implementation, you MUST read:
 
 ---
 
+## 🔄 RETRY SCENARIO: Check for Previous Failures
+
+**CRITICAL:** Before starting, check if this is a RETRY after a failed code review.
+
+Read `execution.json` and look for:
+
+```json
+{
+  "completion": {
+    "blockedBy": [
+      "Missing validation for userId",
+      "Wrong response status in handler.ext:55"
+    ]
+  },
+  "errorHistory": [
+    {
+      "timestamp": "...",
+      "message": "Code review failed: missing validation"
+    }
+  ]
+}
+```
+
+### If `completion.blockedBy` exists and is NOT empty:
+
+**This is a RETRY - You MUST fix the issues listed!**
+
+1. **Read ALL issues** in `completion.blockedBy` array
+2. **Read `errorHistory`** to understand what went wrong
+3. **Read `CODE_REVIEW.md`** if it exists - it has detailed failure analysis
+4. **Address EACH issue** before proceeding with normal implementation
+
+**Example blockedBy handling:**
+```markdown
+Found 2 blocking issues from previous code review:
+1. "Missing validation for userId" → Add validation in handler.ext
+2. "Wrong response status" → Fix status code at handler.ext:55
+
+I will address these FIRST before continuing with the implementation.
+```
+
+### If `completion.blockedBy` is empty or doesn't exist:
+
+This is a fresh execution - proceed with normal implementation flow.
+
+**IMPORTANT:** After fixing blockedBy issues:
+- Clear the `completion.blockedBy` array
+- Reset phases to track the new fixes
+- Ensure all artifacts are re-verified
+
+---
+
 ## 🔄 EXECUTION FLOW
 
 Execute these phases sequentially:
