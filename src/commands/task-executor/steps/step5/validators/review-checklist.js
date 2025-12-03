@@ -9,7 +9,7 @@ const path = require('path');
  * @returns {Promise<Object>} Validation result
  */
 const validateReviewChecklist = async (task, { claudiomiroFolder }) => {
-    const logger = require('../../../../shared/utils/logger');
+    const logger = require('../../../../../shared/utils/logger');
 
     const executionPath = path.join(claudiomiroFolder, task, 'execution.json');
     const checklistPath = path.join(claudiomiroFolder, task, 'review-checklist.json');

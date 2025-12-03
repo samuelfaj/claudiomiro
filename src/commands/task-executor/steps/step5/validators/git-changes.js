@@ -46,7 +46,7 @@ const getGitModifiedFiles = async (cwd) => {
  * @returns {Promise<Object>} Verification result
  */
 const verifyChanges = async (execution, cwd) => {
-    const logger = require('../../../../shared/utils/logger');
+    const logger = require('../../../../../shared/utils/logger');
 
     // Get actual changed files from git
     const actualChanges = await getGitModifiedFiles(cwd);

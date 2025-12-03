@@ -2,7 +2,7 @@ const {
     verifyChanges,
     getGitModifiedFiles,
     normalizePath,
-} = require('./verify-changes');
+} = require('./git-changes');
 
 // Mock dependencies
 jest.mock('child_process', () => ({
@@ -13,7 +13,7 @@ jest.mock('util', () => ({
     promisify: jest.fn((fn) => fn),
 }));
 
-jest.mock('../../../../shared/utils/logger', () => ({
+jest.mock('../../../../../shared/utils/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
 }));

@@ -228,7 +228,7 @@ const cleanDescription = (description) => {
  * @returns {Promise<Object>} Validation result
  */
 const validateImplementationStrategy = async (task, { claudiomiroFolder }) => {
-    const logger = require('../../../../shared/utils/logger');
+    const logger = require('../../../../../shared/utils/logger');
 
     const blueprintPath = path.join(claudiomiroFolder, task, 'BLUEPRINT.md');
     const executionPath = path.join(claudiomiroFolder, task, 'execution.json');

@@ -1,730 +1,318 @@
+/**
+ * Step 5: Task Execution
+ *
+ * Simplified 2-File Flow (BLUEPRINT.md + execution.json):
+ * 1. Load BLUEPRINT.md and execution.json
+ * 2. Verify pre-conditions
+ * 3. Execute task via Claude
+ * 4. Run validation layers
+ * 5. Save progress (NOT reset on error)
+ *
+ * KEY FIX: On validation errors, we DON'T reset execution.json.
+ * We record what failed so the AI can fix that specific part.
+ */
+
 const fs = require('fs');
 const path = require('path');
-const { promisify } = require('util');
-const { exec: execCallback } = require('child_process');
 const state = require('../../../../shared/config/state');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { markTaskCompleted } = require('../../../../shared/services/context-cache');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
-const { validateExecutionJson } = require('../../utils/schema-validator');
 const reflectionHook = require('./reflection-hook');
 
-const exec = promisify(execCallback);
+// Utils
+const {
+    loadExecution,
+    saveExecution,
+    recordError,
+} = require('./utils/execution-io');
+const { enforcePhaseGate } = require('./utils/phase-gate');
+const { estimateCodeChangeSize, VALID_STATUSES } = require('./utils/execution-helpers');
 
-// Valid execution statuses
-const VALID_STATUSES = ['pending', 'in_progress', 'completed', 'blocked'];
+// Validators
+const {
+    verifyPreConditions,
+    validateImplementationStrategy,
+    validateSuccessCriteria,
+    verifyChanges,
+    validateReviewChecklist,
+    validateCompletion,
+} = require('./validators');
 
-// Dangerous command patterns (security)
-const DANGEROUS_PATTERNS = [
-    /rm\s+-rf/i,
-    /sudo\s+/i,
-    />\s*\/dev\//i,
-    /\|\s*sh\b/i,
-    /\|\s*bash\b/i,
-    /eval\s+/i,
-    /curl.*\|\s*sh/i,
-];
-
-/**
- * Step 5: Task Execution
- *
- * 2-File Flow (BLUEPRINT.md + execution.json):
- * 1. Requires BLUEPRINT.md to exist
- * 2. Verifies pre-conditions with HARD STOP behavior
- * 3. Enforces phase gates (Phase N requires Phase N-1 completed)
- * 4. Executes task using BLUEPRINT.md as context
- * 5. Updates execution.json with progress, artifacts, completion
- *
- * This is the core implementation step where actual code changes happen.
- */
-
-// Critical error patterns that should stop execution
-// These indicate fundamental issues that prevent processing
-const CRITICAL_ERROR_PATTERNS = [
-    /\.json not found/i,       // execution.json not found, config.json not found, etc.
-    /file not found/i,         // generic file not found
-    /failed to parse/i,        // JSON parse failures
-    /syntax error/i,           // syntax errors in JSON or code
-    /unexpected token/i,       // JSON parse errors
-    /json parse error/i,       // explicit JSON errors
-    /cannot read/i,            // fs read errors
-    /permission denied/i,      // fs permission errors
-    /enoent/i,                 // Node.js file not found error
-];
+// Prompt Selector
+const { selectPrompt } = require('./prompts/prompt-selector');
 
 /**
- * Check if an error is critical (should stop execution) vs non-critical (can be ignored/fixed)
- * @param {string} errorMessage - Error message to check
- * @returns {boolean} true if critical
+ * Run all validation layers on execution.json
+ * Returns { valid: boolean, failedValidation: string|null }
  */
-const isCriticalError = (errorMessage) => {
-    if (!errorMessage) return false;
-    return CRITICAL_ERROR_PATTERNS.some(pattern => pattern.test(errorMessage));
-};
-
-/**
- * Estimates the code change size from BLUEPRINT.md content
- * @param {string} blueprintPath - Path to BLUEPRINT.md
- * @returns {number} Estimated line count
- */
-const estimateCodeChangeSize = (blueprintPath) => {
-    if (!fs.existsSync(blueprintPath)) return 0;
-    const content = fs.readFileSync(blueprintPath, 'utf8');
-    return content.split('\n').length;
-};
-
-/**
- * Load execution.json with schema validation and auto-repair
- * Lenient mode: non-critical validation errors are logged but not thrown
- * @param {string} executionPath - Path to execution.json
- * @param {Object} options - Options for loading
- * @param {boolean} options.lenient - If true, ignore non-critical validation errors (default: true)
- * @returns {Object} Parsed and repaired execution object
- * @throws {Error} if file missing or JSON parse fails (critical errors only)
- */
-const loadExecution = (executionPath, options = {}) => {
-    const { lenient = true } = options;
+const runValidationLayers = async (task, execution, cwd, _executionPath) => {
     const logger = require('../../../../shared/utils/logger');
 
-    // Critical: file must exist
-    if (!fs.existsSync(executionPath)) {
-        throw new Error(`execution.json not found at ${executionPath}`);
-    }
-
-    let execution;
+    // Layer 1: Implementation Strategy (BLUEPRINT.md §4)
+    logger.info('Validating Implementation Strategy...');
     try {
-        execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
-    } catch (err) {
-        // Critical: JSON must be parseable
-        throw new Error(`Failed to parse execution.json: ${err.message}`);
-    }
-
-    // Validate against schema with auto-repair enabled
-    const validation = validateExecutionJson(execution, { sanitize: true, repair: true });
-
-    if (!validation.valid) {
-        const errorMessage = validation.errors.join('; ');
-
-        // Check if any error is critical
-        if (isCriticalError(errorMessage)) {
-            throw new Error(`Invalid execution.json (critical): ${errorMessage}`);
-        }
-
-        // Non-critical errors: log warning and use repaired data anyway
-        if (lenient) {
-            logger.warning(`[Step5] Non-critical execution.json validation issues (auto-fixed): ${errorMessage}`);
-            // Even if validation says invalid, the repaired data should be usable
-            // Return the best-effort repaired data
-            return validation.repairedData || validation.sanitizedData || execution;
-        }
-
-        // Strict mode: throw on any validation error
-        throw new Error(`Invalid execution.json: ${errorMessage}`);
-    }
-
-    // Return the repaired/sanitized data
-    return validation.repairedData || validation.sanitizedData || execution;
-};
-
-/**
- * Save execution.json with schema validation and auto-repair
- * Lenient mode: saves best-effort repaired data even if validation has non-critical errors
- * @param {string} executionPath - Path to execution.json
- * @param {Object} execution - Execution object to save
- * @param {Object} options - Options for saving
- * @param {boolean} options.lenient - If true, save even with non-critical validation errors (default: true)
- * @throws {Error} only if critical validation errors occur
- */
-const saveExecution = (executionPath, execution, options = {}) => {
-    const { lenient = true } = options;
-    const logger = require('../../../../shared/utils/logger');
-
-    // Validate and repair against schema before save
-    const validation = validateExecutionJson(execution, { sanitize: true, repair: true });
-
-    if (!validation.valid) {
-        const errorMessage = validation.errors.join('; ');
-
-        // Check if any error is critical
-        if (isCriticalError(errorMessage)) {
-            throw new Error(`Cannot save execution.json (critical): ${errorMessage}`);
-        }
-
-        // Non-critical errors: log warning and save anyway
-        if (lenient) {
-            logger.warning(`[Step5] Saving execution.json with non-critical issues (auto-fixed): ${errorMessage}`);
-            // Save the best-effort repaired data
-            const dataToSave = validation.repairedData || validation.sanitizedData || execution;
-            fs.writeFileSync(executionPath, JSON.stringify(dataToSave, null, 2), 'utf8');
-            return;
-        }
-
-        // Strict mode: throw on any validation error
-        throw new Error(`Cannot save execution.json: ${errorMessage}`);
-    }
-
-    // Save the repaired/sanitized data
-    const dataToSave = validation.repairedData || validation.sanitizedData || execution;
-    fs.writeFileSync(executionPath, JSON.stringify(dataToSave, null, 2), 'utf8');
-};
-
-/**
- * Check if command contains dangerous patterns
- * @param {string} command - Command to check
- * @returns {boolean} true if dangerous
- */
-const isDangerousCommand = (command) => {
-    return DANGEROUS_PATTERNS.some(pattern => pattern.test(command));
-};
-
-/**
- * Verify all pre-conditions for all phases
- * @param {Object} execution - execution.json content
- * @returns {Promise<{passed: boolean, blocked: boolean}>}
- * @throws {Error} if blocked
- */
-const verifyPreConditions = async (execution) => {
-    const logger = require('../../../../shared/utils/logger');
-
-    for (const phase of execution.phases || []) {
-        for (const pc of phase.preConditions || []) {
-            // Handle missing command field gracefully
-            if (!pc.command || typeof pc.command !== 'string' || pc.command.trim() === '') {
-                logger.info(`Skipping pre-condition without command: ${pc.check || 'unknown'}`);
-                pc.passed = true; // Mark as passed since there's nothing to verify
-                pc.evidence = 'No command specified - auto-passed';
-                continue;
-            }
-
-            // Handle informational-only pre-conditions (echo commands or no-op)
-            if (pc.command.startsWith('echo "no command') || pc.command === 'true') {
-                logger.info(`Skipping informational pre-condition: ${pc.check || 'unknown'}`);
-                pc.passed = true;
-                pc.evidence = 'Informational pre-condition - auto-passed';
-                continue;
-            }
-
-            logger.info(`Checking: ${pc.check || 'unknown'} with command: ${pc.command}`);
-
-            // Security check
-            if (isDangerousCommand(pc.command)) {
-                pc.passed = false;
-                pc.evidence = 'Command rejected: contains dangerous patterns';
-                logger.warning(`Pre-condition FAILED: ${pc.check}. Evidence: ${pc.evidence}`);
-                execution.status = 'blocked';
-                return { passed: false, blocked: true };
-            }
-
-            try {
-                const { stdout } = await exec(pc.command, { timeout: 5000 });
-                pc.evidence = stdout.trim();
-                // Handle missing or empty expected field - any output is acceptable
-                const expectedValue = pc.expected || '';
-                pc.passed = expectedValue === '' || stdout.includes(expectedValue);
-            } catch (error) {
-                pc.evidence = error.killed
-                    ? 'Command timed out after 5000ms'
-                    : error.message;
-                pc.passed = false;
-            }
-
-            if (!pc.passed) {
-                logger.warning(`Pre-condition FAILED: ${pc.check}. Evidence: ${pc.evidence}`);
-                execution.status = 'blocked';
-                return { passed: false, blocked: true };
-            }
-        }
-    }
-
-    logger.info('All pre-conditions passed');
-    return { passed: true, blocked: false };
-};
-
-/**
- * Enforce phase gate - Phase N requires Phase N-1 completed
- * If previous phase is not completed, resets currentPhase to the incomplete phase
- * This prevents infinite retry loops where the DAG executor keeps retrying step5
- * but the execution.json state never changes.
- *
- * @param {Object} execution - execution.json content (will be mutated if reset needed)
- * @returns {boolean} true if phase gate passed, false if currentPhase was reset
- */
-const enforcePhaseGate = (execution) => {
-    const logger = require('../../../../shared/utils/logger');
-    const currentPhaseId = execution.currentPhase?.id;
-
-    if (!currentPhaseId || currentPhaseId <= 1) {
-        return true; // Phase 1 or no phase, no gate check needed
-    }
-
-    const prevPhase = (execution.phases || []).find(p => p.id === currentPhaseId - 1);
-
-    if (!prevPhase) {
-        // Single-phase task or phases not sequential
-        return true;
-    }
-
-    logger.info(`Phase gate check: Phase ${currentPhaseId - 1} status is ${prevPhase.status}`);
-
-    if (prevPhase.status !== 'completed') {
-        // Instead of throwing, reset currentPhase to the incomplete phase
-        // This allows step5 to re-execute the incomplete phase on retry
-        logger.warning(`Phase gate: Phase ${currentPhaseId - 1} not completed, resetting currentPhase from ${currentPhaseId} to ${currentPhaseId - 1}`);
-
-        // Find the first incomplete phase (could be earlier than currentPhaseId - 1)
-        const firstIncompletePhase = (execution.phases || [])
-            .filter(p => p.status !== 'completed')
-            .sort((a, b) => a.id - b.id)[0];
-
-        if (firstIncompletePhase) {
-            execution.currentPhase = {
-                id: firstIncompletePhase.id,
-                name: firstIncompletePhase.name || `Phase ${firstIncompletePhase.id}`,
-            };
-            logger.info(`Phase gate: Reset currentPhase to Phase ${firstIncompletePhase.id} (${firstIncompletePhase.name || 'unnamed'})`);
-        } else {
-            // Fallback to previous phase if no incomplete phase found
-            execution.currentPhase = {
-                id: currentPhaseId - 1,
-                name: prevPhase.name || `Phase ${currentPhaseId - 1}`,
-            };
-        }
-
-        return false; // Indicate that reset occurred
-    }
-
-    return true; // Phase gate passed
-};
-
-/**
- * Update phase progress
- * @param {Object} execution - execution.json content
- * @param {number} phaseId - Phase ID to update
- * @param {string} status - New status
- */
-const updatePhaseProgress = (execution, phaseId, status) => {
-    const phase = (execution.phases || []).find(p => p.id === phaseId);
-    if (phase) {
-        phase.status = status;
-    }
-
-    // Update currentPhase if advancing
-    if (execution.currentPhase && execution.currentPhase.id < phaseId) {
-        execution.currentPhase.id = phaseId;
-        execution.currentPhase.name = phase?.name || `Phase ${phaseId}`;
-    }
-};
-
-/**
- * Track artifacts in execution.json
- * @param {Object} execution - execution.json content
- * @param {string[]} createdFiles - Paths of created files
- * @param {string[]} modifiedFiles - Paths of modified files
- */
-const trackArtifacts = (execution, createdFiles = [], modifiedFiles = []) => {
-    const logger = require('../../../../shared/utils/logger');
-
-    if (!execution.artifacts) {
-        execution.artifacts = [];
-    }
-
-    for (const filePath of createdFiles) {
-        execution.artifacts.push({
-            type: 'created',
-            path: filePath,
-            verified: false,
-        });
-        logger.info(`Tracked artifact: created ${filePath}`);
-    }
-
-    for (const filePath of modifiedFiles) {
-        execution.artifacts.push({
-            type: 'modified',
-            path: filePath,
-            verified: false,
-        });
-        logger.info(`Tracked artifact: modified ${filePath}`);
-    }
-};
-
-/**
- * Track uncertainty in execution.json
- * @param {Object} execution - execution.json content
- * @param {string} topic - Uncertainty topic
- * @param {string} assumption - Assumption made
- * @param {string} confidence - "LOW"|"MEDIUM"|"HIGH"
- */
-const trackUncertainty = (execution, topic, assumption, confidence) => {
-    const logger = require('../../../../shared/utils/logger');
-
-    if (!execution.uncertainties) {
-        execution.uncertainties = [];
-    }
-
-    const id = `U${execution.uncertainties.length + 1}`;
-    execution.uncertainties.push({
-        id,
-        topic,
-        assumption,
-        confidence,
-        resolution: null,
-        resolvedConfidence: null,
-    });
-
-    logger.info(`Tracked uncertainty: ${id} - ${topic} (${confidence} confidence)`);
-};
-
-/**
- * Validate completion rules
- * @param {Object} execution - execution.json content
- * @returns {boolean} true if all validation rules pass
- */
-const validateCompletion = (execution) => {
-    const logger = require('../../../../shared/utils/logger');
-
-    // Check all phases completed
-    for (const phase of execution.phases || []) {
-        if (phase.status !== 'completed') {
-            logger.info(`Completion validation: failed - Phase ${phase.id} (${phase.name}) not completed (status: ${phase.status})`);
-            return false;
-        }
-
-        // Check all items in phase completed (if items exist)
-        for (const item of phase.items || []) {
-            if (item.completed !== true) {
-                logger.info(`Completion validation: failed - Phase ${phase.id} item not completed: ${item.description}`);
-                return false;
-            }
-        }
-
-        // Check all pre-conditions passed
-        for (const pc of phase.preConditions || []) {
-            if (pc.passed !== true) {
-                logger.info(`Completion validation: failed - Phase ${phase.id} pre-condition not passed: ${pc.check}`);
-                return false;
-            }
-        }
-    }
-
-    // Check all artifacts verified
-    for (const artifact of execution.artifacts || []) {
-        if (artifact.verified !== true) {
-            logger.info(`Completion validation: failed - artifact not verified: ${artifact.path}`);
-            return false;
-        }
-    }
-
-    // Check all success criteria passed (if they exist)
-    for (const criterion of execution.successCriteria || []) {
-        if (criterion.passed !== true) {
-            logger.info(`Completion validation: failed - success criterion not passed: ${criterion.criterion}`);
-            return false;
-        }
-    }
-
-    // Check beyondTheBasics cleanup flags
-    const cleanup = execution.beyondTheBasics?.cleanup;
-    if (cleanup) {
-        if (cleanup.debugLogsRemoved === false ||
-            cleanup.formattingConsistent === false ||
-            cleanup.deadCodeRemoved === false) {
-            logger.info('Completion validation: failed - cleanup not complete');
-            return false;
-        }
-    }
-
-    logger.info('Completion validation: passed');
-    return true;
-};
-
-/**
- * Execute new 2-file flow (BLUEPRINT.md + execution.json)
- * @param {string} task - Task identifier
- * @param {string} taskFolder - Path to task folder
- * @param {string} cwd - Working directory
- * @returns {Promise<any>} Execution result
- */
-const executeNewFlow = async (task, taskFolder, cwd) => {
-    const logger = require('../../../../shared/utils/logger');
-    const blueprintPath = path.join(taskFolder, 'BLUEPRINT.md');
-    const executionPath = path.join(taskFolder, 'execution.json');
-
-    logger.info('Using new 2-file flow (BLUEPRINT.md)');
-
-    // Load BLUEPRINT.md
-    if (!fs.existsSync(blueprintPath)) {
-        throw new Error('BLUEPRINT.md not found');
-    }
-    const blueprintContent = fs.readFileSync(blueprintPath, 'utf8');
-
-    if (!blueprintContent || blueprintContent.trim().length === 0) {
-        throw new Error('BLUEPRINT.md is empty');
-    }
-
-    // Load and validate execution.json
-    const execution = loadExecution(executionPath);
-
-    // Track attempts count BEFORE any increment (for diagnostics)
-    const attemptsBeforeClaude = execution.attempts || 0;
-
-    logger.info(`Loaded execution.json: status=${execution.status}, phase=${execution.currentPhase?.id || 1}, attempts=${attemptsBeforeClaude}`);
-
-    // Phase 1: Pre-condition verification (HARD STOP)
-    // NOTE: We do NOT increment attempts here - pre-condition failures are not real execution attempts
-    const { blocked } = await verifyPreConditions(execution);
-    if (blocked) {
-        // Don't increment attempts for pre-condition failures (they're not real Claude executions)
-        saveExecution(executionPath, execution);
-        throw new Error('Pre-conditions failed. Task blocked.');
-    }
-
-    // Only increment attempts AFTER pre-conditions pass (this is a real execution attempt)
-    execution.attempts = attemptsBeforeClaude + 1;
-
-    // Phase gate enforcement - may reset currentPhase if previous phase incomplete
-    const phaseGatePassed = enforcePhaseGate(execution);
-    if (!phaseGatePassed) {
-        // currentPhase was reset, save and continue execution from the reset phase
-        logger.info('Phase gate reset currentPhase, saving execution.json and continuing...');
-        saveExecution(executionPath, execution);
-    }
-
-    // Update status to in_progress
-    execution.status = 'in_progress';
-    saveExecution(executionPath, execution);
-
-    // Load step5 prompt with execution.json tracking instructions
-    const step5PromptPath = path.join(__dirname, 'prompt.md');
-    let step5Prompt = fs.existsSync(step5PromptPath)
-        ? fs.readFileSync(step5PromptPath, 'utf-8')
-        : '';
-
-    // Load shell command rule
-    const shellCommandRule = fs.readFileSync(
-        path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'),
-        'utf-8',
-    );
-
-    // Replace path placeholders in prompt (CRITICAL: Claude needs to know where files are)
-    step5Prompt = step5Prompt
-        .replace(/\{\{taskFolder\}\}/g, taskFolder)
-        .replace(/\{\{claudiomiroFolder\}\}/g, state.claudiomiroFolder);
-
-    // Combine: step5 instructions + BLUEPRINT + shell rules
-    const prompt = step5Prompt
-        ? `${step5Prompt}\n\n---\n\n## BLUEPRINT.md (Your Implementation Spec)\n\n${blueprintContent}\n\n---\n\n${shellCommandRule}`
-        : `${blueprintContent}\n\n${shellCommandRule}`;
-    const result = await executeClaude(prompt, task, { cwd });
-
-    // Mark task as completed in cache
-    markTaskCompleted(state.claudiomiroFolder, task);
-
-    // Reload execution.json to include Claude's updates before persisting
-    const latestExecution = loadExecution(executionPath);
-
-    // Preserve incremented attempt count if Claude rewrites execution.json
-    // attemptsBeforeClaude is the count BEFORE this execution, so the current attempt is +1
-    const currentAttempt = attemptsBeforeClaude + 1;
-    const latestAttempts = Number.isInteger(latestExecution.attempts)
-        ? latestExecution.attempts
-        : 0;
-    latestExecution.attempts = Math.max(latestAttempts, currentAttempt);
-
-    // 🆕 LAYER 1.5: Validate Implementation Strategy (BLUEPRINT.md §4)
-    logger.info('Validating Implementation Strategy from BLUEPRINT.md §4...');
-    const { validateImplementationStrategy } = require('./validate-implementation-strategy');
-    try {
-        const strategyValidation = await validateImplementationStrategy(task, {
+        const strategyResult = await validateImplementationStrategy(task, {
             claudiomiroFolder: state.claudiomiroFolder,
         });
 
-        if (!strategyValidation.valid) {
-            logger.error(`❌ Implementation Strategy validation failed: ${strategyValidation.missing.length} issues`);
-            strategyValidation.missing.forEach((issue, idx) => {
-                logger.error(`   ${idx + 1}. Phase ${issue.phaseId}: ${issue.reason}`);
-                if (issue.item) {
-                    logger.error(`      Item: "${issue.item}"`);
-                }
-                if (issue.expectedSteps !== undefined) {
-                    logger.error(`      Expected ${issue.expectedSteps} steps, found ${issue.actualItems || 0} items`);
-                }
-            });
-
-            // Force re-execution
-            latestExecution.status = 'in_progress';
-            latestExecution.completion.status = 'pending_validation';
-            saveExecution(executionPath, latestExecution);
-
-            throw new Error(`Implementation Strategy validation failed: ${strategyValidation.missing.length} steps missing or incomplete`);
+        if (!strategyResult.valid) {
+            return {
+                valid: false,
+                failedValidation: 'implementation-strategy',
+                message: `${strategyResult.missing.length} phases/steps missing`,
+                details: strategyResult.missing,
+            };
         }
-
-        logger.info(`✅ Implementation Strategy validated: ${strategyValidation.expectedPhases} phases, all steps tracked`);
+        logger.info(`✅ Implementation Strategy: ${strategyResult.expectedPhases} phases validated`);
     } catch (error) {
-        // If validateImplementationStrategy itself throws (e.g., parsing error), check if it's validation failure
-        if (error.message.includes('Implementation Strategy validation failed')) {
-            throw error; // Re-throw validation failures
+        if (!error.message.includes('not found')) {
+            logger.warning(`Implementation Strategy validation error: ${error.message}`);
         }
-        logger.warning(`Implementation Strategy validation skipped: ${error.message}`);
     }
 
-    // 🆕 LAYER 2: Run automated success criteria validation
-    logger.info('Running success criteria validation from BLUEPRINT.md §3.2...');
-    const { validateSuccessCriteria } = require('./validate-success-criteria');
+    // Layer 2: Success Criteria (BLUEPRINT.md §3.2)
+    logger.info('Validating Success Criteria...');
     try {
         const criteriaResults = await validateSuccessCriteria(task, {
             cwd,
             claudiomiroFolder: state.claudiomiroFolder,
         });
 
-        // Add success criteria results to execution.json
-        latestExecution.successCriteria = criteriaResults;
+        // Add to execution.json
+        execution.successCriteria = criteriaResults;
 
-        const failedCriteria = criteriaResults.filter(c => !c.passed);
-        if (failedCriteria.length > 0) {
-            logger.error(`❌ ${failedCriteria.length} success criteria failed!`);
-            failedCriteria.forEach(c => {
-                logger.error(`   - ${c.criterion}`);
-                logger.error(`     Command: ${c.command}`);
-                logger.error(`     Evidence: ${c.evidence.substring(0, 100)}`);
-            });
-
-            // Force re-execution
-            latestExecution.status = 'in_progress';
-            latestExecution.completion.status = 'pending_validation';
-            saveExecution(executionPath, latestExecution);
-
-            throw new Error(`Success criteria validation failed: ${failedCriteria.map(c => c.criterion).join(', ')}`);
+        const failed = criteriaResults.filter(c => c.passed === false);
+        if (failed.length > 0) {
+            return {
+                valid: false,
+                failedValidation: 'success-criteria',
+                message: `${failed.length} criteria failed`,
+                details: failed.map(c => c.criterion),
+            };
         }
-
-        logger.info(`✅ All ${criteriaResults.length} success criteria passed`);
+        logger.info(`✅ Success Criteria: ${criteriaResults.length} passed`);
     } catch (error) {
-        // If validateSuccessCriteria itself throws (e.g., parsing error), log and continue
-        if (error.message.includes('Success criteria validation failed')) {
-            throw error; // Re-throw if it's the validation failure
+        if (!error.message.includes('not found')) {
+            logger.warning(`Success Criteria validation error: ${error.message}`);
         }
-        logger.warning(`Success criteria validation skipped: ${error.message}`);
     }
 
-    // 🆕 LAYER 4: Verify git changes match declared artifacts
-    logger.info('Verifying git changes match declared artifacts...');
-    const { verifyChanges } = require('./verify-changes');
+    // Layer 3: Git Changes (warning only, not blocking)
+    logger.info('Verifying git changes...');
     try {
-        const diffCheck = await verifyChanges(latestExecution, cwd);
+        const diffCheck = await verifyChanges(execution, cwd);
 
         if (!diffCheck.valid) {
-            logger.warning('⚠️  Git diff discrepancies detected');
-
-            // Record deviations in completion
-            latestExecution.completion.deviations = latestExecution.completion.deviations || [];
+            execution.completion = execution.completion || {};
+            execution.completion.deviations = [];
 
             if (diffCheck.undeclared.length > 0) {
-                const deviation = `Undeclared changes in git: ${diffCheck.undeclared.join(', ')}`;
-                latestExecution.completion.deviations.push(deviation);
-                logger.warning(`   ${deviation}`);
+                execution.completion.deviations.push(`Undeclared: ${diffCheck.undeclared.join(', ')}`);
             }
-
             if (diffCheck.missing.length > 0) {
-                const deviation = `Declared in artifacts but not modified: ${diffCheck.missing.join(', ')}`;
-                latestExecution.completion.deviations.push(deviation);
-                logger.warning(`   ${deviation}`);
+                execution.completion.deviations.push(`Missing: ${diffCheck.missing.join(', ')}`);
             }
-        } else {
-            logger.info('✅ Git changes match declared artifacts');
         }
     } catch (error) {
         logger.warning(`Git verification skipped: ${error.message}`);
     }
 
-    // 🆕 LAYER 5: Validate Review Checklist
-    logger.info('Validating review-checklist.json...');
-    const { validateReviewChecklist } = require('./validate-review-checklist');
+    // Layer 4: Review Checklist
+    logger.info('Validating Review Checklist...');
     try {
-        const checklistValidation = await validateReviewChecklist(task, {
+        const checklistResult = await validateReviewChecklist(task, {
             claudiomiroFolder: state.claudiomiroFolder,
         });
 
-        if (!checklistValidation.valid) {
-            logger.error(`❌ Review checklist validation failed: ${checklistValidation.missing.length} artifacts missing`);
-            checklistValidation.missing.forEach((issue, idx) => {
-                logger.error(`   ${idx + 1}. ${issue.artifact}: ${issue.reason}`);
-            });
-
-            // Force re-execution
-            latestExecution.status = 'in_progress';
-            latestExecution.completion.status = 'pending_validation';
-            saveExecution(executionPath, latestExecution);
-
-            throw new Error(`Review checklist validation failed: ${checklistValidation.missing.length} artifacts missing checklist entries`);
+        if (!checklistResult.valid) {
+            return {
+                valid: false,
+                failedValidation: 'review-checklist',
+                message: `${checklistResult.missing.length} artifacts missing checklist`,
+                details: checklistResult.missing.map(m => m.artifact),
+            };
         }
-
-        logger.info(`✅ Review checklist validated: ${checklistValidation.totalChecklistItems} items for ${checklistValidation.totalArtifacts} artifacts`);
+        logger.info(`✅ Review Checklist: ${checklistResult.totalChecklistItems} items validated`);
     } catch (error) {
-        // If validateReviewChecklist itself throws, check if it's validation failure
-        if (error.message.includes('Review checklist validation failed')) {
-            throw error; // Re-throw validation failures
+        if (!error.message.includes('not found')) {
+            logger.warning(`Review Checklist validation error: ${error.message}`);
         }
-        logger.warning(`Review checklist validation skipped: ${error.message}`);
     }
 
-    // Validate completion (with enhanced checks for phase items, success criteria)
-    if (validateCompletion(latestExecution)) {
-        latestExecution.completion.status = 'completed';
-        latestExecution.status = 'completed';
+    // Layer 5: Completion validation
+    if (validateCompletion(execution)) {
+        execution.completion = execution.completion || {};
+        execution.completion.status = 'completed';
+        execution.status = 'completed';
         logger.info('✅ Task completed successfully');
     } else {
-        logger.warning('⚠️  Completion validation failed - task remains in_progress');
+        logger.warning('⚠️ Completion validation pending');
     }
 
-    logger.info(`Saved execution.json: status=${latestExecution.status}`);
+    return { valid: true, failedValidation: null };
+};
+
+/**
+ * Execute the task using BLUEPRINT.md and execution.json
+ */
+const executeTask = async (task, taskFolder, cwd) => {
+    const logger = require('../../../../shared/utils/logger');
+    const blueprintPath = path.join(taskFolder, 'BLUEPRINT.md');
+    const executionPath = path.join(taskFolder, 'execution.json');
+
+    logger.info('=== Step5: Task Execution ===');
+
+    // 1. Load BLUEPRINT.md
+    if (!fs.existsSync(blueprintPath)) {
+        throw new Error('BLUEPRINT.md not found');
+    }
+    const blueprintContent = fs.readFileSync(blueprintPath, 'utf8');
+    if (!blueprintContent.trim()) {
+        throw new Error('BLUEPRINT.md is empty');
+    }
+
+    // 2. Load execution.json (with auto-repair)
+    const execution = loadExecution(executionPath);
+    const attemptsBefore = execution.attempts || 0;
+
+    logger.info(`Loaded: status=${execution.status}, phase=${execution.currentPhase?.id || 1}, attempts=${attemptsBefore}`);
+
+    // 3. Check what failed last time (if any) - this guides the AI
+    const pendingFixes = execution.pendingFixes || [];
+    const lastError = execution.completion?.lastError;
+    if (pendingFixes.length > 0) {
+        logger.info(`Pending fixes from last attempt: ${pendingFixes.join(', ')}`);
+        if (lastError) {
+            logger.info(`Last error: ${lastError}`);
+        }
+    }
+
+    // 4. Verify pre-conditions (HARD STOP if blocked)
+    const { blocked } = await verifyPreConditions(execution);
+    if (blocked) {
+        saveExecution(executionPath, execution);
+        throw new Error('Pre-conditions failed. Task blocked.');
+    }
+
+    // 5. Increment attempts (only after pre-conditions pass)
+    execution.attempts = attemptsBefore + 1;
+
+    // 6. Enforce phase gate (may reset currentPhase)
+    const phaseGatePassed = enforcePhaseGate(execution);
+    if (!phaseGatePassed) {
+        logger.info('Phase gate reset currentPhase');
+    }
+
+    // 7. Update status and save before Claude execution
+    execution.status = 'in_progress';
+    saveExecution(executionPath, execution);
+
+    // 8. Build prompt for Claude using prompt selector
+    const { state: executionState, prompt: selectedPrompt } = selectPrompt(execution, {
+        taskFolder,
+        claudiomiroFolder: state.claudiomiroFolder,
+    });
+
+    logger.info(`Execution state: ${executionState}`);
+
+    const shellCommandRule = fs.readFileSync(
+        path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'),
+        'utf-8',
+    );
+
+    const prompt = `${selectedPrompt}\n\n---\n\n## BLUEPRINT.md\n\n${blueprintContent}\n\n---\n\n${shellCommandRule}`;
+
+    // 9. Execute Claude
+    const result = await executeClaude(prompt, task, { cwd });
+    markTaskCompleted(state.claudiomiroFolder, task);
+
+    // 10. Reload execution.json (Claude may have updated it)
+    const latestExecution = loadExecution(executionPath);
+
+    // Preserve attempt count
+    const currentAttempt = attemptsBefore + 1;
+    latestExecution.attempts = Math.max(latestExecution.attempts || 0, currentAttempt);
+
+    // Clear pending fixes (we're about to validate again)
+    latestExecution.pendingFixes = [];
+
+    // 11. Run all validation layers
+    const validation = await runValidationLayers(task, latestExecution, cwd, executionPath);
+
+    if (!validation.valid) {
+        // DON'T RESET - just record what failed
+        latestExecution.status = 'in_progress';
+        latestExecution.completion = latestExecution.completion || {};
+        latestExecution.completion.status = 'pending_validation';
+        latestExecution.completion.failedValidation = validation.failedValidation;
+        latestExecution.completion.lastError = validation.message;
+
+        // Track what needs fixing for next attempt
+        if (!latestExecution.pendingFixes) {
+            latestExecution.pendingFixes = [];
+        }
+        if (!latestExecution.pendingFixes.includes(validation.failedValidation)) {
+            latestExecution.pendingFixes.push(validation.failedValidation);
+        }
+
+        saveExecution(executionPath, latestExecution);
+
+        logger.error(`❌ Validation failed: ${validation.failedValidation} - ${validation.message}`);
+        throw new Error(`Validation failed: ${validation.failedValidation}`);
+    }
+
+    // 12. Save final state
     saveExecution(executionPath, latestExecution);
+    logger.info(`Saved: status=${latestExecution.status}`);
 
     return result;
 };
 
+/**
+ * Main step5 function
+ */
 const step5 = async (task) => {
-    const folder = (file) => path.join(state.claudiomiroFolder, task, file);
-    const taskFolder = path.join(state.claudiomiroFolder, task);
     const logger = require('../../../../shared/utils/logger');
+    const taskFolder = path.join(state.claudiomiroFolder, task);
+    const blueprintPath = path.join(taskFolder, 'BLUEPRINT.md');
+    const executionPath = path.join(taskFolder, 'execution.json');
 
-    // Require BLUEPRINT.md to exist
-    const blueprintPath = folder('BLUEPRINT.md');
+    // Verify BLUEPRINT.md exists
     if (!fs.existsSync(blueprintPath)) {
-        throw new Error(`BLUEPRINT.md not found for task ${task}. Step 3 must generate BLUEPRINT.md before execution.`);
+        throw new Error(`BLUEPRINT.md not found for task ${task}`);
     }
 
-    // Read and parse scope from BLUEPRINT.md for multi-repo support
+    // Parse scope for multi-repo support
     const blueprintContent = fs.readFileSync(blueprintPath, 'utf-8');
     const scope = parseTaskScope(blueprintContent);
-
-    // Validate scope in multi-repo mode (throws if missing)
     validateScope(scope, state.isMultiRepo());
 
-    // Determine working directory based on scope
     const cwd = state.isMultiRepo()
         ? state.getRepository(scope)
         : state.folder;
 
     try {
-        const result = await executeNewFlow(task, taskFolder, cwd);
+        const result = await executeTask(task, taskFolder, cwd);
 
         // Generate review checklist for step6
         try {
             const { generateReviewChecklist } = require('./generate-review-checklist');
             const checklistResult = await generateReviewChecklist(task, { cwd });
-            if (checklistResult.success && checklistResult.checklistPath) {
-                logger.info(`[Step5] Generated review-checklist.json with ${checklistResult.itemCount} items`);
+            if (checklistResult.success) {
+                logger.info(`Generated review-checklist.json: ${checklistResult.itemCount} items`);
             }
-        } catch (checklistError) {
+        } catch (error) {
+            // Silently skip in UI mode
             const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
             const stateManager = ParallelStateManager.getInstance();
-            if (!stateManager || !stateManager.isUIRendererActive()) {
-                logger.warning(`[Step5] Review checklist generation skipped: ${checklistError.message}`);
+            if (!stateManager?.isUIRendererActive()) {
+                logger.warning(`Review checklist skipped: ${error.message}`);
             }
         }
 
         // Reflection hook
         try {
-            const executionPath = folder('execution.json');
             const execution = fs.existsSync(executionPath)
                 ? JSON.parse(fs.readFileSync(executionPath, 'utf8'))
                 : null;
@@ -743,92 +331,39 @@ const step5 = async (task) => {
                     await reflectionHook.storeReflection(task, reflection, decision);
                 }
             }
-        } catch (reflectionError) {
+        } catch (error) {
             const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
             const stateManager = ParallelStateManager.getInstance();
-            if (!stateManager || !stateManager.isUIRendererActive()) {
-                logger.warning(`[Step5] Reflection skipped: ${reflectionError.message}`);
+            if (!stateManager?.isUIRendererActive()) {
+                logger.warning(`Reflection skipped: ${error.message}`);
             }
         }
 
         return result;
+
     } catch (error) {
-        // Reset execution.json to fresh state on error, preserving critical data
-        const executionPath = folder('execution.json');
+        // KEY FIX: Don't reset execution.json on error!
+        // Just record what failed so we can fix it on retry
         if (fs.existsSync(executionPath)) {
             try {
-                const oldExecution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
-
-                // Preserve attempts counter and error history
-                const currentAttempts = (oldExecution.attempts || 0);
-                const errorHistory = oldExecution.errorHistory || [];
-
-                // Preserve blockedBy from step6 code review failures
-                // This is CRITICAL so step5 knows what to fix on retry
-                const blockedBy = oldExecution.completion?.blockedBy || [];
-
-                // Add current error to history
-                errorHistory.push({
-                    timestamp: new Date().toISOString(),
-                    message: error.message,
-                    stack: error.stack ? error.stack.split('\n').slice(0, 3).join('\n') : null,
+                recordError(executionPath, error, {
+                    failedValidation: error.message.includes('Validation failed')
+                        ? error.message.replace('Validation failed: ', '')
+                        : 'unknown',
                 });
-
-                // Create brand new execution.json with fresh state
-                const freshExecution = {
-                    $schema: oldExecution.$schema || './execution-schema.json',
-                    taskId: oldExecution.taskId || task,
-                    status: 'pending',
-                    attempts: currentAttempts,
-                    errorHistory,
-                    currentPhase: { id: 1, name: 'Phase 1' },
-                    phases: (oldExecution.phases || []).map(phase => ({
-                        ...phase,
-                        status: 'pending',
-                        items: (phase.items || []).map(item => ({
-                            ...item,
-                            completed: false,
-                        })),
-                        preConditions: (phase.preConditions || []).map(pc => ({
-                            ...pc,
-                            passed: undefined,
-                            evidence: undefined,
-                        })),
-                    })),
-                    artifacts: [],
-                    uncertainties: [],
-                    successCriteria: [],
-                    completion: {
-                        status: 'pending_validation',
-                        blockedBy, // Preserve blockedBy from step6 so step5 knows what to fix
-                    },
-                };
-
-                logger.warning(`[Step5] Error occurred, resetting to fresh execution.json (attempts: ${currentAttempts}, blockedBy: ${blockedBy.length} issues)`);
-                fs.writeFileSync(executionPath, JSON.stringify(freshExecution, null, 2), 'utf8');
-            } catch (_saveErr) {
-                // Ignore save errors
+            } catch (saveErr) {
+                logger.warning(`Could not record error: ${saveErr.message}`);
             }
         }
+
         throw error;
     }
 };
 
-// Export helper functions for testing
+// Exports
 module.exports = {
     step5,
-    loadExecution,
-    saveExecution,
-    verifyPreConditions,
-    enforcePhaseGate,
-    updatePhaseProgress,
-    trackArtifacts,
-    trackUncertainty,
-    validateCompletion,
-    executeNewFlow,
-    isDangerousCommand,
-    isCriticalError,
-    estimateCodeChangeSize,
+    executeTask,
+    runValidationLayers,
     VALID_STATUSES,
-    CRITICAL_ERROR_PATTERNS,
 };

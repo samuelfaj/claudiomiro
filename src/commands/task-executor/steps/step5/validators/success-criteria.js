@@ -144,7 +144,7 @@ const extractCommandFromCell = (cell) => {
  */
 const parseSuccessCriteriaTable = (blueprintContent) => {
     const criteria = [];
-    const logger = require('../../../../shared/utils/logger');
+    const logger = require('../../../../../shared/utils/logger');
 
     // Find §3.2 section using fallback patterns
     const section32Content = findSection32WithFallback(blueprintContent);
@@ -380,7 +380,7 @@ const evaluateExpected = (stdout, command) => {
  * @returns {Promise<Array<Object>>} Results array with pass/fail for each criterion
  */
 const validateSuccessCriteria = async (task, { cwd, claudiomiroFolder }) => {
-    const logger = require('../../../../shared/utils/logger');
+    const logger = require('../../../../../shared/utils/logger');
 
     const blueprintPath = path.join(claudiomiroFolder, task, 'BLUEPRINT.md');
 

@@ -1,9 +1,9 @@
-const { validateReviewChecklist } = require('./validate-review-checklist');
+const { validateReviewChecklist } = require('./review-checklist');
 const fs = require('fs');
 
 // Mock dependencies
 jest.mock('fs');
-jest.mock('../../../../shared/utils/logger', () => ({
+jest.mock('../../../../../shared/utils/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),

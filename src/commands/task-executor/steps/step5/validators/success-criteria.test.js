@@ -6,7 +6,7 @@ const {
     findSection32WithFallback,
     findTableWithFallback,
     extractCommandFromCell,
-} = require('./validate-success-criteria');
+} = require('./success-criteria');
 const fs = require('fs');
 
 // Mock dependencies
@@ -20,7 +20,7 @@ jest.mock('util', () => ({
     promisify: jest.fn((fn) => fn),
 }));
 
-jest.mock('../../../../shared/utils/logger', () => ({
+jest.mock('../../../../../shared/utils/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),
