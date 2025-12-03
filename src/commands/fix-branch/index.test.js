@@ -31,6 +31,8 @@ describe('fix-branch command', () => {
         });
         loopFixes.mockResolvedValue();
         state.setFolder = jest.fn();
+        state.isMultiRepo = jest.fn().mockReturnValue(false);
+        state.getRepository = jest.fn();
     });
 
     describe('getLevelPrompt', () => {
@@ -331,6 +333,143 @@ describe('fix-branch command', () => {
                     5,
                     { clearFolder: false },
                 );
+            });
+        });
+
+        describe('multi-repo mode', () => {
+            beforeEach(() => {
+                state.isMultiRepo.mockReturnValue(true);
+                state.getRepository.mockImplementation((scope) => {
+                    if (scope === 'backend') return '/path/to/backend';
+                    if (scope === 'frontend') return '/path/to/frontend';
+                    return null;
+                });
+            });
+
+            test('should run loopFixes for both repositories in multi-repo mode', async () => {
+                await run([]);
+
+                expect(state.isMultiRepo).toHaveBeenCalled();
+                expect(state.getRepository).toHaveBeenCalledWith('backend');
+                expect(state.getRepository).toHaveBeenCalledWith('frontend');
+                expect(loopFixes).toHaveBeenCalledTimes(2);
+            });
+
+            test('should set folder for each repository before running loopFixes', async () => {
+                await run([]);
+
+                expect(state.setFolder).toHaveBeenCalledWith('/path/to/backend');
+                expect(state.setFolder).toHaveBeenCalledWith('/path/to/frontend');
+            });
+
+            test('should run backend first, then frontend', async () => {
+                const callOrder = [];
+                state.setFolder.mockImplementation((path) => {
+                    callOrder.push(`setFolder:${path}`);
+                });
+                loopFixes.mockImplementation(() => {
+                    callOrder.push('loopFixes');
+                    return Promise.resolve();
+                });
+
+                await run([]);
+
+                expect(callOrder).toEqual([
+                    'setFolder:' + process.cwd(), // Initial setFolder call
+                    'setFolder:/path/to/backend',
+                    'loopFixes',
+                    'setFolder:/path/to/frontend',
+                    'loopFixes',
+                ]);
+            });
+
+            test('should pass correct options to loopFixes for each repository', async () => {
+                await run(['--level=2', '--limit=5']);
+
+                expect(loopFixes).toHaveBeenNthCalledWith(
+                    1,
+                    expect.stringContaining('CORRECTION LEVEL: 2'),
+                    5,
+                    { clearFolder: true },
+                );
+                expect(loopFixes).toHaveBeenNthCalledWith(
+                    2,
+                    expect.stringContaining('CORRECTION LEVEL: 2'),
+                    5,
+                    { clearFolder: true },
+                );
+            });
+
+            test('should respect --no-clear flag in multi-repo mode', async () => {
+                await run(['--no-clear']);
+
+                expect(loopFixes).toHaveBeenNthCalledWith(
+                    1,
+                    expect.stringContaining('CORRECTION LEVEL: 1'),
+                    20,
+                    { clearFolder: false },
+                );
+                expect(loopFixes).toHaveBeenNthCalledWith(
+                    2,
+                    expect.stringContaining('CORRECTION LEVEL: 1'),
+                    20,
+                    { clearFolder: false },
+                );
+            });
+
+            test('should log multi-repo mode message', async () => {
+                await run([]);
+
+                expect(logger.info).toHaveBeenCalledWith(
+                    '🔀 Multi-repo mode detected - reviewing both repositories',
+                );
+            });
+
+            test('should log completion message for each repository', async () => {
+                await run([]);
+
+                expect(logger.info).toHaveBeenCalledWith(
+                    expect.stringContaining('Processing Backend repository'),
+                );
+                expect(logger.info).toHaveBeenCalledWith(
+                    expect.stringContaining('Backend repository review completed'),
+                );
+                expect(logger.info).toHaveBeenCalledWith(
+                    expect.stringContaining('Processing Frontend repository'),
+                );
+                expect(logger.info).toHaveBeenCalledWith(
+                    expect.stringContaining('Frontend repository review completed'),
+                );
+            });
+
+            test('should log final success message', async () => {
+                await run([]);
+
+                expect(logger.info).toHaveBeenCalledWith(
+                    '\n✅ All repositories reviewed successfully',
+                );
+            });
+
+            test('should propagate errors from backend loopFixes', async () => {
+                const error = new Error('Backend loop failed');
+                loopFixes.mockRejectedValueOnce(error);
+
+                await expect(run([])).rejects.toThrow('Backend loop failed');
+            });
+
+            test('should propagate errors from frontend loopFixes', async () => {
+                loopFixes
+                    .mockResolvedValueOnce() // Backend succeeds
+                    .mockRejectedValueOnce(new Error('Frontend loop failed')); // Frontend fails
+
+                await expect(run([])).rejects.toThrow('Frontend loop failed');
+            });
+
+            test('should not run frontend if backend fails', async () => {
+                loopFixes.mockRejectedValueOnce(new Error('Backend failed'));
+
+                await expect(run([])).rejects.toThrow('Backend failed');
+                expect(loopFixes).toHaveBeenCalledTimes(1);
             });
         });
     });

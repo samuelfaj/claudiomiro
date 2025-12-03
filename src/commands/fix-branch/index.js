@@ -41,10 +41,29 @@ const getLevelName = (level) => {
 };
 
 /**
+ * Execute loop-fixes for a single repository
+ *
+ * @param {string} repoPath - Path to the repository
+ * @param {string} repoName - Name of the repository (for logging)
+ * @param {string} reviewPrompt - The review prompt content
+ * @param {number} maxIterations - Maximum number of iterations
+ * @param {boolean} clearFolder - Whether to clear the folder before starting
+ * @returns {Promise<void>}
+ */
+const runForRepository = async (repoPath, repoName, reviewPrompt, maxIterations, clearFolder) => {
+    logger.info(`\n📁 Processing ${repoName} repository: ${repoPath}`);
+    state.setFolder(repoPath);
+    await loopFixes(reviewPrompt, maxIterations, { clearFolder });
+    logger.info(`✅ ${repoName} repository review completed`);
+};
+
+/**
  * Fix Branch Command Entry Point
  *
  * Runs loop-fixes with a predefined code review prompt.
  * This command performs a comprehensive branch review before PR.
+ *
+ * In multi-repo mode, it runs the review for both backend and frontend repositories.
  *
  * Usage:
  *   claudiomiro --fix-branch [folder]
@@ -93,8 +112,24 @@ const run = async (args) => {
     // Get the self-contained prompt content for this level
     const reviewPrompt = getLevelPrompt(level);
 
-    // Execute the loop with the level prompt
-    await loopFixes(reviewPrompt, maxIterations, { clearFolder: !noClear });
+    // Check if multi-repo mode is enabled
+    if (state.isMultiRepo()) {
+        logger.info('🔀 Multi-repo mode detected - reviewing both repositories');
+
+        const backendPath = state.getRepository('backend');
+        const frontendPath = state.getRepository('frontend');
+
+        // Run loop-fixes for backend repository
+        await runForRepository(backendPath, 'Backend', reviewPrompt, maxIterations, !noClear);
+
+        // Run loop-fixes for frontend repository
+        await runForRepository(frontendPath, 'Frontend', reviewPrompt, maxIterations, !noClear);
+
+        logger.info('\n✅ All repositories reviewed successfully');
+    } else {
+        // Single-repo mode: execute normally
+        await loopFixes(reviewPrompt, maxIterations, { clearFolder: !noClear });
+    }
 };
 
 module.exports = { run, getLevelPrompt, getLevelName };
