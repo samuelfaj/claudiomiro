@@ -658,16 +658,23 @@ The task executor uses advanced reasoning techniques to ensure deep analysis and
 
 ### Validation System (Step 2)
 
-**BLOCKING Errors (Fail the step):**
-- `DECOMPOSITION_ANALYSIS.md` doesn't exist
-- Phases A-E incomplete
-- Confidence score < 3.0
-- Tasks missing Pre-BLUEPRINT Analysis
+**Non-Blocking Validation:**
+
+The `DECOMPOSITION_ANALYSIS.json` validation is **non-blocking** - all issues are logged as warnings but do not stop the step. This is because:
+- The file is a reasoning artifact that gets deleted after successful step2
+- It is not used by any downstream process (LLM or programmatic)
+- Real task execution uses BLUEPRINT.md files, not the decomposition analysis
 
 **WARNINGS (Log but continue):**
-- Confidence score between 3.0 and 4.0
+- Schema validation issues
+- Confidence score < 3.0
+- Tasks missing Pre-BLUEPRINT Analysis
 - Phase F (Tree of Thought) incomplete
 - Unresolved divergences in self-consistency
+
+**Artifact Cleanup:**
+- On success: `DECOMPOSITION_ANALYSIS.json` is deleted
+- On failure: preserved for debugging
 
 ### Quality Standards
 
@@ -675,7 +682,6 @@ When modifying task executor prompts:
 - [ ] Maintain all existing reasoning requirements
 - [ ] Evidence must trace to specific file:line references
 - [ ] Examples must include GOOD, BAD, and EDGE CASE
-- [ ] Confidence thresholds must be enforced
 - [ ] Cleanup logic must delete on success, preserve on failure
 
 ---
