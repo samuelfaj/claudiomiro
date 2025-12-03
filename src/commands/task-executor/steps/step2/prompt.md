@@ -470,10 +470,72 @@ Before generating `TASKX/BLUEPRINT.md`, add to `DECOMPOSITION_ANALYSIS.md`:
 - **Blocks:** [TASK4, TASK5] - [What this task provides to them]
 
 ### 4. Success Criteria Traceability
-| Criterion | Source | Testable? | Command/Check |
-|-----------|--------|-----------|---------------|
-| [Criterion 1] | AI_PROMPT.md:§Acceptance Criteria:L45 | YES | [test command] |
-| [Criterion 2] | AI_PROMPT.md:§Acceptance Criteria:L47 | YES | [verification] |
+| Criterion | Source | Testable? | Command | Manual Check |
+|-----------|--------|-----------|---------|--------------|
+| [Criterion 1] | AI_PROMPT.md:§Acceptance Criteria:L45 | AUTO | `grep "pattern" file.ext` | - |
+| [Criterion 2] | AI_PROMPT.md:§Acceptance Criteria:L47 | MANUAL | - | Review Google Cloud Logs for errors |
+| [Criterion 3] | AI_PROMPT.md:§Acceptance Criteria:L50 | AUTO | `test -f path/to/file.ext` | - |
+
+**Column Definitions:**
+
+**Testable? column values:**
+- `AUTO` - Can be verified with automated shell command
+- `MANUAL` - Requires human verification (logs in web console, database GUI, etc.)
+- `BOTH` - Has both automated command AND manual verification step
+
+**Command column (for AUTO/BOTH):**
+- MUST contain EXECUTABLE shell commands
+- DO NOT use human-readable descriptions
+
+**Manual Check column (for MANUAL/BOTH):**
+- Describe what the human reviewer should verify
+- Be specific about where to look and what to check
+- Can reference external systems (Google Cloud Console, database GUI, etc.)
+
+---
+
+**✅ VALID Examples:**
+
+```markdown
+| Check syntax | AI_PROMPT:L45 | AUTO | `php -l file.php` | - |
+| No duplicates | AI_PROMPT:L47 | AUTO | `mysql -e "SELECT userId, COUNT(*) FROM table GROUP BY userId HAVING COUNT(*)>1"` | - |
+| Logs show success | AI_PROMPT:L50 | MANUAL | - | Review Google Cloud Logs: search for "success" in project logs |
+| Email sent correctly | AI_PROMPT:L52 | BOTH | `grep "Email sent" logs/app.log` | Check Postmark dashboard: verify email in sent items |
+```
+
+**❌ INVALID Examples:**
+
+```markdown
+| Check logs | AI_PROMPT:L45 | YES | Review logs for errors | - |
+# ❌ "Review logs" is not a shell command - should be in Manual Check column
+
+| Database check | AI_PROMPT:L47 | AUTO | Database query: SELECT ... | - |
+# ❌ "Database query:" is not executable - use `mysql -e "..."`
+
+| File exists | AI_PROMPT:L50 | MANUAL | Check that file exists | - |
+# ❌ Should be AUTO with `test -f path/to/file.ext`
+```
+
+---
+
+**Guidelines:**
+
+**For AUTO testable criteria:**
+- Use actual shell commands (grep, test, find, mysql, psql, etc.)
+- Command must be executable and return exit code 0 on success
+- Command should produce meaningful output for verification
+- Examples: `grep "pattern" file`, `test -f path`, `npm test`, `php -l file.php`
+
+**For MANUAL testable criteria:**
+- Describe exactly what to verify and where
+- Include specific search terms, filters, or query parameters
+- Reference specific dashboards, consoles, or UIs
+- Examples: "Review Google Cloud Logs: search for 'duplicate payment' in auto_pay logs"
+
+**For BOTH testable criteria:**
+- Provide automated command for quick verification
+- Add manual step for thorough human review
+- Useful when command checks partial aspect but human review needed for full verification
 
 **Validation:** Every criterion MUST trace back to AI_PROMPT.md
 

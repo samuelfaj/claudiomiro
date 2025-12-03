@@ -6,12 +6,37 @@ const path = require('path');
 const exec = promisify(execCallback);
 
 /**
- * Parses BLUEPRINT.md §3.2 Success Criteria table
+ * Checks if a command looks like a human-readable description rather than executable command
+ * @param {string} command - Command string to check
+ * @returns {Object} {isInvalid: boolean, reason: string}
+ */
+const detectNonExecutableCommand = (command) => {
+    // Patterns that indicate human descriptions, not commands
+    const invalidPatterns = [
+        { pattern: /^(review|check|verify|ensure|confirm|validate)\s/i, reason: 'Starts with human action verb (review/check/verify)' },
+        { pattern: /^database query:/i, reason: 'Starts with "Database query:" instead of actual DB CLI command' },
+        { pattern: /^manual/i, reason: 'Marked as manual verification' },
+        { pattern: /\(.*validation.*\)/i, reason: 'Contains parenthetical notes instead of being executable' },
+        { pattern: /^search for/i, reason: 'Starts with "search for" instead of grep/find command' },
+    ];
+
+    for (const { pattern, reason } of invalidPatterns) {
+        if (pattern.test(command)) {
+            return { isInvalid: true, reason };
+        }
+    }
+
+    return { isInvalid: false, reason: '' };
+};
+
+/**
+ * Parses BLUEPRINT.md §3.2 Success Criteria table (5-column format)
  * @param {string} blueprintContent - BLUEPRINT.md content
  * @returns {Array<Object>} Array of success criteria objects
  */
 const parseSuccessCriteriaTable = (blueprintContent) => {
     const criteria = [];
+    const logger = require('../../../../shared/utils/logger');
 
     // Find §3.2 section
     const section32Match = blueprintContent.match(/###\s*3\.2\s+Success Criteria.*?\n([\s\S]*?)(?=\n###|\n##|$)/i);
@@ -21,8 +46,15 @@ const parseSuccessCriteriaTable = (blueprintContent) => {
 
     const section32Content = section32Match[1];
 
-    // Find markdown table
-    const tableMatch = section32Content.match(/\|.*Criterion.*\|.*Command.*\|\s*\n\|[\s\S]*?\n((?:\|.*\|.*\|\s*\n)+)/i);
+    // Try new 5-column format first: | Criterion | Source | Testable? | Command | Manual Check |
+    let tableMatch = section32Content.match(/\|\s*Criterion\s*\|[\s\S]*?\n\|[\s-]+\|[\s-]+\|[\s-]+\|[\s-]+\|[\s-]+\|\s*\n((?:\|.*\|.*\|.*\|.*\|.*\|\s*\n)+)/i);
+    const isFiveColumn = !!tableMatch;
+
+    // Fallback to old 2-column format: | Criterion | Command |
+    if (!tableMatch) {
+        tableMatch = section32Content.match(/\|.*Criterion.*\|.*Command.*\|\s*\n\|[\s\S]*?\n((?:\|.*\|.*\|\s*\n)+)/i);
+    }
+
     if (!tableMatch) {
         return criteria;
     }
@@ -32,23 +64,78 @@ const parseSuccessCriteriaTable = (blueprintContent) => {
     for (const row of tableRows) {
         const cells = row.split('|').map(cell => cell.trim()).filter(Boolean);
 
-        if (cells.length >= 2) {
+        // Skip header separator rows
+        if (cells[0] && cells[0].startsWith('---')) {
+            continue;
+        }
+
+        if (isFiveColumn && cells.length >= 5) {
+            // New format: | Criterion | Source | Testable? | Command | Manual Check |
+            const [criterion, source, testable, command, manualCheck] = cells;
+
+            const commandClean = command.replace(/`/g, '').trim();
+            const manualCheckClean = manualCheck.trim();
+            const testableType = testable.toUpperCase();
+
+            // Skip empty criteria
+            if (!criterion) continue;
+
+            // Determine test type
+            const isAuto = testableType === 'AUTO' || testableType === 'BOTH';
+            const isManual = testableType === 'MANUAL' || testableType === 'BOTH';
+
+            if (isAuto && commandClean && commandClean !== '-') {
+                // Automated test with command
+                const validation = detectNonExecutableCommand(commandClean);
+                if (validation.isInvalid) {
+                    logger.warning(`⚠️  Success criterion may not be executable: "${criterion}"`);
+                    logger.warning(`   Command: "${commandClean}"`);
+                    logger.warning(`   Reason: ${validation.reason}`);
+                    logger.warning('   Expected: Actual shell command (e.g., grep, test, mysql -e, etc.)');
+                }
+
+                criteria.push({
+                    criterion,
+                    command: commandClean,
+                    source: source || 'BLUEPRINT.md §3.2',
+                    testType: isManual ? 'BOTH' : 'AUTO',
+                    manualCheck: isManual ? manualCheckClean : null,
+                });
+            } else if (isManual && manualCheckClean && manualCheckClean !== '-') {
+                // Manual check only (no automated command)
+                criteria.push({
+                    criterion,
+                    command: null, // No automated command
+                    source: source || 'BLUEPRINT.md §3.2',
+                    testType: 'MANUAL',
+                    manualCheck: manualCheckClean,
+                });
+            }
+
+        } else if (!isFiveColumn && cells.length >= 2) {
+            // Old format: | Criterion | Command |
             const criterion = cells[0];
             const command = cells[1];
 
-            // Skip header separator rows
-            if (criterion.startsWith('---') || command.startsWith('---')) {
-                continue;
-            }
-
-            // Extract command from backticks if present
             const commandClean = command.replace(/`/g, '').trim();
 
             if (commandClean && criterion) {
+                // Warn if command looks like a human description
+                const validation = detectNonExecutableCommand(commandClean);
+                if (validation.isInvalid) {
+                    logger.warning(`⚠️  Success criterion may not be executable: "${criterion}"`);
+                    logger.warning(`   Command: "${commandClean}"`);
+                    logger.warning(`   Reason: ${validation.reason}`);
+                    logger.warning('   Expected: Actual shell command (e.g., grep, test, mysql -e, etc.)');
+                    logger.warning('   Consider using new 5-column format with Manual Check column');
+                }
+
                 criteria.push({
                     criterion,
                     command: commandClean,
                     source: 'BLUEPRINT.md §3.2',
+                    testType: 'AUTO',
+                    manualCheck: null,
                 });
             }
         }
@@ -135,6 +222,25 @@ const validateSuccessCriteria = async (task, { cwd, claudiomiroFolder }) => {
     const results = [];
 
     for (const criterion of criteria) {
+        // Handle MANUAL-only checks (no automated command)
+        if (criterion.testType === 'MANUAL') {
+            logger.info(`📋 MANUAL CHECK: ${criterion.criterion}`);
+            logger.info(`   Action: ${criterion.manualCheck}`);
+
+            results.push({
+                criterion: criterion.criterion,
+                command: null,
+                source: criterion.source,
+                expected: 'Manual verification required',
+                passed: null, // null indicates manual check (not auto-testable)
+                evidence: `MANUAL: ${criterion.manualCheck}`,
+                testType: 'MANUAL',
+                manualCheck: criterion.manualCheck,
+            });
+            continue;
+        }
+
+        // Handle AUTO and BOTH checks (has automated command)
         try {
             logger.info(`Running: ${criterion.command}`);
 
@@ -147,17 +253,27 @@ const validateSuccessCriteria = async (task, { cwd, claudiomiroFolder }) => {
             const output = stdout || stderr || '';
             const passed = evaluateExpected(output, criterion.command);
 
-            results.push({
+            const result = {
                 criterion: criterion.criterion,
                 command: criterion.command,
                 source: criterion.source,
                 expected: 'Command should succeed',
                 passed: passed,
                 evidence: output.trim().substring(0, 500), // Limit evidence length
-            });
+                testType: criterion.testType,
+            };
+
+            if (criterion.manualCheck) {
+                result.manualCheck = criterion.manualCheck;
+            }
+
+            results.push(result);
 
             if (passed) {
                 logger.info(`✅ PASSED: ${criterion.criterion}`);
+                if (criterion.testType === 'BOTH') {
+                    logger.info(`   📋 Also verify manually: ${criterion.manualCheck}`);
+                }
             } else {
                 logger.error(`❌ FAILED: ${criterion.criterion}`);
                 logger.error(`   Command: ${criterion.command}`);
@@ -168,17 +284,21 @@ const validateSuccessCriteria = async (task, { cwd, claudiomiroFolder }) => {
             // Command failed (non-zero exit code)
             const output = error.stdout || error.stderr || error.message;
 
-            // Check if this is expected to fail for grep (no match found)
-            const passed = false;
-
-            results.push({
+            const result = {
                 criterion: criterion.criterion,
                 command: criterion.command,
                 source: criterion.source,
                 expected: 'Command should succeed',
-                passed: passed,
+                passed: false,
                 evidence: output.toString().trim().substring(0, 500),
-            });
+                testType: criterion.testType,
+            };
+
+            if (criterion.manualCheck) {
+                result.manualCheck = criterion.manualCheck;
+            }
+
+            results.push(result);
 
             logger.error(`❌ FAILED: ${criterion.criterion}`);
             logger.error(`   Command: ${criterion.command}`);
@@ -186,10 +306,11 @@ const validateSuccessCriteria = async (task, { cwd, claudiomiroFolder }) => {
         }
     }
 
-    const passedCount = results.filter(r => r.passed).length;
-    const failedCount = results.filter(r => !r.passed).length;
+    const passedCount = results.filter(r => r.passed === true).length;
+    const failedCount = results.filter(r => r.passed === false).length;
+    const manualCount = results.filter(r => r.passed === null).length;
 
-    logger.info(`Success Criteria Results: ${passedCount} passed, ${failedCount} failed`);
+    logger.info(`Success Criteria Results: ${passedCount} passed, ${failedCount} failed${manualCount > 0 ? `, ${manualCount} manual checks` : ''}`);
 
     return results;
 };
@@ -198,4 +319,5 @@ module.exports = {
     validateSuccessCriteria,
     parseSuccessCriteriaTable,
     evaluateExpected,
+    detectNonExecutableCommand,
 };

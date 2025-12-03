@@ -75,7 +75,9 @@ describe('schema-validator', () => {
 
                 const result = schemaValidator.validateExecutionJson(validData);
 
-                expect(result).toEqual({ valid: true, errors: [] });
+                expect(result.valid).toBe(true);
+                expect(result.errors).toEqual([]);
+                expect(result.sanitizedData).toBeDefined();
             });
 
             test('should return valid: true with empty errors array', () => {
@@ -424,6 +426,145 @@ describe('schema-validator', () => {
             const result = schemaValidator.formatErrors(errors);
 
             expect(result[0]).toBe('field: Custom error message');
+        });
+    });
+
+    describe('sanitizeData', () => {
+        test('should return null for undefined input', () => {
+            const result = schemaValidator.sanitizeData(undefined);
+            expect(result).toBeNull();
+        });
+
+        test('should return null for null input', () => {
+            const result = schemaValidator.sanitizeData(null);
+            expect(result).toBeNull();
+        });
+
+        test('should preserve primitive values', () => {
+            expect(schemaValidator.sanitizeData('string')).toBe('string');
+            expect(schemaValidator.sanitizeData(123)).toBe(123);
+            expect(schemaValidator.sanitizeData(true)).toBe(true);
+            expect(schemaValidator.sanitizeData(false)).toBe(false);
+        });
+
+        test('should filter undefined values from arrays', () => {
+            const input = [1, undefined, 2, undefined, 3];
+            const result = schemaValidator.sanitizeData(input);
+            expect(result).toEqual([1, 2, 3]);
+        });
+
+        test('should preserve null values in arrays', () => {
+            const input = [1, null, 2, null, 3];
+            const result = schemaValidator.sanitizeData(input);
+            expect(result).toEqual([1, null, 2, null, 3]);
+        });
+
+        test('should skip undefined properties in objects', () => {
+            const input = { a: 1, b: undefined, c: 3 };
+            const result = schemaValidator.sanitizeData(input);
+            expect(result).toEqual({ a: 1, c: 3 });
+            expect(result).not.toHaveProperty('b');
+        });
+
+        test('should preserve null properties in objects', () => {
+            const input = { a: 1, b: null, c: 3 };
+            const result = schemaValidator.sanitizeData(input);
+            expect(result).toEqual({ a: 1, b: null, c: 3 });
+        });
+
+        test('should recursively sanitize nested objects', () => {
+            const input = {
+                level1: {
+                    level2: {
+                        value: 'test',
+                        undefinedProp: undefined,
+                        nullProp: null,
+                    },
+                    undefinedProp: undefined,
+                },
+            };
+            const result = schemaValidator.sanitizeData(input);
+            expect(result).toEqual({
+                level1: {
+                    level2: {
+                        value: 'test',
+                        nullProp: null,
+                    },
+                },
+            });
+        });
+
+        test('should recursively sanitize arrays with nested objects', () => {
+            const input = [
+                { a: 1, b: undefined },
+                undefined,
+                { c: null, d: [undefined, 2, null] },
+            ];
+            const result = schemaValidator.sanitizeData(input);
+            expect(result).toEqual([
+                { a: 1 },
+                { c: null, d: [2, null] },
+            ]);
+        });
+
+        test('should handle uncertainties with null values (real-world scenario)', () => {
+            const input = {
+                uncertainties: [
+                    {
+                        id: 'U1',
+                        topic: 'Test topic',
+                        assumption: 'Test assumption',
+                        confidence: 'MEDIUM',
+                        resolution: null,
+                        resolvedConfidence: null,
+                    },
+                ],
+            };
+            const result = schemaValidator.sanitizeData(input);
+            expect(result.uncertainties[0].resolution).toBeNull();
+            expect(result.uncertainties[0].resolvedConfidence).toBeNull();
+        });
+    });
+
+    describe('validateExecutionJson with sanitization', () => {
+        test('should return sanitizedData on successful validation', () => {
+            mockValidate.mockReturnValue(true);
+            mockValidate.errors = null;
+
+            const input = { status: 'pending', extra: undefined };
+            const result = schemaValidator.validateExecutionJson(input);
+
+            expect(result.valid).toBe(true);
+            expect(result.sanitizedData).toBeDefined();
+            expect(result.sanitizedData).not.toHaveProperty('extra');
+        });
+
+        test('should sanitize data before validation by default', () => {
+            mockValidate.mockReturnValue(true);
+            mockValidate.errors = null;
+
+            const input = {
+                status: 'pending',
+                uncertainties: [
+                    { id: 'U1', resolution: null, resolvedConfidence: null },
+                ],
+            };
+            const result = schemaValidator.validateExecutionJson(input);
+
+            expect(result.valid).toBe(true);
+            expect(result.sanitizedData.uncertainties[0].resolution).toBeNull();
+        });
+
+        test('should not sanitize data when sanitize option is false', () => {
+            mockValidate.mockReturnValue(true);
+            mockValidate.errors = null;
+
+            const input = { status: 'pending', undefinedField: undefined };
+            const result = schemaValidator.validateExecutionJson(input, { sanitize: false });
+
+            expect(result.valid).toBe(true);
+            // When sanitize is false, sanitizedData is not returned
+            expect(result.sanitizedData).toBeUndefined();
         });
     });
 });

@@ -52,8 +52,8 @@
 **HARD STOP:** If ANY check fails → status: blocked
 
 ### 3.2 Success Criteria (VERIFY AFTER COMPLETE):
-| Criterion | Command |
-|-----------|---------|
+| Criterion | Source | Testable? | Command | Manual Check |
+|-----------|--------|-----------|---------|--------------|
 {{successCriteriaTable}}
 
 ### 3.3 Output Artifacts:

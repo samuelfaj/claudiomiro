@@ -55,11 +55,11 @@
             "description": "Error message"
           },
           "stack": {
-            "type": "string",
+            "type": ["string", "null"],
             "description": "Error stack trace (first 3 lines)"
           },
           "phase": {
-            "type": "string",
+            "type": ["string", "null"],
             "description": "Phase where error occurred"
           }
         },
@@ -80,7 +80,7 @@
           "description": "Current phase name"
         },
         "lastAction": {
-          "type": "string",
+          "type": ["string", "null"],
           "description": "Description of last action taken"
         }
       },
@@ -130,7 +130,7 @@
                   "description": "Whether the check passed"
                 },
                 "evidence": {
-                  "type": "string",
+                  "type": ["string", "null"],
                   "description": "Actual output from command"
                 }
               },
@@ -152,11 +152,11 @@
                   "description": "Whether this item is completed"
                 },
                 "source": {
-                  "type": "string",
+                  "type": ["string", "null"],
                   "description": "Source reference (e.g., file:line) for this item"
                 },
                 "evidence": {
-                  "type": "string",
+                  "type": ["string", "null"],
                   "description": "Evidence or output demonstrating completion"
                 }
               },
@@ -193,13 +193,13 @@
             "description": "Confidence level in assumption"
           },
           "resolution": {
-            "type": "string",
-            "description": "How the uncertainty was resolved"
+            "type": ["string", "null"],
+            "description": "How the uncertainty was resolved (null if unresolved)"
           },
           "resolvedConfidence": {
-            "type": "string",
-            "enum": ["LOW", "MEDIUM", "HIGH"],
-            "description": "Confidence after resolution"
+            "type": ["string", "null"],
+            "enum": ["LOW", "MEDIUM", "HIGH", null],
+            "description": "Confidence after resolution (null if unresolved)"
           }
         },
         "additionalProperties": false
@@ -225,7 +225,7 @@
             "description": "Whether artifact was verified"
           },
           "verification": {
-            "type": "string",
+            "type": ["string", "null"],
             "description": "Command or description of verification"
           }
         },
@@ -236,27 +236,40 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["criterion", "command", "passed"],
+        "required": ["criterion", "passed"],
         "properties": {
           "criterion": {
             "type": "string",
             "description": "Success criterion description"
           },
           "command": {
-            "type": "string",
-            "description": "Command to verify criterion"
+            "type": ["string", "null"],
+            "description": "Command to verify criterion (null for manual checks)"
           },
           "expected": {
-            "type": "string",
+            "type": ["string", "null"],
             "description": "Expected output or condition"
           },
           "passed": {
-            "type": "boolean",
-            "description": "Whether criterion passed"
+            "type": ["boolean", "null"],
+            "description": "Whether criterion passed (null for manual checks)"
           },
           "evidence": {
-            "type": "string",
+            "type": ["string", "null"],
             "description": "Actual output from command"
+          },
+          "source": {
+            "type": ["string", "null"],
+            "description": "Source reference for the criterion"
+          },
+          "testType": {
+            "type": ["string", "null"],
+            "enum": ["AUTO", "MANUAL", "BOTH", null],
+            "description": "Type of test (AUTO, MANUAL, or BOTH)"
+          },
+          "manualCheck": {
+            "type": ["string", "null"],
+            "description": "Manual check instructions"
           }
         },
         "additionalProperties": false

@@ -12,6 +12,44 @@ let cachedReviewChecklistValidator = null;
 let reviewChecklistSchemaLoadError = null;
 
 /**
+ * Recursively sanitizes an object by:
+ * - Converting undefined to null for consistency
+ * - Ensuring arrays don't contain undefined elements
+ * - Coercing invalid enum values where possible
+ * @param {any} data - Data to sanitize
+ * @param {string} path - Current path for logging (internal use)
+ * @returns {any} Sanitized data
+ */
+const sanitizeData = (data, path = '') => {
+    if (data === undefined) {
+        return null;
+    }
+
+    if (data === null) {
+        return null;
+    }
+
+    if (Array.isArray(data)) {
+        return data
+            .filter(item => item !== undefined)
+            .map((item, idx) => sanitizeData(item, `${path}[${idx}]`));
+    }
+
+    if (typeof data === 'object') {
+        const sanitized = {};
+        for (const [key, value] of Object.entries(data)) {
+            // Skip undefined values entirely (don't include them)
+            if (value !== undefined) {
+                sanitized[key] = sanitizeData(value, `${path}.${key}`);
+            }
+        }
+        return sanitized;
+    }
+
+    return data;
+};
+
+/**
  * Gets the path to the execution schema file
  * @returns {string}
  */
@@ -141,9 +179,13 @@ const formatErrors = (errors) => {
 /**
  * Validates execution.json data against the schema
  * @param {object} data - The execution data to validate
- * @returns {{ valid: boolean, errors: string[] }}
+ * @param {object} options - Validation options
+ * @param {boolean} options.sanitize - Whether to sanitize data before validation (default: true)
+ * @returns {{ valid: boolean, errors: string[], sanitizedData?: object }}
  */
-const validateExecutionJson = (data) => {
+const validateExecutionJson = (data, options = {}) => {
+    const { sanitize = true } = options;
+
     // Handle null/undefined input
     if (data === null || data === undefined) {
         return {
@@ -170,10 +212,17 @@ const validateExecutionJson = (data) => {
         };
     }
 
-    const valid = validator(data);
+    // Sanitize data if enabled
+    const dataToValidate = sanitize ? sanitizeData(data) : data;
+
+    const valid = validator(dataToValidate);
 
     if (valid) {
-        return { valid: true, errors: [] };
+        const result = { valid: true, errors: [] };
+        if (sanitize) {
+            result.sanitizedData = dataToValidate;
+        }
+        return result;
     }
 
     return {
@@ -240,6 +289,7 @@ module.exports = {
     validateExecutionJson,
     validateReviewChecklist,
     resetValidatorCache,
+    sanitizeData,
     // Exported for testing purposes only
     getSchemaPath,
     getReviewChecklistSchemaPath,

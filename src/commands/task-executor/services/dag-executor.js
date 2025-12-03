@@ -86,21 +86,31 @@ class DAGExecutor {
         );
         if (!depsComplete) return false;
 
+        // CRITICAL: Always enforce global maxConcurrent limit first
+        // This prevents the bug where multi-repo mode could run
+        // maxConcurrent * 3 tasks (backend + frontend + integration)
+        if (this.totalRunning() >= this.maxConcurrent) {
+            return false;
+        }
+
         const scope = task.scope || 'integration';
 
-        // Single-repo mode: use standard total limit
+        // Single-repo mode: global limit already checked above
         if (!state.isMultiRepo()) {
-            return this.totalRunning() < this.maxConcurrent;
+            return true;
         }
 
-        // Multi-repo mode: scope-based limits
+        // Multi-repo mode: also check per-scope limits
+        // This allows better distribution across scopes while respecting global limit
         if (scope === 'integration') {
-            // Integration tasks respect global limit
-            return this.totalRunning() < this.maxConcurrent;
+            // Integration tasks don't have additional per-scope limits
+            return true;
         }
 
-        // Backend/frontend tasks can run independently per scope
-        return this.runningByScope[scope] < this.maxConcurrent;
+        // Backend/frontend tasks respect both global AND per-scope limits
+        // Per-scope limit prevents one scope from monopolizing all slots
+        const perScopeLimit = Math.max(1, Math.floor(this.maxConcurrent / 2));
+        return this.runningByScope[scope] < perScopeLimit;
     }
 
     /**
@@ -259,13 +269,23 @@ class DAGExecutor {
             return false;
         }
 
-        // Mark as running using scope-aware method
-        toExecute.forEach(task => {
+        // Mark as running using scope-aware method, respecting capacity limit
+        const tasksToRun = [];
+        for (const task of toExecute) {
+            // Re-check capacity before each task (markRunning increases the count)
+            if (this.totalRunning() >= this.maxConcurrent) {
+                break;
+            }
             this.markRunning(task);
-        });
+            tasksToRun.push(task);
+        }
+
+        if (tasksToRun.length === 0) {
+            return false;
+        }
 
         // Execute in parallel with Promise.allSettled
-        const promises = toExecute.map(task => this.executeTask(task));
+        const promises = tasksToRun.map(task => this.executeTask(task));
 
         // Wait for all to complete
         await Promise.allSettled(promises);
@@ -452,6 +472,11 @@ class DAGExecutor {
             // Inicia novas tasks se houver slots disponíveis
             if (toExecute.length > 0) {
                 for (const taskName of toExecute) {
+                    // Re-check capacity before each task (markRunning increases the count)
+                    if (this.totalRunning() >= this.maxConcurrent) {
+                        break;
+                    }
+
                     this.markRunning(taskName);
 
                     // Cria a promise da task e armazena no mapa
@@ -708,33 +733,39 @@ class DAGExecutor {
             .filter(([_name, task]) => task.status === 'pending')
             .map(([name]) => name);
 
-        // Filter by scope-aware capacity (ignores dependency check for step2)
-        const toExecute = pending.filter(taskName => {
-            const task = this.tasks[taskName];
-            const scope = task.scope || 'integration';
-
-            if (!state.isMultiRepo()) {
-                return this.totalRunning() < this.maxConcurrent;
-            }
-
-            if (scope === 'integration') {
-                return this.totalRunning() < this.maxConcurrent;
-            }
-
-            return this.runningByScope[scope] < this.maxConcurrent;
-        });
-
-        if (toExecute.length === 0) {
+        if (pending.length === 0) {
             return false;
         }
 
-        // Mark as running using scope-aware method
-        toExecute.forEach(task => {
-            this.markRunning(task);
-        });
+        // Mark as running using scope-aware method, respecting capacity limit
+        const tasksToRun = [];
+        for (const taskName of pending) {
+            // Check capacity before each task (markRunning increases the count)
+            if (this.totalRunning() >= this.maxConcurrent) {
+                break;
+            }
+
+            const task = this.tasks[taskName];
+            const scope = task.scope || 'integration';
+
+            // In multi-repo mode, also check per-scope limits
+            if (state.isMultiRepo() && scope !== 'integration') {
+                const perScopeLimit = Math.max(1, Math.floor(this.maxConcurrent / 2));
+                if (this.runningByScope[scope] >= perScopeLimit) {
+                    continue; // Skip this task, try next one
+                }
+            }
+
+            this.markRunning(taskName);
+            tasksToRun.push(taskName);
+        }
+
+        if (tasksToRun.length === 0) {
+            return false;
+        }
 
         // Execute in parallel
-        const promises = toExecute.map(task => this.executeStep2Task(task));
+        const promises = tasksToRun.map(task => this.executeStep2Task(task));
         await Promise.allSettled(promises);
 
         return true;
