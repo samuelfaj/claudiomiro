@@ -89,6 +89,32 @@ Features:
 - Integration verification between codebases
 - Coordinated commits across repositories
 
+### Legacy Systems Support
+
+Claudiomiro handles complex multi-repository environments with legacy systems:
+
+```bash
+# Include legacy systems in your workflow
+claudiomiro --backend=./api --legacy=./legacy-service --frontend=./web --prompt="Add feature across stack"
+
+# Legacy backend with modern frontend
+claudiomiro --legacy-backend=./legacy-api --frontend=./web --prompt="Modernize frontend integration"
+
+# Legacy frontend with modern backend
+claudiomiro --backend=./api --legacy-frontend=./legacy-ui --prompt="Update legacy UI components"
+
+# Multiple legacy systems with migration path
+claudiomiro --legacy-backend=./old-api --legacy-frontend=./old-ui --backend=./api --frontend=./web --prompt="Migrate features to new stack"
+```
+
+Capabilities for legacy codebases:
+- Automatic legacy codebase detection and analysis
+- Preservation of existing patterns and conventions
+- Safe refactoring with minimal disruption
+- Integration tests between modern and legacy systems
+- Gradual migration support without breaking changes
+- Parallel support for legacy and modern stacks
+
 See [Multi-Repository Mode Guide](./docs/multi-repository-mode.md) for details.
 
 ### Local LLM Co-Pilot (Optional)
