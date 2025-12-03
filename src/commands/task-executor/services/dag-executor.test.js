@@ -9,7 +9,6 @@ jest.mock('./parallel-ui-renderer');
 jest.mock('../utils/terminal-renderer');
 jest.mock('../utils/progress-calculator');
 jest.mock('../utils/validation');
-jest.mock('../utils/scope-parser');
 
 // Set up os.cpus mock before module import
 const os = require('os');
@@ -24,7 +23,6 @@ const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
 const { isCompletedFromExecution, hasApprovedCodeReview } = require('../utils/validation');
-const { parseTaskScope } = require('../utils/scope-parser');
 const { DAGExecutor } = require('./dag-executor');
 
 // Mock steps module
@@ -54,8 +52,6 @@ describe('DAGExecutor', () => {
         state.getGitMode = jest.fn().mockReturnValue(null);
         path.join.mockImplementation((...args) => args.join('/'));
 
-        // Default scope-parser mock
-        parseTaskScope.mockReturnValue(null); // Defaults to 'integration'
         fs.existsSync.mockReturnValue(false);
         fs.readFileSync.mockReturnValue('');
 
@@ -1600,58 +1596,24 @@ describe('DAGExecutor', () => {
 
     describe('Scope-Aware Parallelism', () => {
         describe('_initializeTasks', () => {
-            test('should extract backend scope from TASK.md', () => {
-                fs.existsSync.mockReturnValue(true);
-                fs.readFileSync.mockReturnValue('@scope backend\n# Task Description');
-                parseTaskScope.mockReturnValue('backend');
-
-                const tasks = { TASK1: { deps: [], status: 'pending' } };
-                const exec = new DAGExecutor(tasks);
-
-                expect(exec.tasks.TASK1.scope).toBe('backend');
-            });
-
-            test('should extract frontend scope from TASK.md', () => {
-                fs.existsSync.mockReturnValue(true);
-                fs.readFileSync.mockReturnValue('@scope frontend\n# Task Description');
-                parseTaskScope.mockReturnValue('frontend');
-
-                const tasks = { TASK1: { deps: [], status: 'pending' } };
-                const exec = new DAGExecutor(tasks);
-
-                expect(exec.tasks.TASK1.scope).toBe('frontend');
-            });
-
-            test('should default to integration when @scope missing', () => {
-                fs.existsSync.mockReturnValue(true);
-                fs.readFileSync.mockReturnValue('# Task Description without scope');
-                parseTaskScope.mockReturnValue(null);
-
+            test('should default all tasks to integration scope', () => {
                 const tasks = { TASK1: { deps: [], status: 'pending' } };
                 const exec = new DAGExecutor(tasks);
 
                 expect(exec.tasks.TASK1.scope).toBe('integration');
             });
 
-            test('should default to integration when TASK.md not found', () => {
-                fs.existsSync.mockReturnValue(false);
-
-                const tasks = { TASK1: { deps: [], status: 'pending' } };
+            test('should set integration scope for multiple tasks', () => {
+                const tasks = {
+                    TASK1: { deps: [], status: 'pending' },
+                    TASK2: { deps: ['TASK1'], status: 'pending' },
+                    TASK3: { deps: ['TASK2'], status: 'pending' },
+                };
                 const exec = new DAGExecutor(tasks);
 
                 expect(exec.tasks.TASK1.scope).toBe('integration');
-            });
-
-            test('should handle file read error gracefully', () => {
-                fs.existsSync.mockReturnValue(true);
-                fs.readFileSync.mockImplementation(() => {
-                    throw new Error('Permission denied');
-                });
-
-                const tasks = { TASK1: { deps: [], status: 'pending' } };
-                const exec = new DAGExecutor(tasks);
-
-                expect(exec.tasks.TASK1.scope).toBe('integration');
+                expect(exec.tasks.TASK2.scope).toBe('integration');
+                expect(exec.tasks.TASK3.scope).toBe('integration');
             });
         });
 
@@ -1833,23 +1795,8 @@ describe('DAGExecutor', () => {
         });
 
         describe('Multi-repo execution', () => {
-            test('should enforce global limit even across different scopes in multi-repo', () => {
+            test('should enforce global limit for all tasks (all default to integration scope)', () => {
                 state.isMultiRepo.mockReturnValue(true);
-
-                fs.existsSync.mockImplementation(filePath => {
-                    if (filePath.includes('TASK.md')) return true;
-                    return false;
-                });
-                fs.readFileSync.mockImplementation(filePath => {
-                    if (filePath.includes('TASK1')) return '@scope backend';
-                    if (filePath.includes('TASK2')) return '@scope frontend';
-                    return '';
-                });
-                parseTaskScope.mockImplementation(content => {
-                    if (content.includes('backend')) return 'backend';
-                    if (content.includes('frontend')) return 'frontend';
-                    return null;
-                });
 
                 const tasks = {
                     TASK1: { deps: [], status: 'pending' },
@@ -1857,13 +1804,17 @@ describe('DAGExecutor', () => {
                 };
                 const exec = new DAGExecutor(tasks, null, 1); // maxConcurrent = 1
 
+                // Both tasks default to integration scope
+                expect(exec.tasks.TASK1.scope).toBe('integration');
+                expect(exec.tasks.TASK2.scope).toBe('integration');
+
                 // TASK1 should be executable
                 expect(exec.canExecute('TASK1')).toBe(true);
 
                 exec.markRunning('TASK1');
-                expect(exec.runningByScope.backend).toBe(1);
+                expect(exec.runningByScope.integration).toBe(1);
 
-                // TASK2 is frontend, but global limit (1) is reached, so it should be blocked
+                // TASK2 cannot execute because global limit (1) is reached
                 expect(exec.canExecute('TASK2')).toBe(false);
             });
 

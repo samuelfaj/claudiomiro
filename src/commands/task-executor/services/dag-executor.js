@@ -10,7 +10,6 @@ const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
 const { resolveDeadlock } = require('./deadlock-resolver');
-const { parseTaskScope } = require('../utils/scope-parser');
 
 const CORE_COUNT = Math.max(1, os.cpus().length);
 
@@ -41,25 +40,12 @@ class DAGExecutor {
     }
 
     /**
-     * Initialize tasks with scope information from TASK.md files
+     * Initialize tasks with scope information
      * @param {Object} tasks - Task object { TASKN: { deps: [], status: 'pending' } }
      */
     _initializeTasks(tasks) {
         for (const taskName of Object.keys(tasks)) {
-            try {
-                const taskMdPath = path.join(state.claudiomiroFolder, taskName, 'TASK.md');
-                if (fs.existsSync(taskMdPath)) {
-                    const content = fs.readFileSync(taskMdPath, 'utf8');
-                    const scope = parseTaskScope(content);
-                    tasks[taskName].scope = scope || 'integration';
-                } else {
-                    logger.warning(`No TASK.md found for ${taskName}, defaulting to integration scope`);
-                    tasks[taskName].scope = 'integration';
-                }
-            } catch (error) {
-                logger.warning(`Error reading TASK.md for ${taskName}: ${error.message}, defaulting to integration scope`);
-                tasks[taskName].scope = 'integration';
-            }
+            tasks[taskName].scope = 'integration';
         }
     }
 
@@ -193,20 +179,7 @@ class DAGExecutor {
             if (!this.tasks[_taskName]) {
                 // New task (e.g., from split) - add it
                 this.tasks[_taskName] = taskData;
-
-                // Initialize scope for new task
-                try {
-                    const taskMdPath = path.join(state.claudiomiroFolder, _taskName, 'TASK.md');
-                    if (fs.existsSync(taskMdPath)) {
-                        const content = fs.readFileSync(taskMdPath, 'utf8');
-                        const scope = parseTaskScope(content);
-                        this.tasks[_taskName].scope = scope || 'integration';
-                    } else {
-                        this.tasks[_taskName].scope = 'integration';
-                    }
-                } catch {
-                    this.tasks[_taskName].scope = 'integration';
-                }
+                this.tasks[_taskName].scope = 'integration';
 
                 this.stateManager.taskStates.set(_taskName, {
                     status: taskData.status,
