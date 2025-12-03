@@ -345,6 +345,11 @@ const commitOrFix = async (prompt, taskName = null, cwd = null) => {
     }
 
     try {
+        const shellCommandRule = fs.readFileSync(
+            path.join(__dirname, '..', 'templates', 'SHELL-COMMAND-RULE.md'),
+            'utf-8',
+        );
+
         await executeClaude(
             `${prompt}${localCommitHint}\n\n` +
             'HARD RULES:\n' +
@@ -355,7 +360,9 @@ const commitOrFix = async (prompt, taskName = null, cwd = null) => {
             ' - NOBODY can know that AI was used\n' +
             ' - If you need to commit, use git commit -m "message"\n' +
             ' - If you need to push, use git push\n' +
-            ' - If you need to create a PR, use the available git tools (GitHub, GitLab, etc.)\n',
+            ' - If you need to create a PR, use the available git tools (GitHub, GitLab, etc.)\n' +
+            '\n\n---\n\n' +
+            shellCommandRule,
             taskName,
             { cwd: workDir },
         );
