@@ -839,6 +839,106 @@ describe('schema-validator', () => {
         });
     });
 
+    describe('stripUnknownProperties', () => {
+        test('should strip unknown properties from uncertainties', () => {
+            const input = {
+                id: 'U1',
+                topic: 'API version',
+                assumption: 'Using v2',
+                confidence: 'HIGH',
+                description: 'Unknown property to strip',
+                mitigation: 'Another unknown property',
+                fallback: 'Yet another unknown property',
+            };
+            const result = schemaValidator.repairUncertainty(input, 0);
+
+            expect(result.id).toBe('U1');
+            expect(result.topic).toBe('API version');
+            expect(result.assumption).toBe('Using v2');
+            expect(result.confidence).toBe('HIGH');
+            expect(result.description).toBeUndefined();
+            expect(result.mitigation).toBeUndefined();
+            expect(result.fallback).toBeUndefined();
+        });
+
+        test('should strip unknown properties from artifacts', () => {
+            const input = {
+                type: 'created',
+                path: 'src/file.js',
+                verified: true,
+                description: 'Unknown property to strip',
+            };
+            const result = schemaValidator.repairArtifact(input);
+
+            expect(result.type).toBe('created');
+            expect(result.path).toBe('src/file.js');
+            expect(result.verified).toBe(true);
+            expect(result.description).toBeUndefined();
+        });
+
+        test('should strip unknown properties from completion', () => {
+            const input = {
+                status: 'completed',
+                summary: ['Done'],
+                reason: 'Unknown property to strip',
+                lessonLearned: 'Another unknown property',
+            };
+            const result = schemaValidator.repairCompletion(input);
+
+            expect(result.status).toBe('completed');
+            expect(result.summary).toEqual(['Done']);
+            expect(result.reason).toBeUndefined();
+            expect(result.lessonLearned).toBeUndefined();
+        });
+
+        test('should strip unknown properties from phases', () => {
+            const input = {
+                id: 1,
+                name: 'Phase 1',
+                status: 'completed',
+                extraField: 'Unknown property to strip',
+            };
+            const result = schemaValidator.repairPhase(input, 1);
+
+            expect(result.id).toBe(1);
+            expect(result.name).toBe('Phase 1');
+            expect(result.status).toBe('completed');
+            expect(result.extraField).toBeUndefined();
+        });
+
+        test('should handle the real-world execution.json error case', () => {
+            // This is the exact scenario from the user's error
+            mockValidate.mockReturnValue(true);
+            mockValidate.errors = null;
+
+            const input = {
+                uncertainties: [
+                    { id: 'U1', topic: 'Test', assumption: 'None', confidence: 'HIGH', description: 'Extra', mitigation: 'Extra' },
+                    { id: 'U2', topic: 'Test2', assumption: 'None2', confidence: 'LOW', description: 'Extra2', fallback: 'Extra2' },
+                ],
+                artifacts: [
+                    { type: 'created', path: 'file.js', verified: true, description: 'Extra artifact desc' },
+                ],
+                completion: {
+                    status: 'completed',
+                    reason: 'Extra reason',
+                    lessonLearned: 'Extra lesson',
+                },
+            };
+
+            const result = schemaValidator.validateExecutionJson(input, { repair: true });
+
+            expect(result.valid).toBe(true);
+            expect(result.repairedData.uncertainties[0].description).toBeUndefined();
+            expect(result.repairedData.uncertainties[0].mitigation).toBeUndefined();
+            expect(result.repairedData.uncertainties[1].description).toBeUndefined();
+            expect(result.repairedData.uncertainties[1].fallback).toBeUndefined();
+            expect(result.repairedData.artifacts[0].description).toBeUndefined();
+            expect(result.repairedData.completion.reason).toBeUndefined();
+            expect(result.repairedData.completion.lessonLearned).toBeUndefined();
+        });
+    });
+
     describe('validateExecutionJson with repair', () => {
         test('should repair preConditions with missing command/expected', () => {
             mockValidate.mockReturnValue(true);

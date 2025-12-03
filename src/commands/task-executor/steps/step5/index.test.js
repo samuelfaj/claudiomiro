@@ -65,7 +65,9 @@ const {
     trackUncertainty,
     validateCompletion,
     isDangerousCommand,
+    isCriticalError,
     VALID_STATUSES,
+    CRITICAL_ERROR_PATTERNS,
 } = require('./index');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
@@ -568,7 +570,7 @@ describe('step5', () => {
                 .toThrow('Failed to parse execution.json');
         });
 
-        test('should throw error when schema validation fails', () => {
+        test('should throw error when schema validation fails in strict mode', () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(JSON.stringify({ status: 'pending' }));
             validateExecutionJson.mockReturnValue({
@@ -576,11 +578,11 @@ describe('step5', () => {
                 errors: ['Missing required field "phases"', 'Missing required field "$schema"'],
             });
 
-            expect(() => loadExecution('/test/execution.json'))
+            expect(() => loadExecution('/test/execution.json', { lenient: false }))
                 .toThrow('Invalid execution.json: Missing required field "phases"; Missing required field "$schema"');
         });
 
-        test('should throw error when status is invalid according to schema', () => {
+        test('should throw error when status is invalid according to schema in strict mode', () => {
             fs.existsSync.mockReturnValue(true);
             fs.readFileSync.mockReturnValue(JSON.stringify({
                 status: 'invalid_status',
@@ -593,8 +595,36 @@ describe('step5', () => {
                 errors: ['status: Invalid value. Allowed values: pending, in_progress, completed, blocked'],
             });
 
-            expect(() => loadExecution('/test/execution.json'))
+            expect(() => loadExecution('/test/execution.json', { lenient: false }))
                 .toThrow('Invalid execution.json');
+        });
+
+        test('should return repaired data with warning in lenient mode (default) for non-critical errors', () => {
+            const originalData = { status: 'pending', unknownField: 'value' };
+            const repairedData = { status: 'pending', phases: [] };
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify(originalData));
+            validateExecutionJson.mockReturnValue({
+                valid: false,
+                errors: ['uncertainties.0: Unknown property "description"'],
+                repairedData,
+            });
+
+            // Should not throw in lenient mode
+            const result = loadExecution('/test/execution.json');
+            expect(result).toEqual(repairedData);
+        });
+
+        test('should throw on critical errors even in lenient mode', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ status: 'pending' }));
+            validateExecutionJson.mockReturnValue({
+                valid: false,
+                errors: ['Failed to parse nested JSON structure'],
+            });
+
+            expect(() => loadExecution('/test/execution.json'))
+                .toThrow('Invalid execution.json (critical)');
         });
     });
 
@@ -620,17 +650,17 @@ describe('step5', () => {
             );
         });
 
-        test('should throw error when schema validation fails', () => {
+        test('should throw error when schema validation fails in strict mode', () => {
             validateExecutionJson.mockReturnValue({
                 valid: false,
                 errors: ['Missing required field "phases"'],
             });
 
-            expect(() => saveExecution('/test/execution.json', { status: 'pending' }))
+            expect(() => saveExecution('/test/execution.json', { status: 'pending' }, { lenient: false }))
                 .toThrow('Cannot save execution.json: Missing required field "phases"');
         });
 
-        test('should throw error when status is invalid according to schema', () => {
+        test('should throw error when status is invalid according to schema in strict mode', () => {
             validateExecutionJson.mockReturnValue({
                 valid: false,
                 errors: ['status: Invalid value. Allowed values: pending, in_progress, completed, blocked'],
@@ -641,7 +671,36 @@ describe('step5', () => {
                 phases: [],
                 artifacts: [],
                 completion: {},
-            })).toThrow('Cannot save execution.json');
+            }, { lenient: false })).toThrow('Cannot save execution.json');
+        });
+
+        test('should save with warning in lenient mode (default) when validation fails with non-critical errors', () => {
+            const execution = { status: 'pending' };
+            const repairedData = { status: 'pending', phases: [] };
+            validateExecutionJson.mockReturnValue({
+                valid: false,
+                errors: ['uncertainties.0: Unknown property "description"'],
+                repairedData,
+            });
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Should not throw in lenient mode
+            expect(() => saveExecution('/test/execution.json', execution)).not.toThrow();
+            expect(fs.writeFileSync).toHaveBeenCalledWith(
+                '/test/execution.json',
+                JSON.stringify(repairedData, null, 2),
+                'utf8',
+            );
+        });
+
+        test('should throw on critical errors even in lenient mode', () => {
+            validateExecutionJson.mockReturnValue({
+                valid: false,
+                errors: ['Failed to parse JSON'],
+            });
+
+            expect(() => saveExecution('/test/execution.json', { status: 'pending' }))
+                .toThrow('Cannot save execution.json (critical)');
         });
     });
 
@@ -743,6 +802,37 @@ describe('step5', () => {
             expect(isDangerousCommand('echo hello')).toBe(false);
             expect(isDangerousCommand('ls -la')).toBe(false);
             expect(isDangerousCommand('npm test')).toBe(false);
+        });
+    });
+
+    describe('isCriticalError', () => {
+        test('should detect file not found errors', () => {
+            expect(isCriticalError('execution.json not found at /path')).toBe(true);
+            expect(isCriticalError('File not found')).toBe(true);
+        });
+
+        test('should detect JSON parse errors', () => {
+            expect(isCriticalError('Failed to parse JSON')).toBe(true);
+            expect(isCriticalError('Unexpected token in JSON')).toBe(true);
+            expect(isCriticalError('Syntax error in config')).toBe(true);
+        });
+
+        test('should return false for schema validation errors (non-critical)', () => {
+            expect(isCriticalError('Unknown property "description"')).toBe(false);
+            expect(isCriticalError('Missing required field "phases"')).toBe(false);
+            expect(isCriticalError('Invalid value. Allowed values: pending, in_progress')).toBe(false);
+        });
+
+        test('should return false for empty or null input', () => {
+            expect(isCriticalError(null)).toBe(false);
+            expect(isCriticalError('')).toBe(false);
+            expect(isCriticalError(undefined)).toBe(false);
+        });
+
+        test('should have expected critical patterns', () => {
+            expect(CRITICAL_ERROR_PATTERNS).toBeDefined();
+            expect(Array.isArray(CRITICAL_ERROR_PATTERNS)).toBe(true);
+            expect(CRITICAL_ERROR_PATTERNS.length).toBeGreaterThan(0);
         });
     });
 

@@ -38,6 +38,30 @@ const DANGEROUS_PATTERNS = [
  * This is the core implementation step where actual code changes happen.
  */
 
+// Critical error patterns that should stop execution
+// These indicate fundamental issues that prevent processing
+const CRITICAL_ERROR_PATTERNS = [
+    /\.json not found/i,       // execution.json not found, config.json not found, etc.
+    /file not found/i,         // generic file not found
+    /failed to parse/i,        // JSON parse failures
+    /syntax error/i,           // syntax errors in JSON or code
+    /unexpected token/i,       // JSON parse errors
+    /json parse error/i,       // explicit JSON errors
+    /cannot read/i,            // fs read errors
+    /permission denied/i,      // fs permission errors
+    /enoent/i,                 // Node.js file not found error
+];
+
+/**
+ * Check if an error is critical (should stop execution) vs non-critical (can be ignored/fixed)
+ * @param {string} errorMessage - Error message to check
+ * @returns {boolean} true if critical
+ */
+const isCriticalError = (errorMessage) => {
+    if (!errorMessage) return false;
+    return CRITICAL_ERROR_PATTERNS.some(pattern => pattern.test(errorMessage));
+};
+
 /**
  * Estimates the code change size from BLUEPRINT.md content
  * @param {string} blueprintPath - Path to BLUEPRINT.md
@@ -51,11 +75,18 @@ const estimateCodeChangeSize = (blueprintPath) => {
 
 /**
  * Load execution.json with schema validation and auto-repair
+ * Lenient mode: non-critical validation errors are logged but not thrown
  * @param {string} executionPath - Path to execution.json
+ * @param {Object} options - Options for loading
+ * @param {boolean} options.lenient - If true, ignore non-critical validation errors (default: true)
  * @returns {Object} Parsed and repaired execution object
- * @throws {Error} if file missing or critically invalid
+ * @throws {Error} if file missing or JSON parse fails (critical errors only)
  */
-const loadExecution = (executionPath) => {
+const loadExecution = (executionPath, options = {}) => {
+    const { lenient = true } = options;
+    const logger = require('../../../../shared/utils/logger');
+
+    // Critical: file must exist
     if (!fs.existsSync(executionPath)) {
         throw new Error(`execution.json not found at ${executionPath}`);
     }
@@ -64,13 +95,31 @@ const loadExecution = (executionPath) => {
     try {
         execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
     } catch (err) {
+        // Critical: JSON must be parseable
         throw new Error(`Failed to parse execution.json: ${err.message}`);
     }
 
     // Validate against schema with auto-repair enabled
     const validation = validateExecutionJson(execution, { sanitize: true, repair: true });
+
     if (!validation.valid) {
-        throw new Error(`Invalid execution.json: ${validation.errors.join('; ')}`);
+        const errorMessage = validation.errors.join('; ');
+
+        // Check if any error is critical
+        if (isCriticalError(errorMessage)) {
+            throw new Error(`Invalid execution.json (critical): ${errorMessage}`);
+        }
+
+        // Non-critical errors: log warning and use repaired data anyway
+        if (lenient) {
+            logger.warning(`[Step5] Non-critical execution.json validation issues (auto-fixed): ${errorMessage}`);
+            // Even if validation says invalid, the repaired data should be usable
+            // Return the best-effort repaired data
+            return validation.repairedData || validation.sanitizedData || execution;
+        }
+
+        // Strict mode: throw on any validation error
+        throw new Error(`Invalid execution.json: ${errorMessage}`);
     }
 
     // Return the repaired/sanitized data
@@ -79,15 +128,39 @@ const loadExecution = (executionPath) => {
 
 /**
  * Save execution.json with schema validation and auto-repair
+ * Lenient mode: saves best-effort repaired data even if validation has non-critical errors
  * @param {string} executionPath - Path to execution.json
  * @param {Object} execution - Execution object to save
- * @throws {Error} if validation fails after repair
+ * @param {Object} options - Options for saving
+ * @param {boolean} options.lenient - If true, save even with non-critical validation errors (default: true)
+ * @throws {Error} only if critical validation errors occur
  */
-const saveExecution = (executionPath, execution) => {
+const saveExecution = (executionPath, execution, options = {}) => {
+    const { lenient = true } = options;
+    const logger = require('../../../../shared/utils/logger');
+
     // Validate and repair against schema before save
     const validation = validateExecutionJson(execution, { sanitize: true, repair: true });
+
     if (!validation.valid) {
-        throw new Error(`Cannot save execution.json: ${validation.errors.join('; ')}`);
+        const errorMessage = validation.errors.join('; ');
+
+        // Check if any error is critical
+        if (isCriticalError(errorMessage)) {
+            throw new Error(`Cannot save execution.json (critical): ${errorMessage}`);
+        }
+
+        // Non-critical errors: log warning and save anyway
+        if (lenient) {
+            logger.warning(`[Step5] Saving execution.json with non-critical issues (auto-fixed): ${errorMessage}`);
+            // Save the best-effort repaired data
+            const dataToSave = validation.repairedData || validation.sanitizedData || execution;
+            fs.writeFileSync(executionPath, JSON.stringify(dataToSave, null, 2), 'utf8');
+            return;
+        }
+
+        // Strict mode: throw on any validation error
+        throw new Error(`Cannot save execution.json: ${errorMessage}`);
     }
 
     // Save the repaired/sanitized data
@@ -669,6 +742,8 @@ module.exports = {
     validateCompletion,
     executeNewFlow,
     isDangerousCommand,
+    isCriticalError,
     estimateCodeChangeSize,
     VALID_STATUSES,
+    CRITICAL_ERROR_PATTERNS,
 };

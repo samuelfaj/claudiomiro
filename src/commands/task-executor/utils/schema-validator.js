@@ -18,6 +18,39 @@ const VALID_ARTIFACT_TYPES = ['created', 'modified'];
 const VALID_COMPLETION_STATUSES = ['pending_validation', 'completed', 'blocked', 'failed'];
 const VALID_TEST_TYPES = ['AUTO', 'MANUAL', 'BOTH'];
 
+// Allowed keys per schema section (additionalProperties: false)
+const ALLOWED_UNCERTAINTY_KEYS = ['id', 'topic', 'assumption', 'confidence', 'resolution', 'resolvedConfidence'];
+const ALLOWED_ARTIFACT_KEYS = ['type', 'path', 'verified', 'verification'];
+const ALLOWED_COMPLETION_KEYS = ['status', 'summary', 'deviations', 'forFutureTasks', 'codeReviewPassed', 'blockedBy'];
+const ALLOWED_PHASE_KEYS = ['id', 'name', 'status', 'preConditions', 'items'];
+const ALLOWED_PRECONDITION_KEYS = ['check', 'command', 'expected', 'passed', 'evidence'];
+const ALLOWED_PHASE_ITEM_KEYS = ['description', 'completed', 'source', 'evidence'];
+const ALLOWED_CURRENT_PHASE_KEYS = ['id', 'name', 'lastAction'];
+const ALLOWED_ERROR_HISTORY_KEYS = ['timestamp', 'message', 'stack', 'phase'];
+const ALLOWED_SUCCESS_CRITERION_KEYS = ['criterion', 'command', 'expected', 'passed', 'evidence', 'source', 'testType', 'manualCheck'];
+const ALLOWED_CLEANUP_KEYS = ['debugLogsRemoved', 'formattingConsistent', 'deadCodeRemoved'];
+const ALLOWED_BEYOND_THE_BASICS_KEYS = ['extras', 'edgeCases', 'downstreamImpact', 'cleanup'];
+
+/**
+ * Strips unknown properties from an object based on allowed keys
+ * @param {object} obj - Object to strip
+ * @param {string[]} allowedKeys - Array of allowed property names
+ * @returns {object} Object with only allowed properties
+ */
+const stripUnknownProperties = (obj, allowedKeys) => {
+    if (!obj || typeof obj !== 'object') {
+        return obj;
+    }
+
+    const stripped = {};
+    for (const key of allowedKeys) {
+        if (key in obj) {
+            stripped[key] = obj[key];
+        }
+    }
+    return stripped;
+};
+
 /**
  * Repairs an execution.json object by filling in missing required fields
  * and normalizing values to valid formats.
@@ -116,7 +149,8 @@ const repairPhase = (phase, defaultId) => {
         };
     }
 
-    const repaired = { ...phase };
+    // Strip unknown properties first
+    const repaired = stripUnknownProperties(phase, ALLOWED_PHASE_KEYS);
 
     if (typeof repaired.id !== 'number' || repaired.id < 1) {
         repaired.id = defaultId;
@@ -155,15 +189,19 @@ const repairPreCondition = (pc) => {
         };
     }
 
-    const repaired = { ...pc };
+    // Preserve values we need before stripping
+    const checkValue = pc.check || pc.description || pc.name || 'Unknown check';
+    const commandValue = pc.command || pc.cmd || 'echo "no command specified"';
+
+    // Strip unknown properties first
+    const repaired = stripUnknownProperties(pc, ALLOWED_PRECONDITION_KEYS);
 
     // Ensure required fields exist
     if (!repaired.check || typeof repaired.check !== 'string') {
-        repaired.check = repaired.description || repaired.name || 'Unknown check';
+        repaired.check = checkValue;
     }
     if (!repaired.command || typeof repaired.command !== 'string') {
-        // Try to infer from other fields or set a no-op command
-        repaired.command = repaired.cmd || 'echo "no command specified"';
+        repaired.command = commandValue;
     }
     if (repaired.expected === undefined || repaired.expected === null) {
         // Empty string is valid - means any output is acceptable
@@ -194,10 +232,14 @@ const repairPhaseItem = (item) => {
         };
     }
 
-    const repaired = { ...item };
+    // Preserve description from other fields before stripping
+    const descriptionValue = item.description || item.name || item.task || 'Unknown item';
+
+    // Strip unknown properties first
+    const repaired = stripUnknownProperties(item, ALLOWED_PHASE_ITEM_KEYS);
 
     if (!repaired.description || typeof repaired.description !== 'string') {
-        repaired.description = repaired.name || repaired.task || 'Unknown item';
+        repaired.description = descriptionValue;
     }
     if (typeof repaired.completed !== 'boolean') {
         repaired.completed = false;
@@ -214,7 +256,8 @@ const repairCurrentPhase = (cp) => {
         return { id: 1, name: 'Phase 1' };
     }
 
-    const repaired = { ...cp };
+    // Strip unknown properties first
+    const repaired = stripUnknownProperties(cp, ALLOWED_CURRENT_PHASE_KEYS);
 
     if (typeof repaired.id !== 'number' || repaired.id < 1) {
         repaired.id = 1;
@@ -237,13 +280,17 @@ const repairErrorHistoryEntry = (entry) => {
         };
     }
 
-    const repaired = { ...entry };
+    // Preserve message from error field before stripping
+    const messageValue = entry.message || entry.error || 'Unknown error';
+
+    // Strip unknown properties first
+    const repaired = stripUnknownProperties(entry, ALLOWED_ERROR_HISTORY_KEYS);
 
     if (!repaired.timestamp) {
         repaired.timestamp = new Date().toISOString();
     }
     if (!repaired.message || typeof repaired.message !== 'string') {
-        repaired.message = repaired.error || 'Unknown error';
+        repaired.message = messageValue;
     }
 
     return repaired;
@@ -264,7 +311,8 @@ const repairUncertainty = (u, idx) => {
         };
     }
 
-    const repaired = { ...u };
+    // Strip unknown properties first (e.g., description, mitigation, fallback)
+    const repaired = stripUnknownProperties(u, ALLOWED_UNCERTAINTY_KEYS);
 
     if (!repaired.id || typeof repaired.id !== 'string') {
         repaired.id = `U${idx + 1}`;
@@ -304,13 +352,17 @@ const repairArtifact = (artifact) => {
         };
     }
 
-    const repaired = { ...artifact };
+    // Preserve path/file from original before stripping
+    const pathValue = artifact.path || artifact.file || 'unknown';
+
+    // Strip unknown properties first (e.g., description)
+    const repaired = stripUnknownProperties(artifact, ALLOWED_ARTIFACT_KEYS);
 
     if (!repaired.type || !VALID_ARTIFACT_TYPES.includes(repaired.type)) {
         repaired.type = 'modified';
     }
     if (!repaired.path || typeof repaired.path !== 'string') {
-        repaired.path = repaired.file || 'unknown';
+        repaired.path = pathValue;
     }
     if (typeof repaired.verified !== 'boolean') {
         repaired.verified = false;
@@ -330,10 +382,14 @@ const repairSuccessCriterion = (criterion) => {
         };
     }
 
-    const repaired = { ...criterion };
+    // Preserve criterion value from other fields before stripping
+    const criterionValue = criterion.criterion || criterion.check || criterion.description || 'Unknown criterion';
+
+    // Strip unknown properties first
+    const repaired = stripUnknownProperties(criterion, ALLOWED_SUCCESS_CRITERION_KEYS);
 
     if (!repaired.criterion || typeof repaired.criterion !== 'string') {
-        repaired.criterion = repaired.check || repaired.description || 'Unknown criterion';
+        repaired.criterion = criterionValue;
     }
     if (repaired.passed !== null && typeof repaired.passed !== 'boolean') {
         repaired.passed = false;
@@ -353,10 +409,12 @@ const repairBeyondTheBasics = (btb) => {
         return {};
     }
 
-    const repaired = { ...btb };
+    // Strip unknown properties first
+    const repaired = stripUnknownProperties(btb, ALLOWED_BEYOND_THE_BASICS_KEYS);
 
     if (repaired.cleanup && typeof repaired.cleanup === 'object') {
-        const cleanup = { ...repaired.cleanup };
+        // Also strip unknown properties from cleanup
+        const cleanup = stripUnknownProperties(repaired.cleanup, ALLOWED_CLEANUP_KEYS);
         if (typeof cleanup.debugLogsRemoved !== 'boolean') {
             cleanup.debugLogsRemoved = false;
         }
@@ -387,7 +445,8 @@ const repairCompletion = (completion) => {
         return { status: 'pending_validation' };
     }
 
-    const repaired = { ...completion };
+    // Strip unknown properties first (e.g., reason, lessonLearned)
+    const repaired = stripUnknownProperties(completion, ALLOWED_COMPLETION_KEYS);
 
     if (!repaired.status || !VALID_COMPLETION_STATUSES.includes(repaired.status)) {
         repaired.status = 'pending_validation';
@@ -707,6 +766,9 @@ module.exports = {
     repairUncertainty,
     repairCompletion,
     repairBeyondTheBasics,
+    repairCurrentPhase,
+    repairErrorHistoryEntry,
+    stripUnknownProperties,
     // Exported for testing purposes only
     getSchemaPath,
     getReviewChecklistSchemaPath,
