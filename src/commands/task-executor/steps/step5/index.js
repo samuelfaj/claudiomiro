@@ -260,11 +260,25 @@ const trackUncertainty = (execution, topic, assumption, confidence) => {
 const validateCompletion = (execution) => {
     const logger = require('../../../../shared/utils/logger');
 
-    // Check all pre-conditions passed
+    // Check all phases completed
     for (const phase of execution.phases || []) {
+        if (phase.status !== 'completed') {
+            logger.info(`Completion validation: failed - Phase ${phase.id} (${phase.name}) not completed (status: ${phase.status})`);
+            return false;
+        }
+
+        // Check all items in phase completed (if items exist)
+        for (const item of phase.items || []) {
+            if (item.completed !== true) {
+                logger.info(`Completion validation: failed - Phase ${phase.id} item not completed: ${item.description}`);
+                return false;
+            }
+        }
+
+        // Check all pre-conditions passed
         for (const pc of phase.preConditions || []) {
             if (pc.passed !== true) {
-                logger.info('Completion validation: failed - pre-condition not passed');
+                logger.info(`Completion validation: failed - Phase ${phase.id} pre-condition not passed: ${pc.check}`);
                 return false;
             }
         }
@@ -273,7 +287,15 @@ const validateCompletion = (execution) => {
     // Check all artifacts verified
     for (const artifact of execution.artifacts || []) {
         if (artifact.verified !== true) {
-            logger.info('Completion validation: failed - artifact not verified');
+            logger.info(`Completion validation: failed - artifact not verified: ${artifact.path}`);
+            return false;
+        }
+    }
+
+    // Check all success criteria passed (if they exist)
+    for (const criterion of execution.successCriteria || []) {
+        if (criterion.passed !== true) {
+            logger.info(`Completion validation: failed - success criterion not passed: ${criterion.criterion}`);
             return false;
         }
     }
@@ -370,10 +392,149 @@ const executeNewFlow = async (task, taskFolder, cwd) => {
         : 0;
     latestExecution.attempts = Math.max(latestAttempts, attemptsBeforeClaude);
 
-    // Validate completion
+    // 🆕 LAYER 1.5: Validate Implementation Strategy (BLUEPRINT.md §4)
+    logger.info('Validating Implementation Strategy from BLUEPRINT.md §4...');
+    const { validateImplementationStrategy } = require('./validate-implementation-strategy');
+    try {
+        const strategyValidation = await validateImplementationStrategy(task, {
+            claudiomiroFolder: state.claudiomiroFolder,
+        });
+
+        if (!strategyValidation.valid) {
+            logger.error(`❌ Implementation Strategy validation failed: ${strategyValidation.missing.length} issues`);
+            strategyValidation.missing.forEach((issue, idx) => {
+                logger.error(`   ${idx + 1}. Phase ${issue.phaseId}: ${issue.reason}`);
+                if (issue.item) {
+                    logger.error(`      Item: "${issue.item}"`);
+                }
+                if (issue.expectedSteps !== undefined) {
+                    logger.error(`      Expected ${issue.expectedSteps} steps, found ${issue.actualItems || 0} items`);
+                }
+            });
+
+            // Force re-execution
+            latestExecution.status = 'in_progress';
+            latestExecution.completion.status = 'pending_validation';
+            saveExecution(executionPath, latestExecution);
+
+            throw new Error(`Implementation Strategy validation failed: ${strategyValidation.missing.length} steps missing or incomplete`);
+        }
+
+        logger.info(`✅ Implementation Strategy validated: ${strategyValidation.expectedPhases} phases, all steps tracked`);
+    } catch (error) {
+        // If validateImplementationStrategy itself throws (e.g., parsing error), check if it's validation failure
+        if (error.message.includes('Implementation Strategy validation failed')) {
+            throw error; // Re-throw validation failures
+        }
+        logger.warning(`Implementation Strategy validation skipped: ${error.message}`);
+    }
+
+    // 🆕 LAYER 2: Run automated success criteria validation
+    logger.info('Running success criteria validation from BLUEPRINT.md §3.2...');
+    const { validateSuccessCriteria } = require('./validate-success-criteria');
+    try {
+        const criteriaResults = await validateSuccessCriteria(task, {
+            cwd,
+            claudiomiroFolder: state.claudiomiroFolder,
+        });
+
+        // Add success criteria results to execution.json
+        latestExecution.successCriteria = criteriaResults;
+
+        const failedCriteria = criteriaResults.filter(c => !c.passed);
+        if (failedCriteria.length > 0) {
+            logger.error(`❌ ${failedCriteria.length} success criteria failed!`);
+            failedCriteria.forEach(c => {
+                logger.error(`   - ${c.criterion}`);
+                logger.error(`     Command: ${c.command}`);
+                logger.error(`     Evidence: ${c.evidence.substring(0, 100)}`);
+            });
+
+            // Force re-execution
+            latestExecution.status = 'in_progress';
+            latestExecution.completion.status = 'pending_validation';
+            saveExecution(executionPath, latestExecution);
+
+            throw new Error(`Success criteria validation failed: ${failedCriteria.map(c => c.criterion).join(', ')}`);
+        }
+
+        logger.info(`✅ All ${criteriaResults.length} success criteria passed`);
+    } catch (error) {
+        // If validateSuccessCriteria itself throws (e.g., parsing error), log and continue
+        if (error.message.includes('Success criteria validation failed')) {
+            throw error; // Re-throw if it's the validation failure
+        }
+        logger.warning(`Success criteria validation skipped: ${error.message}`);
+    }
+
+    // 🆕 LAYER 4: Verify git changes match declared artifacts
+    logger.info('Verifying git changes match declared artifacts...');
+    const { verifyChanges } = require('./verify-changes');
+    try {
+        const diffCheck = await verifyChanges(latestExecution, cwd);
+
+        if (!diffCheck.valid) {
+            logger.warning('⚠️  Git diff discrepancies detected');
+
+            // Record deviations in completion
+            latestExecution.completion.deviations = latestExecution.completion.deviations || [];
+
+            if (diffCheck.undeclared.length > 0) {
+                const deviation = `Undeclared changes in git: ${diffCheck.undeclared.join(', ')}`;
+                latestExecution.completion.deviations.push(deviation);
+                logger.warning(`   ${deviation}`);
+            }
+
+            if (diffCheck.missing.length > 0) {
+                const deviation = `Declared in artifacts but not modified: ${diffCheck.missing.join(', ')}`;
+                latestExecution.completion.deviations.push(deviation);
+                logger.warning(`   ${deviation}`);
+            }
+        } else {
+            logger.info('✅ Git changes match declared artifacts');
+        }
+    } catch (error) {
+        logger.warning(`Git verification skipped: ${error.message}`);
+    }
+
+    // 🆕 LAYER 5: Validate Review Checklist
+    logger.info('Validating review-checklist.json...');
+    const { validateReviewChecklist } = require('./validate-review-checklist');
+    try {
+        const checklistValidation = await validateReviewChecklist(task, {
+            claudiomiroFolder: state.claudiomiroFolder,
+        });
+
+        if (!checklistValidation.valid) {
+            logger.error(`❌ Review checklist validation failed: ${checklistValidation.missing.length} artifacts missing`);
+            checklistValidation.missing.forEach((issue, idx) => {
+                logger.error(`   ${idx + 1}. ${issue.artifact}: ${issue.reason}`);
+            });
+
+            // Force re-execution
+            latestExecution.status = 'in_progress';
+            latestExecution.completion.status = 'pending_validation';
+            saveExecution(executionPath, latestExecution);
+
+            throw new Error(`Review checklist validation failed: ${checklistValidation.missing.length} artifacts missing checklist entries`);
+        }
+
+        logger.info(`✅ Review checklist validated: ${checklistValidation.totalChecklistItems} items for ${checklistValidation.totalArtifacts} artifacts`);
+    } catch (error) {
+        // If validateReviewChecklist itself throws, check if it's validation failure
+        if (error.message.includes('Review checklist validation failed')) {
+            throw error; // Re-throw validation failures
+        }
+        logger.warning(`Review checklist validation skipped: ${error.message}`);
+    }
+
+    // Validate completion (with enhanced checks for phase items, success criteria)
     if (validateCompletion(latestExecution)) {
         latestExecution.completion.status = 'completed';
         latestExecution.status = 'completed';
+        logger.info('✅ Task completed successfully');
+    } else {
+        logger.warning('⚠️  Completion validation failed - task remains in_progress');
     }
 
     logger.info(`Saved execution.json: status=${latestExecution.status}`);

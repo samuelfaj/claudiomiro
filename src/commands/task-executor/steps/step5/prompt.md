@@ -128,11 +128,57 @@ Update execution.json:
     {
       "id": <phase_id>,
       "name": "<phase_name>",
-      "status": "in_progress"
+      "status": "in_progress",
+      "items": []  // ⬅️ Will track individual tasks within this phase
     }
   ]
 }
 ```
+
+**CRITICAL: Track Phase Items Granularly**
+
+For each step within the phase (from BLUEPRINT.md §4), create an item:
+
+```json
+{
+  "phases": [
+    {
+      "id": 1,
+      "name": "Preparation",
+      "status": "in_progress",
+      "items": [
+        {
+          "description": "Read autopay.php lines 90-302 to understand context",
+          "source": "BLUEPRINT.md §4 Phase 1 Step 1",
+          "completed": false,
+          "evidence": null
+        },
+        {
+          "description": "Read recurringBillingData.php:82-88 to confirm method signature",
+          "source": "BLUEPRINT.md §4 Phase 1 Step 2",
+          "completed": false,
+          "evidence": null
+        }
+      ]
+    }
+  ]
+}
+```
+
+**As you complete each step, update the item:**
+```json
+{
+  "description": "Read autopay.php lines 90-302 to understand context",
+  "source": "BLUEPRINT.md §4 Phase 1 Step 1",
+  "completed": true,  // ⬅️ Change to true!
+  "evidence": "Read file at 2025-12-02T23:45:12Z, contains ledgerLineData query at line 119"
+}
+```
+
+**Why this matters:**
+- Ensures you don't skip ANY step from BLUEPRINT.md §4
+- Provides audit trail of what was actually done
+- validateCompletion() will FAIL if any item.completed !== true
 
 ### Step 2.2: Implement Changes
 
@@ -214,7 +260,99 @@ If you make assumptions during implementation:
 }
 ```
 
-### Step 2.4: Complete Phase
+### Step 2.4: Update Review Checklist (CRITICAL - Real-Time)
+
+**MANDATORY:** For EVERY file you create/modify, immediately add review questions to `review-checklist.json`.
+
+**Location:** Same directory as BLUEPRINT.md and execution.json
+
+**Initial structure (create if doesn't exist):**
+```json
+{
+  "task": "TASK0",
+  "generatedAt": "2025-12-02T23:45:12.000Z",
+  "items": []
+}
+```
+
+**For each artifact, add a review item:**
+```json
+{
+  "task": "TASK0",
+  "generatedAt": "2025-12-02T23:45:12.000Z",
+  "items": [
+    {
+      "artifact": "path/to/handler.ext",
+      "type": "modified",
+      "questions": [
+        {
+          "category": "compatibility",
+          "question": "Does the new recurringBillingData query return the same data structure as the old ledgerLineData query?",
+          "why": "Ensures downstream code expecting specific fields doesn't break"
+        },
+        {
+          "category": "completeness",
+          "question": "Are all edge cases handled: computerUpdated=false, disenrolled students, zero amounts?",
+          "why": "Per BLUEPRINT.md requirements, these must be logged and skipped"
+        },
+        {
+          "category": "error-handling",
+          "question": "What happens if recurringBillingData::getActiveRowsByUser() returns empty array?",
+          "why": "Should gracefully handle no active billing records"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**Question Categories (use relevant ones):**
+- `compatibility` - Will existing callers break? Signature changes?
+- `breaking-change` - API changes that could break other code?
+- `completeness` - All cases handled? No TODOs? All requirements met?
+- `data-flow` - Where does data come from/go to? Correct transformations?
+- `error-handling` - Null/empty/error cases handled gracefully?
+- `integration` - Dependencies used correctly? External APIs work?
+- `testing` - Are tests present? Do they cover the changes?
+
+**CRITICAL Rules:**
+- ✅ Add questions IMMEDIATELY after modifying each file (not at the end)
+- ✅ Make questions SPECIFIC to the actual changes (not generic)
+- ✅ Focus on functional correctness (not style/formatting)
+- ✅ Use language-agnostic terms (functions, not "React components")
+- ✅ Reference BLUEPRINT.md requirements in "why" field
+
+**Example - After modifying autopay.php:**
+```json
+{
+  "artifact": "jobs/autopay.php",
+  "type": "modified",
+  "questions": [
+    {
+      "category": "completeness",
+      "question": "Are lines 119-180 fully replaced with recurringBilling query as specified in BLUEPRINT.md Phase 2 Step 2.1?",
+      "why": "Core requirement: replace ledgerLines data source"
+    },
+    {
+      "category": "data-flow",
+      "question": "Does recurringBilling.amountDue contain all discounts pre-applied, eliminating the need to recalculate?",
+      "why": "Per BLUEPRINT.md, amountDue is source of truth with discounts already applied"
+    },
+    {
+      "category": "error-handling",
+      "question": "If studentData::isCurrentlyEnrolled() throws an error, is it caught and logged?",
+      "why": "Avoid breaking entire autopay process if one student check fails"
+    }
+  ]
+}
+```
+
+**Why this matters:**
+- Step6 (Code Review) uses review-checklist.json to systematically verify your work
+- Ensures no critical checks are forgotten during review
+- Provides audit trail of what should be verified
+
+### Step 2.5: Complete Phase
 
 After finishing all steps in a phase:
 
@@ -655,15 +793,27 @@ You MUST produce/update these files:
 
 ---
 
-## 📊 VALIDATION
+## 📊 VALIDATION (Multi-Layer System)
 
-After you finish, the system will run these validations:
+After you finish, the system will automatically run **4 layers of validation** to ensure 100% completeness:
+
+### Layer 1: Phase Completeness (validateCompletion)
+
+The system validates that you completed EVERY step from BLUEPRINT.md:
 
 ```javascript
-// From step5/index.js:260-294
+// From step5/index.js:260-316
 function validateCompletion(execution) {
-  // Check 1: All pre-conditions passed
+  // Check 1: All phases completed
   for (const phase of execution.phases || []) {
+    if (phase.status !== 'completed') return false;
+
+    // NEW: Check all phase items completed
+    for (const item of phase.items || []) {
+      if (item.completed !== true) return false; // ❌ FAIL if any step skipped
+    }
+
+    // Check pre-conditions passed
     for (const pc of phase.preConditions || []) {
       if (pc.passed !== true) return false;
     }
@@ -674,7 +824,12 @@ function validateCompletion(execution) {
     if (artifact.verified !== true) return false;
   }
 
-  // Check 3: Cleanup complete
+  // NEW: Check 3: All success criteria passed
+  for (const criterion of execution.successCriteria || []) {
+    if (criterion.passed !== true) return false; // ❌ FAIL if validation command failed
+  }
+
+  // Check 4: Cleanup complete
   const cleanup = execution.beyondTheBasics?.cleanup;
   if (cleanup) {
     if (cleanup.debugLogsRemoved === false ||
@@ -688,7 +843,178 @@ function validateCompletion(execution) {
 }
 ```
 
-**Your execution.json MUST pass all these checks for task to be marked complete.**
+### Layer 1.5: Automated Implementation Strategy Validation
+
+**AUTOMATIC - Runs after Claude finishes**
+
+**CRITICAL:** The system automatically validates that you implemented EVERY step from BLUEPRINT.md §4 Implementation Strategy.
+
+The system:
+1. Parses BLUEPRINT.md §4 to extract ALL phases and their steps
+2. Compares with `execution.json` phase items
+3. **FAILS THE STEP** if ANY phase or step is missing or incomplete
+
+```javascript
+// From step5/validate-implementation-strategy.js
+const strategyValidation = await validateImplementationStrategy(task, { claudiomiroFolder });
+
+// Validates:
+// - All phases from §4 exist in execution.json
+// - Each phase has items tracking the steps
+// - All items are marked completed=true
+
+// Example validation:
+// BLUEPRINT.md §4 says:
+// ### Phase 1: Preparation
+// 1. Read autopay.php lines 90-302
+// 2. Read recurringBillingData.php:82-88
+// 3. Verify all pre-conditions pass
+//
+// execution.json MUST have:
+{
+  "phases": [
+    {
+      "id": 1,
+      "name": "Preparation",
+      "items": [
+        { "description": "Read autopay.php lines 90-302", "completed": true },
+        { "description": "Read recurringBillingData.php:82-88", "completed": true },
+        { "description": "Verify all pre-conditions pass", "completed": true }
+      ]
+    }
+  ]
+}
+
+// If missing steps → throw error and force re-execution
+if (!strategyValidation.valid) {
+  execution.status = 'in_progress';
+  throw new Error('Implementation Strategy validation failed');
+}
+```
+
+**This means:**
+- You MUST create a `phase.items` entry for EACH step in BLUEPRINT.md §4
+- You CANNOT skip any phase or any step within a phase
+- All items MUST be marked `completed: true` when done
+- System will BLOCK task completion if any step is missing
+
+**Example of what happens if you skip a step:**
+```
+❌ Implementation Strategy validation failed: 1 issues
+   1. Phase 1: Item not completed
+      Item: "Read recurringBillingData.php:82-88"
+```
+
+### Layer 2: Automated Success Criteria Validation
+
+**AUTOMATIC - Runs after Claude finishes**
+
+The system automatically:
+1. Parses BLUEPRINT.md §3.2 Success Criteria table
+2. Executes EVERY command listed
+3. Records pass/fail for each criterion
+4. **FAILS THE STEP** if any criterion fails
+
+```javascript
+// From step5/validate-success-criteria.js
+const criteriaResults = await validateSuccessCriteria(task, { cwd, claudiomiroFolder });
+// Automatically added to execution.json:
+execution.successCriteria = [
+  {
+    criterion: "recurringBilling query used",
+    command: "grep -n 'recurringBillingData::getActiveRowsByUser' jobs/autopay.php",
+    passed: true,  // ✅ or ❌
+    evidence: "Line 145: recurringBillingData::getActiveRowsByUser"
+  }
+];
+
+// If ANY failed → throw error and force re-execution
+if (failedCriteria.length > 0) {
+  execution.status = 'in_progress'; // Force retry
+  throw new Error('Success criteria validation failed');
+}
+```
+
+**This means:**
+- You DON'T need to manually run success criteria commands
+- System runs them automatically
+- Task will NOT complete if any fail
+- You'll see detailed error logs if validation fails
+
+### Layer 3: Git Diff Verification
+
+**AUTOMATIC - Runs after Claude finishes**
+
+The system verifies that git changes match declared artifacts:
+
+```javascript
+// From step5/verify-changes.js
+const actualChanges = await getGitModifiedFiles(cwd);  // From git
+const declaredChanges = execution.artifacts.map(a => a.path);  // From execution.json
+
+// Detects:
+// - Undeclared changes: Files modified in git but NOT in artifacts
+// - Missing changes: Files in artifacts but NOT actually modified
+
+// If discrepancies found → Records in completion.deviations (WARNING, not error)
+```
+
+**This means:**
+- System catches if you modified files but forgot to track them
+- System catches if you claimed to modify files but didn't actually do it
+- Discrepancies are logged as warnings (won't fail the step, but visible in logs)
+
+### Layer 4: Phase Items Tracking
+
+**MANUAL - You must do this**
+
+For each step in BLUEPRINT.md §4 phases, create an item in execution.json:
+
+```json
+{
+  "phases": [
+    {
+      "id": 1,
+      "name": "Preparation",
+      "items": [
+        {
+          "description": "Read autopay.php lines 90-302",
+          "source": "BLUEPRINT.md §4 Phase 1 Step 1",
+          "completed": true,  // ⬅️ MUST mark as true when done
+          "evidence": "File contains ledgerLineData query at line 119"
+        }
+      ]
+    }
+  ]
+}
+```
+
+**validateCompletion() checks:**
+- All `phase.items[].completed === true`
+- If any item is `false` → Task NOT complete
+
+---
+
+## 🎯 GUARANTEE OF 100% COMPLETENESS
+
+With these 5 layers, the system guarantees:
+
+| Layer | Verifies | Enforcement |
+|-------|----------|-------------|
+| **Layer 1** | All phase items manually tracked | ✅ Manual (you create items) |
+| **Layer 1.5** | Implementation Strategy §4 steps ALL done | ❌ **BLOCKS** if any step missing |
+| **Layer 2** | Success Criteria §3.2 commands ALL pass | ❌ **BLOCKS** if any fail |
+| **Layer 3** | Git changes match artifacts | ⚠️ **WARNS** if mismatch |
+| **Layer 4** | Phases/items/artifacts/cleanup complete | ❌ **BLOCKS** if incomplete |
+
+**Bottom line:**
+- Task CANNOT complete if you skip ANY step from BLUEPRINT.md §4 (Layer 1.5 auto-validates)
+- Task CANNOT complete if ANY validation command fails (Layer 2 auto-validates)
+- Task CANNOT complete if items not marked completed (Layer 4 validates)
+- Task CANNOT complete if ANY artifact unverified
+- Git discrepancies are logged (visible to reviewers)
+
+**Your execution.json MUST pass all blocking checks for task to be marked complete.**
 
 ---
 

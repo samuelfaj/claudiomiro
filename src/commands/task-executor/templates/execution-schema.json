@@ -39,6 +39,34 @@
       "minimum": 0,
       "description": "Number of execution attempts"
     },
+    "errorHistory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "message"],
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO timestamp when error occurred"
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message"
+          },
+          "stack": {
+            "type": "string",
+            "description": "Error stack trace (first 3 lines)"
+          },
+          "phase": {
+            "type": "string",
+            "description": "Phase where error occurred"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "History of errors encountered during execution"
+    },
     "currentPhase": {
       "type": "object",
       "properties": {
@@ -108,6 +136,33 @@
               },
               "additionalProperties": false
             }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["description", "completed"],
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "description": "Description of phase item/task"
+                },
+                "completed": {
+                  "type": "boolean",
+                  "description": "Whether this item is completed"
+                },
+                "source": {
+                  "type": "string",
+                  "description": "Source reference (e.g., file:line) for this item"
+                },
+                "evidence": {
+                  "type": "string",
+                  "description": "Evidence or output demonstrating completion"
+                }
+              },
+              "additionalProperties": false
+            },
+            "description": "Individual items/tasks within this phase"
           }
         },
         "additionalProperties": false
@@ -177,6 +232,37 @@
         "additionalProperties": false
       }
     },
+    "successCriteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["criterion", "command", "passed"],
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "description": "Success criterion description"
+          },
+          "command": {
+            "type": "string",
+            "description": "Command to verify criterion"
+          },
+          "expected": {
+            "type": "string",
+            "description": "Expected output or condition"
+          },
+          "passed": {
+            "type": "boolean",
+            "description": "Whether criterion passed"
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Actual output from command"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Success criteria validation results"
+    },
     "beyondTheBasics": {
       "type": "object",
       "properties": {
@@ -223,7 +309,7 @@
       "properties": {
         "status": {
           "type": "string",
-          "enum": ["pending_validation", "completed"],
+          "enum": ["pending_validation", "completed", "blocked", "failed"],
           "description": "Completion validation status"
         },
         "summary": {
@@ -240,6 +326,15 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "Notes for future related tasks"
+        },
+        "codeReviewPassed": {
+          "type": "boolean",
+          "description": "Whether code review passed"
+        },
+        "blockedBy": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of blocking issues or dependencies"
         }
       },
       "additionalProperties": false

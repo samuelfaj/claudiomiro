@@ -938,10 +938,15 @@ describe('step5', () => {
             const execution = {
                 phases: [
                     {
+                        id: 1,
+                        name: 'Phase 1',
+                        status: 'completed',  // ⬅️ Required by new validation
                         preConditions: [{ passed: true }],
+                        items: [],  // ⬅️ Empty items is OK (optional)
                     },
                 ],
                 artifacts: [{ verified: true }],
+                successCriteria: [],  // ⬅️ Empty success criteria is OK (optional)
                 beyondTheBasics: {
                     cleanup: {
                         debugLogsRemoved: true,

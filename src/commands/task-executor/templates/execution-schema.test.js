@@ -43,6 +43,14 @@ describe('execution-schema', () => {
                     name: 'Core Implementation',
                     lastAction: 'Created main function',
                 },
+                errorHistory: [
+                    {
+                        timestamp: '2025-01-01T12:00:00.000Z',
+                        message: 'Test failed',
+                        stack: 'Error: Test failed\n    at test.js:10:5\n    at run.js:20:3',
+                        phase: 'Testing',
+                    },
+                ],
                 phases: [
                     {
                         id: 1,
@@ -57,12 +65,39 @@ describe('execution-schema', () => {
                                 evidence: 'v20.10.0',
                             },
                         ],
+                        items: [
+                            {
+                                description: 'Install dependencies',
+                                completed: true,
+                                source: 'package.json:5',
+                                evidence: 'npm install completed successfully',
+                            },
+                        ],
                     },
                     {
                         id: 2,
                         name: 'Core Implementation',
                         status: 'in_progress',
                         preConditions: [],
+                        items: [
+                            {
+                                description: 'Create handler function',
+                                completed: true,
+                            },
+                            {
+                                description: 'Add validation logic',
+                                completed: false,
+                            },
+                        ],
+                    },
+                ],
+                successCriteria: [
+                    {
+                        criterion: 'All tests pass',
+                        command: 'npm test',
+                        expected: 'exit code 0',
+                        passed: true,
+                        evidence: 'Tests: 10 passed, 10 total',
                     },
                 ],
                 uncertainties: [
@@ -103,6 +138,8 @@ describe('execution-schema', () => {
                     summary: ['Implemented core feature'],
                     deviations: ['Used different naming'],
                     forFutureTasks: ['Consider caching'],
+                    codeReviewPassed: false,
+                    blockedBy: ['Waiting for API approval'],
                 },
             };
 
@@ -392,6 +429,194 @@ describe('execution-schema', () => {
                 (e.params.missingProperty === 'formattingConsistent' ||
                  e.params.missingProperty === 'deadCodeRemoved'),
             )).toBe(true);
+        });
+    });
+
+    describe('new optional fields validation', () => {
+        test('should validate errorHistory structure', () => {
+            const withErrorHistory = {
+                $schema: 'execution-schema-v1',
+                version: '1.0',
+                task: 'TASK0',
+                title: 'Test Task',
+                status: 'pending',
+                started: '2025-01-01T00:00:00.000Z',
+                attempts: 1,
+                errorHistory: [
+                    {
+                        timestamp: '2025-01-01T12:00:00.000Z',
+                        message: 'Build failed',
+                    },
+                    {
+                        timestamp: '2025-01-01T13:00:00.000Z',
+                        message: 'Test failed',
+                        stack: 'Error: Test failed\n    at test.js:10',
+                        phase: 'Testing',
+                    },
+                ],
+            };
+
+            const valid = validate(withErrorHistory);
+            expect(valid).toBe(true);
+            expect(validate.errors).toBeNull();
+        });
+
+        test('should validate successCriteria structure', () => {
+            const withSuccessCriteria = {
+                $schema: 'execution-schema-v1',
+                version: '1.0',
+                task: 'TASK0',
+                title: 'Test Task',
+                status: 'pending',
+                started: '2025-01-01T00:00:00.000Z',
+                attempts: 1,
+                successCriteria: [
+                    {
+                        criterion: 'All tests pass',
+                        command: 'npm test',
+                        passed: true,
+                    },
+                    {
+                        criterion: 'Build succeeds',
+                        command: 'npm run build',
+                        expected: 'exit code 0',
+                        passed: false,
+                        evidence: 'Build failed with exit code 1',
+                    },
+                ],
+            };
+
+            const valid = validate(withSuccessCriteria);
+            expect(valid).toBe(true);
+            expect(validate.errors).toBeNull();
+        });
+
+        test('should validate phase items structure', () => {
+            const withPhaseItems = {
+                $schema: 'execution-schema-v1',
+                version: '1.0',
+                task: 'TASK0',
+                title: 'Test Task',
+                status: 'pending',
+                started: '2025-01-01T00:00:00.000Z',
+                attempts: 1,
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Implementation',
+                        status: 'in_progress',
+                        items: [
+                            {
+                                description: 'Create files',
+                                completed: true,
+                                source: 'src/file.js:10',
+                                evidence: 'File created successfully',
+                            },
+                            {
+                                description: 'Write tests',
+                                completed: false,
+                                source: 'tests/file.test.js:5',
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            const valid = validate(withPhaseItems);
+            expect(valid).toBe(true);
+            expect(validate.errors).toBeNull();
+        });
+
+        test('should validate completion.codeReviewPassed and completion.blockedBy', () => {
+            const withCompletionExtras = {
+                $schema: 'execution-schema-v1',
+                version: '1.0',
+                task: 'TASK0',
+                title: 'Test Task',
+                status: 'blocked',
+                started: '2025-01-01T00:00:00.000Z',
+                attempts: 1,
+                completion: {
+                    status: 'pending_validation',
+                    codeReviewPassed: true,
+                    blockedBy: ['TASK1', 'TASK2'],
+                },
+            };
+
+            const valid = validate(withCompletionExtras);
+            expect(valid).toBe(true);
+            expect(validate.errors).toBeNull();
+        });
+
+        test('should fail for phase items missing required fields', () => {
+            const invalidPhaseItems = {
+                $schema: 'execution-schema-v1',
+                version: '1.0',
+                task: 'TASK0',
+                title: 'Test Task',
+                status: 'pending',
+                started: '2025-01-01T00:00:00.000Z',
+                attempts: 1,
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Implementation',
+                        status: 'in_progress',
+                        items: [
+                            { description: 'Create files' }, // missing completed
+                        ],
+                    },
+                ],
+            };
+
+            const valid = validate(invalidPhaseItems);
+            expect(valid).toBe(false);
+            expect(validate.errors).toContainEqual(
+                expect.objectContaining({
+                    keyword: 'required',
+                    params: expect.objectContaining({ missingProperty: 'completed' }),
+                }),
+            );
+        });
+
+        test('should validate completion.status with blocked value', () => {
+            const withBlockedStatus = {
+                $schema: 'execution-schema-v1',
+                version: '1.0',
+                task: 'TASK0',
+                title: 'Test Task',
+                status: 'blocked',
+                started: '2025-01-01T00:00:00.000Z',
+                attempts: 1,
+                completion: {
+                    status: 'blocked',
+                    blockedBy: ['Waiting for API'],
+                },
+            };
+
+            const valid = validate(withBlockedStatus);
+            expect(valid).toBe(true);
+            expect(validate.errors).toBeNull();
+        });
+
+        test('should validate completion.status with failed value', () => {
+            const withFailedStatus = {
+                $schema: 'execution-schema-v1',
+                version: '1.0',
+                task: 'TASK0',
+                title: 'Test Task',
+                status: 'blocked',  // root status uses different enum
+                started: '2025-01-01T00:00:00.000Z',
+                attempts: 1,
+                completion: {
+                    status: 'failed',  // completion.status can be 'failed'
+                    summary: ['Task failed due to errors'],
+                },
+            };
+
+            const valid = validate(withFailedStatus);
+            expect(valid).toBe(true);
+            expect(validate.errors).toBeNull();
         });
     });
 
