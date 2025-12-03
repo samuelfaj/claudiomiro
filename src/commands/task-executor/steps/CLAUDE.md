@@ -164,18 +164,20 @@ Define exact structure of expected output:
 
 You MUST produce (no exceptions):
 
-1. **File: TODO.md**
-   - First line: `Fully implemented: YES` or `NO`
-   - Second line: [explanation]
-   - Structure: [template]
+1. **File: BLUEPRINT.md**
+   - Task identity and context chain
+   - Execution contract with phases
+   - Implementation strategy
 
-2. **File: CONTEXT.md**
-   - Section A: [content]
-   - Section B: [content]
+2. **File: execution.json**
+   - Status: pending | in_progress | completed | blocked
+   - Phases with status tracking
+   - Artifacts and completion data
 
 3. **Validation:**
    - Verify both files exist
-   - Verify format is correct
+   - Verify JSON is valid
+   - Verify all required fields present
 ```
 
 **Why:** Consistent, parseable output every time.
@@ -429,9 +431,9 @@ You MUST produce:
 ## 📖 Reference Examples
 
 See these files for exemplary implementation:
-- `step2.js` — TODO.md generation with deep context
-- `step3.js` — Execution with RESEARCH.md and CONTEXT.md
-- `step4.js` — Code review with systematic analysis
+- `step4/` — BLUEPRINT.md + execution.json generation
+- `step5/` — Task execution with execution.json tracking
+- `step6/` — Code review with systematic analysis
 
 ---
 
@@ -523,7 +525,7 @@ src/steps/
 │   └── prompt.md                 # Prompt for step3 (if > 500 chars)
 │
 ├── step4/
-│   ├── index.js                  # Generate TODO.md (SRP)
+│   ├── index.js                  # Generate BLUEPRINT.md + execution.json (SRP)
 │   └── prompt.md                 # Prompt for step4 (if > 500 chars)
 │
 ├── step5/
@@ -599,12 +601,11 @@ src/steps/
 
 **Examples:**
 ```
-✅ src/templates/TODO.md
-✅ src/templates/CONTEXT.md
-✅ src/templates/RESEARCH.md
+✅ src/templates/BLUEPRINT.md
+✅ src/templates/execution-schema.json   # JSON schemas use lowercase
 
-❌ templates/todo.md              # Should be uppercase
-❌ templates/template-todo.md     # Redundant prefix
+❌ templates/blueprint.md         # Should be uppercase for .md
+❌ templates/template-blueprint.md # Redundant prefix
 ```
 
 ---
@@ -962,7 +963,8 @@ step2/
 ### When to Use Templates
 
 **ALWAYS** use templates when:
-- Generating `TODO.md` files (use `templates/TODO.md`)
+- Generating `BLUEPRINT.md` files (use `templates/BLUEPRINT.md`)
+- Generating `execution.json` files (use `templates/execution-schema.json`)
 - Creating standardized output files across steps
 - Ensuring consistent structure in generated documentation
 - Following established project patterns and formats
@@ -971,10 +973,9 @@ step2/
 
 ```
 src/steps/templates/
-├── TODO.md           # Standard TODO file format for implementation plans
-├── CONTEXT.md        # (Future) Context file template
-├── RESEARCH.md       # (Future) Research findings template
-└── [NEW_TEMPLATE].md # New templates following ALL_CAPS.md naming
+├── BLUEPRINT.md            # Task definition with identity, context, and strategy
+├── execution-schema.json   # JSON schema for execution.json validation
+└── [NEW_TEMPLATE].md       # New templates following ALL_CAPS.md naming
 ```
 
 ### Using Existing Templates
@@ -988,16 +989,16 @@ When a step needs to generate a file that matches a template:
 const fs = require('fs');
 const path = require('path');
 
-const templatePath = path.join(__dirname, '../templates/TODO.md');
+const templatePath = path.join(__dirname, '../templates/BLUEPRINT.md');
 const template = fs.readFileSync(templatePath, 'utf-8');
 
 // Include template reference in your prompt
 const prompt = `
-Generate a TODO.md file following this EXACT structure:
+Generate a BLUEPRINT.md file following this EXACT structure:
 
 ${template}
 
-CRITICAL: Maintain all sections, checkboxes, and formatting from the template.
+CRITICAL: Maintain all sections and formatting from the template.
 `;
 
 await executeClaude(prompt);
@@ -1010,22 +1011,28 @@ Reference templates directly in `prompt.md`:
 ```markdown
 ## REQUIRED OUTPUT
 
-You MUST generate `TODO.md` following the EXACT structure from `/src/steps/templates/TODO.md`.
+You MUST generate:
 
-**Template sections (ALL REQUIRED):**
-1. Implementation status (YES/NO)
-2. Context Reference
-3. Implementation Plan (with detailed subsections)
-4. Verification
-5. Acceptance Criteria
-6. Impact Analysis
-7. Follow-ups
+1. `BLUEPRINT.md` following the EXACT structure from `/src/steps/templates/BLUEPRINT.md`.
+
+**BLUEPRINT sections (ALL REQUIRED):**
+1. Task Identity (ID, title, scope)
+2. Context Chain (parent references)
+3. Execution Contract (phases, artifacts)
+4. Implementation Strategy
+
+2. `execution.json` following the schema from `/src/steps/templates/execution-schema.json`.
+
+**execution.json fields (ALL REQUIRED):**
+- status: pending | in_progress | completed | blocked
+- phases: array of phase objects
+- artifacts: array of created/modified files
+- completion: status and notes
 
 **DO NOT:**
-- Skip any template sections
-- Change the checkbox format
-- Remove required fields
-- Alter the structure
+- Skip any required sections
+- Use invalid JSON syntax
+- Omit required fields
 ```
 
 ### Creating New Templates
@@ -1148,14 +1155,14 @@ When updating templates:
 For major template changes:
 
 ```markdown
-# TODO.md Template
+# BLUEPRINT.md Template
 
 **Version:** 2.0
 **Last Updated:** 2025-01-18
 **Breaking Changes:**
-- Added "Security & Permissions" section (required)
-- Renamed "Tests" to "Testing Strategy"
-- Removed deprecated "Dependencies" section
+- Added "Execution Contract" section (required)
+- Renamed "Tasks" to "Phases"
+- Moved implementation details to execution.json
 
 **Migration Guide:**
 [Instructions for updating code that uses old version]
@@ -1259,110 +1266,78 @@ Before committing a new or updated template:
 
 ### Examples
 
-#### Example 1: Using TODO Template in Step
+#### Example 1: Using BLUEPRINT Template in Step
 
 ```javascript
-// src/steps/step3/index.js
+// src/steps/step4/index.js
 const fs = require('fs');
 const path = require('path');
 
-const step3 = async () => {
-  // Load TODO template
-  const todoTemplatePath = path.join(__dirname, '../templates/TODO.md');
-  const todoTemplate = fs.readFileSync(todoTemplatePath, 'utf-8');
+const step4 = async (taskName) => {
+  // Load BLUEPRINT template
+  const blueprintTemplatePath = path.join(__dirname, '../templates/BLUEPRINT.md');
+  const blueprintTemplate = fs.readFileSync(blueprintTemplatePath, 'utf-8');
 
   // Load step prompt that references the template
   const promptPath = path.join(__dirname, 'prompt.md');
   let prompt = fs.readFileSync(promptPath, 'utf-8');
 
   // Inject template into prompt
-  prompt = prompt.replace('{{TODO_TEMPLATE}}', todoTemplate);
+  prompt = prompt.replace('{{BLUEPRINT_TEMPLATE}}', blueprintTemplate);
 
-  logger.startSpinner('Generating TODO.md from template...');
+  logger.startSpinner('Generating BLUEPRINT.md and execution.json...');
   await executeClaude(prompt);
   logger.stopSpinner();
 
-  // Validate output matches template structure
-  const todoPath = path.join(process.cwd(), '.claudiomiro/TODO.md');
-  validateTemplateCompliance(todoPath, todoTemplate);
+  // Validate outputs
+  const blueprintPath = path.join(state.claudiomiroFolder, taskName, 'BLUEPRINT.md');
+  const executionPath = path.join(state.claudiomiroFolder, taskName, 'execution.json');
+  validateFilesExist([blueprintPath, executionPath]);
 };
 ```
 
-#### Example 2: Creating New CONTEXT Template
+#### Example 2: execution.json Structure
 
-```bash
-# 1. Create template file
-touch src/steps/templates/CONTEXT.md
+```json
+{
+  "taskId": "TASK1",
+  "status": "in_progress",
+  "attempts": 1,
+  "currentPhase": {
+    "id": "impl",
+    "name": "Implementation"
+  },
+  "phases": [
+    {
+      "id": "impl",
+      "name": "Implementation",
+      "status": "in_progress",
+      "items": [
+        { "description": "Create handler", "status": "completed" },
+        { "description": "Add validation", "status": "pending" }
+      ]
+    }
+  ],
+  "artifacts": [
+    { "path": "src/handler.ext", "action": "created" }
+  ],
+  "uncertainties": [
+    {
+      "id": "U1",
+      "topic": "API version",
+      "assumption": "Use v2",
+      "confidence": 0.7
+    }
+  ],
+  "completion": {
+    "status": "pending_validation",
+    "codeReviewPassed": false,
+    "forFutureTasks": []
+  }
+}
 ```
 
-```markdown
-# CONTEXT.md Template
-
-**Purpose:** Capture contextual information about task execution
-**Used by:** step4 (execution), step5 (review)
-**When to use:** When task execution needs to preserve context for review
-
----
-
-## Task Summary
-
-**Original Request:** [User's original request]
-**Interpreted As:** [How the task was understood]
-**Scope:** [What is and isn't included]
-
-## Files Modified
-
-### Created
-- `path/to/file.ext` - [Purpose]
-
-### Modified
-- `path/to/file.ext:lines` - [Changes made]
-
-### Deleted
-- `path/to/file.ext` - [Reason for deletion]
-
-## Implementation Decisions
-
-### Decision 1: [Topic]
-- **Context:** [Why this decision was needed]
-- **Options Considered:** [Alternatives]
-- **Chosen:** [What was selected]
-- **Rationale:** [Why this choice]
-
-## Dependencies
-
-### Added
-- [package/library] version [X.Y.Z] - [Purpose]
-
-### Updated
-- [package/library] [old] → [new] - [Reason]
-
-## Testing Performed
-
-- [ ] Unit tests: [location]
-- [ ] Integration tests: [location]
-- [ ] Manual testing: [what was tested]
-
-## Notes for Review
-
-[Anything the reviewer should pay special attention to]
-```
-
-**Then update step4 to use it:**
-
-```javascript
-// src/steps/step4/index.js
-const contextTemplatePath = path.join(__dirname, '../templates/CONTEXT.md');
-const contextTemplate = fs.readFileSync(contextTemplatePath, 'utf-8');
-
-const prompt = `
-As you execute the task, maintain a CONTEXT.md file following this structure:
-
-${contextTemplate}
-
-Update it after each significant action.
-`;
-```
+**Use this structure when generating execution.json in step4.**
 
 ---
 
@@ -1370,19 +1345,23 @@ Update it after each significant action.
 
 **Key Takeaways:**
 
-1. **Always use templates** when generating standardized files
+1. **Use BLUEPRINT.md + execution.json** as the standard output format
 2. **Load templates** from `/src/steps/templates/` directory
 3. **Follow template structure** exactly - don't skip sections
-4. **Create new templates** when output format is reused 2+ times
+4. **Validate execution.json** using the schema
 5. **Keep templates language-agnostic** using `.ext` and generic examples
 6. **Document templates** clearly with purpose and usage instructions
 7. **Version templates** when making breaking changes
 
+**File Responsibilities:**
+- **BLUEPRINT.md** - Static task definition (identity, context, strategy)
+- **execution.json** - Dynamic execution state (status, phases, artifacts)
+
 **Benefits:**
 - ✅ Consistent output across all steps
-- ✅ Complete, well-structured documentation
-- ✅ Reduced errors from missing sections
-- ✅ Easier maintenance and updates
+- ✅ Structured JSON for programmatic access
+- ✅ Clear separation of static vs dynamic data
+- ✅ Easier validation and error handling
 - ✅ Clear expectations for Claude's output
 - ✅ Reusable patterns across project
 

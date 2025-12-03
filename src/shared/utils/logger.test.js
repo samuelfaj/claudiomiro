@@ -5,9 +5,9 @@ const logger = require('./logger');
 const mockParallelStateManager = {
     instance: null,
 };
-jest.mock('../services/parallel-state-manager', () => ({
+jest.mock('../executors/parallel-state-manager', () => ({
     ParallelStateManager: mockParallelStateManager,
-}), { virtual: true });
+}));
 // Alias for existing test code that uses ParallelStateManager
 const ParallelStateManager = mockParallelStateManager;
 

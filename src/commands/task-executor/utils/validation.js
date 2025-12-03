@@ -1,82 +1,72 @@
 const fs = require('fs');
 
-// Local LLM service for enhanced completion detection (lazy loaded)
-let localLLMService = null;
-const getLocalLLM = () => {
-    if (!localLLMService) {
-        try {
-            const { getLocalLLMService } = require('../../../shared/services/local-llm');
-            localLLMService = getLocalLLMService();
-        } catch (error) {
-            localLLMService = null;
-        }
-    }
-    return localLLMService;
-};
-
 /**
- * Checks if a task is fully implemented (sync version - heuristic only)
- * @param {string} file - Path to TODO.md file
- * @returns {boolean}
+ * Checks if a task is completed based on execution.json
+ * @param {string} executionPath - Path to execution.json file
+ * @returns {{completed: boolean, confidence: number, reason: string}}
  */
-const isFullyImplemented = (file) => {
-    const todo = fs.readFileSync(file, 'utf-8');
-    return isFullyImplementedFromContent(todo);
-};
-
-/**
- * Checks if content indicates full implementation (heuristic)
- * @param {string} content - TODO.md content
- * @returns {boolean}
- */
-const isFullyImplementedFromContent = (content) => {
-    const lines = content.split('\n').slice(0, 10); // Check first 10 lines
-
-    for (const line of lines) {
-        const trimmedLine = line.trim().toLowerCase();
-        // Check if line is exactly "fully implemented: yes" (not inside a task)
-        if (trimmedLine === 'fully implemented: yes' || trimmedLine.startsWith('fully implemented: yes')) {
-            // Make sure it's not part of a task (doesn't start with - [ ])
-            if (!line.trim().startsWith('-')) {
-                return true;
-            }
-        }
+const isCompletedFromExecution = (executionPath) => {
+    if (!fs.existsSync(executionPath)) {
+        return {
+            completed: false,
+            confidence: 1.0,
+            reason: 'execution.json not found',
+        };
     }
 
-    return false;
-};
+    try {
+        const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
 
-/**
- * Checks if a task is fully implemented using Local LLM when available
- * @param {string} file - Path to TODO.md file
- * @returns {Promise<{completed: boolean, confidence: number}>}
- */
-const isFullyImplementedAsync = async (file) => {
-    const content = fs.readFileSync(file, 'utf-8');
-
-    // Try Local LLM for enhanced detection
-    const llm = getLocalLLM();
-    if (llm) {
-        try {
-            await llm.initialize();
-            if (llm.isAvailable()) {
-                const result = await llm.checkCompletion(content);
-                if (result && typeof result.completed === 'boolean') {
-                    return result;
-                }
-            }
-        } catch (error) {
-            // Fall through to heuristic
+        // Check completion status
+        if (execution.completion?.status === 'completed') {
+            return {
+                completed: true,
+                confidence: 1.0,
+                reason: 'completion.status is completed',
+            };
         }
-    }
 
-    // Fallback to heuristic
-    const completed = isFullyImplementedFromContent(content);
-    return {
-        completed,
-        confidence: 0.8,
-        reason: 'Heuristic check',
-    };
+        // Check overall status
+        if (execution.status === 'completed') {
+            return {
+                completed: true,
+                confidence: 0.9,
+                reason: 'status is completed',
+            };
+        }
+
+        // Check if blocked
+        if (execution.status === 'blocked') {
+            return {
+                completed: false,
+                confidence: 1.0,
+                reason: 'status is blocked',
+            };
+        }
+
+        // Check all phases completed
+        const phases = execution.phases || [];
+        const allPhasesCompleted = phases.length > 0 && phases.every(p => p.status === 'completed');
+        if (allPhasesCompleted) {
+            return {
+                completed: true,
+                confidence: 0.85,
+                reason: 'all phases completed',
+            };
+        }
+
+        return {
+            completed: false,
+            confidence: 0.8,
+            reason: 'task still in progress',
+        };
+    } catch (error) {
+        return {
+            completed: false,
+            confidence: 0.5,
+            reason: `Failed to parse execution.json: ${error.message}`,
+        };
+    }
 };
 
 const hasApprovedCodeReview = (file) => {
@@ -105,8 +95,6 @@ const hasApprovedCodeReview = (file) => {
 };
 
 module.exports = {
-    isFullyImplemented,
-    isFullyImplementedAsync,
-    isFullyImplementedFromContent,
+    isCompletedFromExecution,
     hasApprovedCodeReview,
 };

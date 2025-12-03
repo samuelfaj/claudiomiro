@@ -1,0 +1,367 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Decomposition Analysis",
+  "description": "Schema for task decomposition analysis in JSON format",
+  "type": "object",
+  "required": ["phaseA", "phaseB", "phaseC", "phaseD", "phaseE", "phaseF", "preBlueprintAnalysis"],
+  "properties": {
+    "phaseA": {
+      "type": "object",
+      "description": "Requirements Extraction",
+      "required": ["explicitRequirements", "implicitRequirements", "totalRequirements"],
+      "properties": {
+        "explicitRequirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "quote", "section", "line", "intent"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^R\\d+$" },
+              "quote": { "type": "string", "minLength": 10 },
+              "section": { "type": "string", "minLength": 1 },
+              "line": { "type": "integer", "minimum": 1 },
+              "intent": { "type": "string", "minLength": 10 }
+            }
+          }
+        },
+        "implicitRequirements": {
+          "type": "object",
+          "required": ["testing", "documentation", "integration", "errorHandling", "edgeCases"],
+          "properties": {
+            "testing": { "type": "object", "required": ["required", "evidence"], "properties": { "required": { "type": "boolean" }, "evidence": { "type": "string" } } },
+            "documentation": { "type": "object", "required": ["required", "evidence"], "properties": { "required": { "type": "boolean" }, "evidence": { "type": "string" } } },
+            "integration": { "type": "object", "required": ["required", "evidence"], "properties": { "required": { "type": "boolean" }, "evidence": { "type": "string" } } },
+            "errorHandling": { "type": "object", "required": ["required", "evidence"], "properties": { "required": { "type": "boolean" }, "evidence": { "type": "string" } } },
+            "edgeCases": { "type": "object", "required": ["required", "evidence"], "properties": { "required": { "type": "boolean" }, "evidence": { "type": "string" } } }
+          }
+        },
+        "totalRequirements": {
+          "type": "object",
+          "required": ["explicit", "implicit", "total"],
+          "properties": {
+            "explicit": { "type": "integer", "minimum": 1 },
+            "implicit": { "type": "integer", "minimum": 0 },
+            "total": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "phaseB": {
+      "type": "object",
+      "description": "Complexity Analysis",
+      "required": ["requirements"],
+      "properties": {
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "complexity", "reasoning", "evidence"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^R\\d+(-R\\d+)?$" },
+              "complexity": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+              "reasoning": { "type": "string", "minLength": 20 },
+              "evidence": { "type": "string", "minLength": 10 }
+            }
+          }
+        }
+      }
+    },
+    "phaseC": {
+      "type": "object",
+      "description": "Dependency Analysis",
+      "required": ["dependencyMatrix", "dependencyGraph", "maxParallelism"],
+      "properties": {
+        "dependencyMatrix": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "dependsOn", "why", "canParallelize"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^R\\d+(-R\\d+)?$" },
+              "dependsOn": { "type": "string" },
+              "why": { "type": "string", "minLength": 10 },
+              "canParallelize": { "type": "string" }
+            }
+          }
+        },
+        "dependencyGraph": {
+          "type": "string",
+          "description": "ASCII visualization of dependency layers",
+          "minLength": 20
+        },
+        "maxParallelism": {
+          "type": "object",
+          "required": ["layers", "totalLayers"],
+          "properties": {
+            "layers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["layer", "taskCount", "description"],
+                "properties": {
+                  "layer": { "type": "integer", "minimum": 0 },
+                  "taskCount": { "type": "integer", "minimum": 1 },
+                  "description": { "type": "string" }
+                }
+              }
+            },
+            "totalLayers": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "phaseD": {
+      "type": "object",
+      "description": "Decomposition Strategy",
+      "required": ["requirements", "summary"],
+      "properties": {
+        "requirements": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": ["id", "description", "keepAtomic", "reasoning", "proposedTasks", "evidence"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^R\\d+(-R\\d+)?$" },
+              "description": { "type": "string", "minLength": 10 },
+              "keepAtomic": { "type": "boolean" },
+              "reasoning": { "type": "string", "minLength": 20 },
+              "proposedTasks": { "type": "array", "items": { "type": "string", "pattern": "^TASK\\d+$" } },
+              "evidence": { "type": "string", "minLength": 10 }
+            }
+          }
+        },
+        "summary": {
+          "type": "object",
+          "required": ["tasks", "totalTasks"],
+          "properties": {
+            "tasks": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["task", "coversRequirements", "layer", "dependencies"],
+                "properties": {
+                  "task": { "type": "string", "pattern": "^TASK\\d+$" },
+                  "coversRequirements": { "type": "array", "items": { "type": "string" } },
+                  "layer": { "type": "integer", "minimum": 0 },
+                  "dependencies": { "type": "array", "items": { "type": "string" } }
+                }
+              }
+            },
+            "totalTasks": { "type": "integer", "minimum": 1 }
+          }
+        }
+      }
+    },
+    "phaseE": {
+      "type": "object",
+      "description": "Self-Critique",
+      "required": ["qualityGates", "redFlags", "revisionsMade", "finalDecision"],
+      "properties": {
+        "qualityGates": {
+          "type": "object",
+          "required": ["checks"],
+          "properties": {
+            "checks": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["check", "passed", "notes"],
+                "properties": {
+                  "check": { "type": "string" },
+                  "passed": { "type": "boolean" },
+                  "notes": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "redFlags": {
+          "type": "object",
+          "required": ["flags"],
+          "properties": {
+            "flags": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["flag", "present", "notes"],
+                "properties": {
+                  "flag": { "type": "string" },
+                  "present": { "type": "boolean" },
+                  "notes": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "revisionsMade": { "type": "string" },
+        "finalDecision": {
+          "type": "object",
+          "required": ["proceed", "reasoning"],
+          "properties": {
+            "proceed": { "type": "boolean" },
+            "reasoning": { "type": "string", "minLength": 20 }
+          }
+        }
+      }
+    },
+    "phaseF": {
+      "type": "object",
+      "description": "Tree of Thought - Alternative Exploration",
+      "required": ["decompositionAlternatives", "confidenceScore"],
+      "properties": {
+        "decompositionAlternatives": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["approach", "description", "pros", "cons"],
+            "properties": {
+              "approach": { "type": "string" },
+              "description": { "type": "string" },
+              "pros": { "type": "string" },
+              "cons": { "type": "string" }
+            }
+          }
+        },
+        "selectedApproach": { "type": "string" },
+        "selectionReasoning": { "type": "string" },
+        "evidence": { "type": "string" },
+        "selfConsistencyCheck": {
+          "type": "object",
+          "properties": {
+            "paths": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["path", "result", "convergence"],
+                "properties": {
+                  "path": { "type": "string" },
+                  "result": { "type": "string" },
+                  "convergence": { "type": "boolean" }
+                }
+              }
+            },
+            "divergenceDetected": { "type": "boolean" },
+            "resolution": { "type": "string" }
+          }
+        },
+        "confidenceScore": {
+          "type": "object",
+          "required": ["aspects", "overallScore", "decision"],
+          "properties": {
+            "aspects": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "object",
+                "required": ["aspect", "score", "justification"],
+                "properties": {
+                  "aspect": { "type": "string" },
+                  "score": { "type": "number", "minimum": 1, "maximum": 5 },
+                  "justification": { "type": "string" }
+                }
+              }
+            },
+            "overallScore": { "type": "number", "minimum": 1, "maximum": 5 },
+            "decision": { "type": "string", "enum": ["proceed", "revise", "clarify"] }
+          }
+        }
+      }
+    },
+    "preBlueprintAnalysis": {
+      "type": "object",
+      "description": "Pre-BLUEPRINT Analysis for each task",
+      "patternProperties": {
+        "^TASK\\d+$": {
+          "type": "object",
+          "required": ["whyExists", "scopeJustification", "dependencyReasoning", "successCriteria", "confidenceRisk", "guardrails"],
+          "properties": {
+            "whyExists": {
+              "type": "object",
+              "required": ["origin", "necessity", "evidence"],
+              "properties": {
+                "origin": { "type": "string" },
+                "necessity": { "type": "string" },
+                "evidence": { "type": "string" }
+              }
+            },
+            "scopeJustification": {
+              "type": "object",
+              "required": ["is", "isNot", "scopeSizeCheck"],
+              "properties": {
+                "is": { "type": "array", "items": { "type": "string" } },
+                "isNot": { "type": "array", "items": { "type": "string" } },
+                "scopeSizeCheck": {
+                  "type": "object",
+                  "required": ["estimatedLOC", "category", "justification"],
+                  "properties": {
+                    "estimatedLOC": { "type": "integer" },
+                    "category": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH"] },
+                    "justification": { "type": "string" }
+                  }
+                }
+              }
+            },
+            "dependencyReasoning": {
+              "type": "object",
+              "required": ["dependsOn", "whyDependencies", "canParallelizeWith", "blocks"],
+              "properties": {
+                "dependsOn": { "type": "array", "items": { "type": "string" } },
+                "whyDependencies": { "type": "string" },
+                "canParallelizeWith": { "type": "array", "items": { "type": "string" } },
+                "blocks": { "type": "array", "items": { "type": "string" } }
+              }
+            },
+            "successCriteria": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["criterion", "source", "testable", "commandOrCheck"],
+                "properties": {
+                  "criterion": { "type": "string" },
+                  "source": { "type": "string" },
+                  "testable": { "type": "boolean" },
+                  "commandOrCheck": { "type": "string" }
+                }
+              }
+            },
+            "confidenceRisk": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["aspect", "confidence", "risk", "mitigation"],
+                "properties": {
+                  "aspect": { "type": "string" },
+                  "confidence": { "type": "string", "enum": ["HIGH", "MEDIUM", "LOW"] },
+                  "risk": { "type": "string" },
+                  "mitigation": { "type": "string" }
+                }
+              }
+            },
+            "guardrails": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["category", "guardrail", "reason", "source"],
+                "properties": {
+                  "category": { "type": "string" },
+                  "guardrail": { "type": "string" },
+                  "reason": { "type": "string" },
+                  "source": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -39,7 +39,7 @@ const generateOutputFilename = () => {
  * @param {string} command - The command that was executed
  * @returns {string} Path to the saved file
  */
-const saveOutput = (content, command) => {
+const saveOutput = ({ content, command, filteredOutput, filterInstruction }) => {
     const folder = initializeTokenOptimizerFolder();
     const filename = generateOutputFilename();
     const filePath = path.join(folder, filename);
@@ -50,7 +50,13 @@ const saveOutput = (content, command) => {
 ${command}
 \`\`\`
 
-## Output
+## Filter Instruction
+${filterInstruction}
+
+## Filtered Output
+${filteredOutput}
+
+## Full Output
 ${content}
 `;
 
@@ -162,7 +168,12 @@ const executeTokenOptimizer = async (command, filterInstruction, options = {}) =
         if (verbose) {
             logger.info('Command produced no output.');
         }
-        const outputPath = saveOutput('(no output)', command);
+        const outputPath = saveOutput({
+            content: '(no output)',
+            command,
+            filteredOutput: '',
+            filterInstruction,
+        });
         if (verbose) {
             logger.info(`Output saved to: ${outputPath}`);
         }
@@ -177,7 +188,12 @@ const executeTokenOptimizer = async (command, filterInstruction, options = {}) =
         const filteredOutput = await filterWithLLM(combinedOutput, filterInstruction);
 
         if (filteredOutput) {
-            const outputPath = saveOutput(combinedOutput, command);
+            const outputPath = saveOutput({
+                content: combinedOutput,
+                command,
+                filteredOutput,
+                filterInstruction,
+            });
             return { filteredOutput, exitCode: result.exitCode, outputPath };
         }
 
@@ -185,7 +201,12 @@ const executeTokenOptimizer = async (command, filterInstruction, options = {}) =
         if (verbose) {
             logger.warning('Local LLM not available. Returning original output.');
         }
-        const outputPath = saveOutput(combinedOutput, command);
+        const outputPath = saveOutput({
+            content: combinedOutput,
+            command,
+            filteredOutput: combinedOutput,
+            filterInstruction,
+        });
         if (verbose) {
             logger.info(`Full output saved to: ${outputPath}`);
         }
@@ -196,7 +217,12 @@ const executeTokenOptimizer = async (command, filterInstruction, options = {}) =
             logger.warning(`LLM filtering failed: ${err.message}`);
             logger.info('Falling back to original output.');
         }
-        const outputPath = saveOutput(combinedOutput, command);
+        const outputPath = saveOutput({
+            content: combinedOutput,
+            command,
+            filteredOutput: combinedOutput,
+            filterInstruction,
+        });
         if (verbose) {
             logger.info(`Full output saved to: ${outputPath}`);
         }

@@ -4,39 +4,92 @@ const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const { getLocalLLMService } = require('../../../../shared/services/local-llm');
+const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
+const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system/context-generator');
+const { runValidation } = require('./decomposition-json-validator');
 
 /**
  * Step 2: Task Decomposition
  * Decomposes AI_PROMPT.md into individual tasks (TASK0, TASK1, etc.)
- * With Local LLM validation for quality check
+ * With decomposition analysis validation and Local LLM quality check
  */
 const step2 = async () => {
-    const _folder = (file) => path.join(state.claudiomiroFolder, file);
+    const folder = (file) => path.join(state.claudiomiroFolder, file);
+    const analysisPath = folder('DECOMPOSITION_ANALYSIS.json');
 
     logger.newline();
     logger.startSpinner('Creating tasks...');
 
+    // Build context once for all tasks
+    const legacyContext = generateLegacySystemContext();
+    let optimizedContext = '';
+    try {
+        const result = await buildOptimizedContextAsync(
+            state.claudiomiroFolder,
+            null, // No specific task yet - we're decomposing
+            state.folder,
+            'task decomposition',
+        );
+        optimizedContext = result.context || '';
+    } catch (error) {
+        // Fallback to empty context if building fails
+        logger.debug(`[Step2] Context building failed: ${error.message}`);
+    }
+
     const replace = (text) => {
-        return text.replaceAll('{{claudiomiroFolder}}', `${state.claudiomiroFolder}`);
+        return text
+            .replaceAll('{{claudiomiroFolder}}', `${state.claudiomiroFolder}`)
+            .replaceAll('{{legacySystemContext}}', legacyContext || 'None - no legacy systems configured')
+            .replaceAll('{{optimizedContext}}', optimizedContext || '');
     };
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
-    await executeClaude(replace(prompt));
 
-    logger.stopSpinner();
-    logger.success('Tasks created successfully');
+    // Track success/failure for cleanup
+    let decompositionSuccess = false;
 
-    // Check if tasks were created, but only in non-test environment
-    if (process.env.NODE_ENV !== 'test') {
-        if (
-            !fs.existsSync(path.join(state.claudiomiroFolder, 'TASK0')) &&
-            !fs.existsSync(path.join(state.claudiomiroFolder, 'TASK1'))
-        ) {
-            throw new Error('Error creating tasks');
+    try {
+        await executeClaude(replace(prompt));
+
+        logger.stopSpinner();
+        logger.success('Tasks created successfully');
+
+        // Check if tasks were created, but only in non-test environment
+        if (process.env.NODE_ENV !== 'test') {
+            const task0BlueprintExists = fs.existsSync(path.join(state.claudiomiroFolder, 'TASK0', 'BLUEPRINT.md'));
+            const task1BlueprintExists = fs.existsSync(path.join(state.claudiomiroFolder, 'TASK1', 'BLUEPRINT.md'));
+
+            if (!task0BlueprintExists && !task1BlueprintExists) {
+                throw new Error('Error creating tasks');
+            }
+
+            // Validate decomposition analysis document
+            logger.startSpinner('Validating decomposition analysis...');
+            runValidation(state.claudiomiroFolder);
+            logger.stopSpinner();
+            logger.success('Decomposition analysis validated');
+
+            // Validate decomposition with Local LLM (if available)
+            await validateDecompositionWithLLM();
         }
 
-        // Validate decomposition with Local LLM (if available)
-        await validateDecompositionWithLLM();
+        decompositionSuccess = true;
+    } catch (error) {
+        logger.stopSpinner();
+        decompositionSuccess = false;
+        throw error;
+    } finally {
+        // Cleanup DECOMPOSITION_ANALYSIS.json based on success/failure
+        if (fs.existsSync(analysisPath)) {
+            if (decompositionSuccess) {
+                // Delete on success - reasoning artifacts no longer needed
+                fs.unlinkSync(analysisPath);
+                logger.debug('DECOMPOSITION_ANALYSIS.json deleted (success)');
+            } else {
+                // Preserve on failure for debugging
+                logger.info('DECOMPOSITION_ANALYSIS.json preserved for debugging');
+            }
+        }
     }
 };
 
@@ -61,10 +114,10 @@ const validateDecompositionWithLLM = async () => {
 
         const tasks = [];
         for (const taskFolder of taskFolders) {
-            const taskMdPath = path.join(state.claudiomiroFolder, taskFolder, 'TASK.md');
-            if (!fs.existsSync(taskMdPath)) continue;
+            const blueprintPath = path.join(state.claudiomiroFolder, taskFolder, 'BLUEPRINT.md');
+            if (!fs.existsSync(blueprintPath)) continue;
 
-            const content = fs.readFileSync(taskMdPath, 'utf-8');
+            const content = fs.readFileSync(blueprintPath, 'utf-8');
 
             // Extract dependencies
             const depsMatch = content.match(/@dependencies\s*\[?([^\]\n]*)\]?/i);
@@ -113,4 +166,20 @@ const validateDecompositionWithLLM = async () => {
     }
 };
 
-module.exports = { step2 };
+/**
+ * Cleanup decomposition analysis artifacts after step2 completion
+ * Called externally if step2 needs to be re-run
+ * @param {boolean} preserveOnError - Whether to keep DECOMPOSITION_ANALYSIS.json on error
+ */
+const cleanupDecompositionArtifacts = (preserveOnError = true) => {
+    const analysisPath = path.join(state.claudiomiroFolder, 'DECOMPOSITION_ANALYSIS.json');
+
+    if (fs.existsSync(analysisPath)) {
+        if (!preserveOnError) {
+            fs.unlinkSync(analysisPath);
+            logger.debug('DECOMPOSITION_ANALYSIS.json cleaned up');
+        }
+    }
+};
+
+module.exports = { step2, cleanupDecompositionArtifacts };

@@ -1,0 +1,82 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "review-checklist-schema-v1",
+  "title": "Review Checklist Schema",
+  "description": "JSON Schema for review-checklist.json - contextual review questions for code review",
+  "type": "object",
+  "required": ["$schema", "task", "generated", "items"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "review-checklist-schema-v1",
+      "description": "Schema identifier"
+    },
+    "task": {
+      "type": "string",
+      "pattern": "^TASK\\d+$",
+      "description": "Task identifier (e.g., TASK0, TASK1)"
+    },
+    "generated": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when checklist was generated"
+    },
+    "items": {
+      "type": "array",
+      "description": "Review checklist items",
+      "items": {
+        "type": "object",
+        "required": ["id", "file", "type", "description", "reviewed", "category"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^RC\\d+$",
+            "description": "Review checklist item identifier (e.g., RC1, RC2)"
+          },
+          "file": {
+            "type": "string",
+            "description": "File path related to this review item"
+          },
+          "lines": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Specific line numbers to review (optional)"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["created", "modified"],
+            "description": "Whether file was created or modified"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 10,
+            "description": "Review question or verification item"
+          },
+          "reviewed": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether this item has been reviewed"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "compatibility",
+              "breaking-change",
+              "completeness",
+              "data-flow",
+              "error-handling",
+              "integration",
+              "testing"
+            ],
+            "description": "Category of review concern"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

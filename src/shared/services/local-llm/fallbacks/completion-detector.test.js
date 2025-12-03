@@ -4,6 +4,7 @@
  */
 
 const {
+    isCompletedFromExecution,
     isFullyImplemented,
     hasApprovedCodeReview,
     getCheckboxCompletion,
@@ -12,7 +13,59 @@ const {
 } = require('./completion-detector');
 
 describe('completion-detector', () => {
-    describe('isFullyImplemented', () => {
+    describe('isCompletedFromExecution', () => {
+        test('should return completed true for status: completed', () => {
+            const result = isCompletedFromExecution({ status: 'completed' });
+
+            expect(result.completed).toBe(true);
+            expect(result.confidence).toBe(1.0);
+        });
+
+        test('should return completed true for completion.status: completed', () => {
+            const result = isCompletedFromExecution({ completion: { status: 'completed' } });
+
+            expect(result.completed).toBe(true);
+            expect(result.confidence).toBe(1.0);
+        });
+
+        test('should return completed false for blocked status', () => {
+            const result = isCompletedFromExecution({ status: 'blocked' });
+
+            expect(result.completed).toBe(false);
+            expect(result.confidence).toBe(1.0);
+            expect(result.reason).toContain('blocked');
+        });
+
+        test('should return completed false for in_progress status', () => {
+            const result = isCompletedFromExecution({ status: 'in_progress' });
+
+            expect(result.completed).toBe(false);
+        });
+
+        test('should handle JSON string input', () => {
+            const jsonString = JSON.stringify({ status: 'completed' });
+            const result = isCompletedFromExecution(jsonString);
+
+            expect(result.completed).toBe(true);
+        });
+
+        test('should return error for invalid JSON string', () => {
+            const result = isCompletedFromExecution('{ invalid json }');
+
+            expect(result.completed).toBe(false);
+            expect(result.confidence).toBe(0);
+            expect(result.reason).toContain('Invalid');
+        });
+
+        test('should return error for null input', () => {
+            const result = isCompletedFromExecution(null);
+
+            expect(result.completed).toBe(false);
+            expect(result.reason).toContain('No execution data');
+        });
+    });
+
+    describe('isFullyImplemented (deprecated)', () => {
         test('should return true for "Fully implemented: YES"', () => {
             const content = `# Task
 Fully implemented: YES

@@ -84,16 +84,18 @@ Output JSON:
 
     /**
    * Completion check prompt
+   * @deprecated Use execution.json status field directly instead of LLM analysis
+   * Kept for backward compatibility with legacy code
    */
-    checkCompletion: (todoContent) => `Task: Check if task is fully completed.
+    checkCompletion: (content) => `Task: Check if task is fully completed.
 
 Look for:
-1. "Fully implemented: YES" statement
-2. All checkboxes marked [x]
-3. No "TODO" or "PENDING" items
+1. "status": "completed" in JSON
+2. "Fully implemented: YES" statement
+3. All checkboxes marked [x]
 
-TODO.md content:
-${todoContent.slice(0, 2000)}
+Content:
+${content.slice(0, 2000)}
 
 Output JSON:
 {"completed": true/false, "confidence": 0.0-1.0, "reason": ""}`,

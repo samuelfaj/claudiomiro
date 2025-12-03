@@ -51,11 +51,11 @@ describe('analyze-split', () => {
             expect(fs.existsSync).toHaveBeenCalledWith(path.join(mockTaskFolder, 'split.txt'));
         });
 
-        test('should execute analysis and create split.txt when TASK.md exists after execution', async () => {
+        test('should execute analysis and create split.txt when BLUEPRINT.md exists after execution', async () => {
             // Arrange
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('split.txt')) return false; // Initial check
-                if (filePath.includes('TASK.md')) return true;  // After execution
+                if (filePath.includes('BLUEPRINT.md')) return true;  // After execution
                 if (filePath.includes('prompt-split.md')) return true; // Template exists
                 return false;
             });
@@ -92,11 +92,11 @@ describe('analyze-split', () => {
             expect(result).toEqual({ success: true });
         });
 
-        test('should execute analysis but skip split.txt creation when task was split (TASK.md does not exist)', async () => {
+        test('should execute analysis but skip split.txt creation when task was split (BLUEPRINT.md does not exist)', async () => {
             // Arrange
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('split.txt')) return false; // Initial check
-                if (filePath.includes('TASK.md')) return false; // After execution (task was split)
+                if (filePath.includes('BLUEPRINT.md')) return false; // After execution (task was split)
                 if (filePath.includes('prompt-split.md')) return true; // Template exists
                 return false;
             });
@@ -129,7 +129,7 @@ describe('analyze-split', () => {
 
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('split.txt')) return false;
-                if (filePath.includes('TASK.md')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
                 if (filePath.includes('prompt-split.md')) return true;
                 return false;
             });

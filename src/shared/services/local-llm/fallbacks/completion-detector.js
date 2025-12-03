@@ -4,6 +4,43 @@
  */
 
 /**
+ * Check if execution.json indicates the task is completed
+ * @param {string|object} executionData - execution.json content (string or parsed object)
+ * @returns {{completed: boolean, confidence: number, reason: string}}
+ */
+function isCompletedFromExecution(executionData) {
+    if (!executionData) {
+        return { completed: false, confidence: 0, reason: 'No execution data' };
+    }
+
+    try {
+        const execution = typeof executionData === 'string'
+            ? JSON.parse(executionData)
+            : executionData;
+
+        // Check top-level status
+        if (execution.status === 'completed') {
+            return { completed: true, confidence: 1.0, reason: 'Status is completed' };
+        }
+
+        // Check completion.status
+        if (execution.completion?.status === 'completed') {
+            return { completed: true, confidence: 1.0, reason: 'Completion status is completed' };
+        }
+
+        // Check if blocked
+        if (execution.status === 'blocked') {
+            return { completed: false, confidence: 1.0, reason: 'Task is blocked' };
+        }
+
+        return { completed: false, confidence: 0.8, reason: 'Task not marked as completed' };
+    } catch (error) {
+        return { completed: false, confidence: 0, reason: 'Invalid execution.json format' };
+    }
+}
+
+/**
+ * @deprecated Use isCompletedFromExecution instead
  * Check if a TODO.md indicates the task is fully implemented
  * @param {string} content - TODO.md content
  * @returns {boolean}
@@ -144,7 +181,8 @@ function hasPendingTodos(content) {
 }
 
 /**
- * Get detailed completion analysis
+ * @deprecated Use isCompletedFromExecution for execution.json analysis
+ * Get detailed completion analysis from legacy TODO.md content
  * @param {string} content - TODO.md or similar content
  * @returns {Object}
  */
@@ -185,6 +223,9 @@ function analyzeCompletion(content) {
 }
 
 module.exports = {
+    // New execution.json-based detection
+    isCompletedFromExecution,
+    // Legacy TODO.md-based detection (deprecated)
     isFullyImplemented,
     hasApprovedCodeReview,
     getCheckboxCompletion,

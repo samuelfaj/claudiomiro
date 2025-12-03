@@ -1,5 +1,5 @@
 const fs = require('fs');
-const { isFullyImplemented } = require('./validation');
+const { isCompletedFromExecution, hasApprovedCodeReview } = require('./validation');
 
 jest.mock('fs');
 
@@ -8,232 +8,271 @@ describe('validation', () => {
         jest.clearAllMocks();
     });
 
-    describe('isFullyImplemented', () => {
-        describe('basic detection', () => {
-            test('should return true for exact match "fully implemented: yes"', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: YES\n\nSome other content');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
+    describe('isCompletedFromExecution', () => {
+        describe('file existence checks', () => {
+            test('should return completed:false when execution.json does not exist', () => {
+                fs.existsSync.mockReturnValue(false);
 
-            test('should return true for "fully implemented: yes" with extra spacing', () => {
-                fs.readFileSync.mockReturnValue('  Fully implemented: YES  \n\nSome content');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
+                const result = isCompletedFromExecution('/test/execution.json');
 
-            test('should return true for lowercase "fully implemented: yes"', () => {
-                fs.readFileSync.mockReturnValue('fully implemented: yes\n\nContent here');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should return true for mixed case "Fully Implemented: Yes"', () => {
-                fs.readFileSync.mockReturnValue('Fully Implemented: Yes\n\nMore content');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should return true for uppercase "FULLY IMPLEMENTED: YES"', () => {
-                fs.readFileSync.mockReturnValue('FULLY IMPLEMENTED: YES\n\nContent');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should return false for "fully implemented: no"', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: NO\n\nSome content');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
-
-            test('should return false for "fully implemented: maybe"', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: maybe\n\nSome content');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
-        });
-
-        describe('task list filtering', () => {
-            test('should ignore "fully implemented: yes" inside task items', () => {
-                fs.readFileSync.mockReturnValue('- [ ] Task with fully implemented: yes\n\nContent');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
-
-            test('should ignore "fully implemented: yes" in checked task items', () => {
-                fs.readFileSync.mockReturnValue('- [x] Task with fully implemented: yes\n\nContent');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
-
-            test('should detect "fully implemented: yes" that is not part of a task', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: yes\n- [ ] Some task\n- [ ] Another task');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should ignore task items but detect standalone declaration', () => {
-                fs.readFileSync.mockReturnValue('- [ ] fully implemented: no\nFully implemented: yes\n- [ ] Task');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-        });
-
-        describe('first 10 lines limitation', () => {
-            test('should detect "fully implemented: yes" within first 10 lines', () => {
-                const lines = [
-                    'Line 1',
-                    'Line 2',
-                    'Line 3',
-                    'Fully implemented: yes',
-                    'Line 5',
-                    'Line 6',
-                    'Line 7',
-                    'Line 8',
-                    'Line 9',
-                    'Line 10',
-                ];
-                fs.readFileSync.mockReturnValue(lines.join('\n'));
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should not detect "fully implemented: yes" after line 10', () => {
-                const lines = [
-                    'Line 1',
-                    'Line 2',
-                    'Line 3',
-                    'Line 4',
-                    'Line 5',
-                    'Line 6',
-                    'Line 7',
-                    'Line 8',
-                    'Line 9',
-                    'Line 10',
-                    'Fully implemented: yes',
-                    'Line 12',
-                ];
-                fs.readFileSync.mockReturnValue(lines.join('\n'));
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
-
-            test('should check exactly first 10 lines only', () => {
-                const lines = Array(20).fill('Line').map((l, i) => `${l} ${i + 1}`);
-                lines[0] = 'Fully implemented: yes';
-                fs.readFileSync.mockReturnValue(lines.join('\n'));
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should handle files with fewer than 10 lines', () => {
-                fs.readFileSync.mockReturnValue('Line 1\nLine 2\nFully implemented: yes');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-        });
-
-        describe('edge cases and error handling', () => {
-            test('should handle empty file', () => {
-                fs.readFileSync.mockReturnValue('');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
-
-            test('should handle file with only whitespace', () => {
-                fs.readFileSync.mockReturnValue('   \n  \n   \n');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
-
-            test('should handle file with only newlines', () => {
-                fs.readFileSync.mockReturnValue('\n\n\n\n');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
-
-            test('should throw error for non-existent file', () => {
-                fs.readFileSync.mockImplementation(() => {
-                    throw new Error('ENOENT: no such file or directory');
+                expect(result).toEqual({
+                    completed: false,
+                    confidence: 1.0,
+                    reason: 'execution.json not found',
                 });
-                expect(() => isFullyImplemented('nonexistent.md')).toThrow();
+            });
+        });
+
+        describe('completion status detection', () => {
+            test('should return completed:true when completion.status is completed', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'in_progress',
+                    completion: { status: 'completed' },
+                    phases: [],
+                }));
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result).toEqual({
+                    completed: true,
+                    confidence: 1.0,
+                    reason: 'completion.status is completed',
+                });
             });
 
-            test('should throw error for file read permission errors', () => {
+            test('should return completed:true when status is completed', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'completed',
+                    completion: { status: 'pending_validation' },
+                    phases: [],
+                }));
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result).toEqual({
+                    completed: true,
+                    confidence: 0.9,
+                    reason: 'status is completed',
+                });
+            });
+
+            test('should return completed:false when status is blocked', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'blocked',
+                    completion: { status: 'pending_validation' },
+                    phases: [],
+                }));
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result).toEqual({
+                    completed: false,
+                    confidence: 1.0,
+                    reason: 'status is blocked',
+                });
+            });
+
+            test('should return completed:true when all phases are completed', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'in_progress',
+                    completion: { status: 'pending_validation' },
+                    phases: [
+                        { id: 1, name: 'Phase 1', status: 'completed' },
+                        { id: 2, name: 'Phase 2', status: 'completed' },
+                        { id: 3, name: 'Phase 3', status: 'completed' },
+                    ],
+                }));
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result).toEqual({
+                    completed: true,
+                    confidence: 0.85,
+                    reason: 'all phases completed',
+                });
+            });
+
+            test('should return completed:false when some phases are not completed', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'in_progress',
+                    completion: { status: 'pending_validation' },
+                    phases: [
+                        { id: 1, name: 'Phase 1', status: 'completed' },
+                        { id: 2, name: 'Phase 2', status: 'in_progress' },
+                        { id: 3, name: 'Phase 3', status: 'pending' },
+                    ],
+                }));
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result).toEqual({
+                    completed: false,
+                    confidence: 0.8,
+                    reason: 'task still in progress',
+                });
+            });
+
+            test('should return completed:false when phases array is empty', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'in_progress',
+                    completion: { status: 'pending_validation' },
+                    phases: [],
+                }));
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result).toEqual({
+                    completed: false,
+                    confidence: 0.8,
+                    reason: 'task still in progress',
+                });
+            });
+
+            test('should return completed:false when phases is undefined', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'pending',
+                    completion: { status: 'pending_validation' },
+                }));
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result).toEqual({
+                    completed: false,
+                    confidence: 0.8,
+                    reason: 'task still in progress',
+                });
+            });
+        });
+
+        describe('error handling', () => {
+            test('should handle malformed JSON', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue('not valid json');
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result.completed).toBe(false);
+                expect(result.confidence).toBe(0.5);
+                expect(result.reason).toContain('Failed to parse execution.json');
+            });
+
+            test('should handle file read errors', () => {
+                fs.existsSync.mockReturnValue(true);
                 fs.readFileSync.mockImplementation(() => {
                     throw new Error('EACCES: permission denied');
                 });
-                expect(() => isFullyImplemented('noperm.md')).toThrow();
-            });
 
-            test('should handle very long lines', () => {
-                const longLine = 'x'.repeat(10000);
-                fs.readFileSync.mockReturnValue(`${longLine}\nFully implemented: yes`);
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
+                const result = isCompletedFromExecution('/test/execution.json');
 
-            test('should handle special characters', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: yes\n!@#$%^&*()_+-={}[]|\\:";\'<>?,./');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should handle Unicode content', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: yes\n你好世界\nПривет мир\n🎉🎊');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should handle emoji in content', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: yes 🚀\nMore content');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should handle tabs and special whitespace', () => {
-                fs.readFileSync.mockReturnValue('\t\tFully implemented: yes\t\t\nContent');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should handle CRLF line endings', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: yes\r\nLine 2\r\nLine 3');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
-
-            test('should handle mixed line endings', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: yes\r\nLine 2\nLine 3');
-                expect(isFullyImplemented('test.md')).toBe(true);
+                expect(result.completed).toBe(false);
+                expect(result.confidence).toBe(0.5);
+                expect(result.reason).toContain('Failed to parse execution.json');
             });
         });
 
-        describe('malformed content', () => {
-            test('should return false for partial match "fully implemented:"', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented:\n\nContent');
-                expect(isFullyImplemented('test.md')).toBe(false);
+        describe('priority of completion checks', () => {
+            test('should prioritize completion.status over status field', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'in_progress',
+                    completion: { status: 'completed' },
+                    phases: [
+                        { id: 1, status: 'pending' },
+                    ],
+                }));
+
+                const result = isCompletedFromExecution('/test/execution.json');
+
+                expect(result.completed).toBe(true);
+                expect(result.reason).toBe('completion.status is completed');
             });
 
-            test('should return false for "fully: yes"', () => {
-                fs.readFileSync.mockReturnValue('Fully: yes\n\nContent');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
+            test('should prioritize status over phases', () => {
+                fs.existsSync.mockReturnValue(true);
+                fs.readFileSync.mockReturnValue(JSON.stringify({
+                    status: 'completed',
+                    completion: { status: 'pending_validation' },
+                    phases: [
+                        { id: 1, status: 'pending' },
+                    ],
+                }));
 
-            test('should return false for "implemented: yes"', () => {
-                fs.readFileSync.mockReturnValue('Implemented: yes\n\nContent');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
+                const result = isCompletedFromExecution('/test/execution.json');
 
-            test('should handle content without the marker', () => {
-                fs.readFileSync.mockReturnValue('Some random content\nNo markers here\nJust text');
-                expect(isFullyImplemented('test.md')).toBe(false);
+                expect(result.completed).toBe(true);
+                expect(result.reason).toBe('status is completed');
             });
         });
+    });
 
-        describe('multi-line and formatting variations', () => {
-            test('should handle "fully implemented: yes" on first line', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: yes\nLine 2\nLine 3');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
+    describe('hasApprovedCodeReview', () => {
+        test('should return false when file does not exist', () => {
+            fs.existsSync.mockReturnValue(false);
 
-            test('should handle "fully implemented: yes" on last checked line (line 10)', () => {
-                const lines = Array(9).fill('Line');
-                lines.push('Fully implemented: yes');
-                fs.readFileSync.mockReturnValue(lines.join('\n'));
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(false);
+        });
 
-            test('should handle multiple occurrences within first 10 lines', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented: yes\nContent\nFully implemented: yes');
-                expect(isFullyImplemented('test.md')).toBe(true);
-            });
+        test('should return false when ## Status section is missing', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('# Code Review\n\nSome content without status section');
 
-            test('should not match text before "fully implemented: yes" on same line', () => {
-                fs.readFileSync.mockReturnValue('Status: Fully implemented: yes\nContent');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(false);
+        });
 
-            test('should detect with various spacing around colon', () => {
-                fs.readFileSync.mockReturnValue('Fully implemented:yes\nContent');
-                expect(isFullyImplemented('test.md')).toBe(false);
-            });
+        test('should return true when status is Approved', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('# Code Review\n\n## Status\nApproved\n\n## Details');
+
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(true);
+        });
+
+        test('should return true when status contains approved (case insensitive)', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('# Code Review\n\n## Status\nAPPROVED with comments\n\n## Details');
+
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(true);
+        });
+
+        test('should return false when status is Rejected', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('# Code Review\n\n## Status\nRejected\n\n## Details');
+
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(false);
+        });
+
+        test('should return false when status is Pending', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('# Code Review\n\n## Status\nPending\n\n## Details');
+
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(false);
+        });
+
+        test('should handle status section with empty lines before value', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('## Status\n\n\nApproved');
+
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(true);
+        });
+
+        test('should handle lowercase status header', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('## status\nApproved');
+
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(true);
+        });
+
+        test('should return false when status section exists but has no value', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('## Status\n\n');
+
+            expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(false);
         });
     });
 });

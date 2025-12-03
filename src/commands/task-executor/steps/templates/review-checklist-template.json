@@ -1,0 +1,59 @@
+{
+  "task": "TASK0",
+  "generatedAt": "2025-12-02T23:45:12.000Z",
+  "items": [
+    {
+      "artifact": "path/to/handler.ext",
+      "type": "modified",
+      "questions": [
+        {
+          "category": "compatibility",
+          "question": "Does the new implementation maintain backward compatibility with existing callers?",
+          "why": "Ensures no breaking changes for dependent code"
+        },
+        {
+          "category": "error-handling",
+          "question": "Are all error cases properly handled with appropriate error messages?",
+          "why": "Prevents runtime errors and improves debugging"
+        },
+        {
+          "category": "data-integrity",
+          "question": "Does the data transformation preserve all required fields?",
+          "why": "Ensures no data loss during processing"
+        }
+      ]
+    },
+    {
+      "artifact": "path/to/validator.ext",
+      "type": "created",
+      "questions": [
+        {
+          "category": "completeness",
+          "question": "Does the validator check all required input fields?",
+          "why": "Prevents invalid data from entering the system"
+        },
+        {
+          "category": "edge-cases",
+          "question": "Are boundary conditions (null, empty, max values) handled correctly?",
+          "why": "Prevents unexpected behavior with edge case inputs"
+        }
+      ]
+    },
+    {
+      "artifact": "path/to/test.ext",
+      "type": "created",
+      "questions": [
+        {
+          "category": "coverage",
+          "question": "Do tests cover success, failure, and edge case scenarios?",
+          "why": "Ensures comprehensive test coverage"
+        },
+        {
+          "category": "assertions",
+          "question": "Do all assertions verify the expected behavior clearly?",
+          "why": "Makes test failures easy to diagnose"
+        }
+      ]
+    }
+  ]
+}

@@ -4,7 +4,7 @@ jest.mock('path');
 jest.mock('os');
 jest.mock('../../../shared/utils/logger');
 jest.mock('../../../shared/config/state');
-jest.mock('./parallel-state-manager');
+jest.mock('../../../shared/executors/parallel-state-manager');
 jest.mock('./parallel-ui-renderer');
 jest.mock('../utils/terminal-renderer');
 jest.mock('../utils/progress-calculator');
@@ -19,11 +19,11 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
-const ParallelStateManager = require('./parallel-state-manager');
+const ParallelStateManager = require('../../../shared/executors/parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
-const { isFullyImplemented, hasApprovedCodeReview } = require('../utils/validation');
+const { isCompletedFromExecution, hasApprovedCodeReview } = require('../utils/validation');
 const { parseTaskScope } = require('../utils/scope-parser');
 const { DAGExecutor } = require('./dag-executor');
 
@@ -433,6 +433,12 @@ describe('DAGExecutor', () => {
             executor.maxConcurrent = 2;
             executor.running = new Set();
 
+            // Set up tasks with no dependencies so canExecute passes
+            executor.tasks = {
+                task1: { deps: [], status: 'pending' },
+                task2: { deps: [], status: 'pending' },
+            };
+
             const mockTasks = ['task1', 'task2'];
             jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
             jest.spyOn(executor, 'executeTask').mockResolvedValue();
@@ -448,6 +454,14 @@ describe('DAGExecutor', () => {
         test('should respect already running tasks when calculating slots', () => {
             executor.maxConcurrent = 2;
             executor.running = new Set(['existing-task']);
+            executor.runningByScope = { backend: 0, frontend: 0, integration: 1 }; // Match running set
+
+            // Set up tasks in executor.tasks so canExecute passes
+            executor.tasks = {
+                'existing-task': { deps: [], status: 'running' },
+                task1: { deps: [], status: 'pending' },
+                task2: { deps: [], status: 'pending' },
+            };
 
             const mockTasks = ['task1', 'task2'];
             jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
@@ -525,6 +539,7 @@ describe('DAGExecutor', () => {
         test('should handle zero available slots when all slots are occupied', async () => {
             executor.maxConcurrent = 2;
             executor.running = new Set(['task1', 'task2']); // All slots occupied
+            executor.runningByScope = { backend: 0, frontend: 0, integration: 2 }; // Match running set
 
             // Set up tasks in executor.tasks
             executor.tasks = {
@@ -550,6 +565,7 @@ describe('DAGExecutor', () => {
         test('should handle partial slot availability with mixed running/ready tasks', () => {
             executor.maxConcurrent = 3;
             executor.running = new Set(['existing-task']); // 1 slot occupied, 2 available
+            executor.runningByScope = { backend: 0, frontend: 0, integration: 1 }; // Match running set
 
             // Set up tasks in executor.tasks
             executor.tasks = {
@@ -576,6 +592,12 @@ describe('DAGExecutor', () => {
             executor.maxConcurrent = 2;
             executor.running = new Set();
 
+            // Set up tasks with no dependencies so canExecute passes
+            executor.tasks = {
+                task1: { deps: [], status: 'pending' },
+                task2: { deps: [], status: 'pending' },
+            };
+
             const mockTasks = ['task1', 'task2'];
             jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
 
@@ -598,6 +620,12 @@ describe('DAGExecutor', () => {
         test('should maintain task isolation during parallel execution', async () => {
             executor.maxConcurrent = 2;
             executor.running = new Set();
+
+            // Set up tasks with no dependencies so canExecute passes
+            executor.tasks = {
+                task1: { deps: [], status: 'pending' },
+                task2: { deps: [], status: 'pending' },
+            };
 
             const mockTasks = ['task1', 'task2'];
             jest.spyOn(executor, 'getReadyTasks').mockReturnValue(mockTasks);
@@ -638,8 +666,10 @@ describe('DAGExecutor', () => {
             expect(executeTaskSpy).toHaveBeenCalledTimes(1);
 
             // Change limit and execute another wave
+            // Reset all state including runningByScope to simulate completed tasks
             executor.maxConcurrent = 3;
             executor.running.clear();
+            executor.runningByScope = { backend: 0, frontend: 0, integration: 0 };
             executor.tasks = {
                 task2: { deps: [], status: 'pending' },
                 task3: { deps: [], status: 'pending' },
@@ -695,11 +725,11 @@ describe('DAGExecutor', () => {
 
         test('should mark task as completed if already approved', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return false;
             });
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
             hasApprovedCodeReview.mockReturnValue(true);
 
             await executor.executeTask('testTask');
@@ -710,9 +740,9 @@ describe('DAGExecutor', () => {
             expect(executor.running.has('testTask')).toBe(false);
         });
 
-        test('should execute step4 if TODO.md does not exist', async () => {
+        test('should execute step4 if execution.json does not exist', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 if (filePath.includes('CODE_REVIEW.md')) return false;
                 return true;
             });
@@ -726,7 +756,7 @@ describe('DAGExecutor', () => {
         test('should skip step4 if not in allowedSteps', async () => {
             executor.allowedSteps = [5, 6]; // Step 4 not allowed
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 return true;
             });
 
@@ -739,7 +769,7 @@ describe('DAGExecutor', () => {
         test('should handle task splitting (folder no longer exists)', async () => {
             fs.existsSync.mockImplementation(filePath => {
                 if (filePath.includes('/testTask')) return false; // Task folder gone
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 return true;
             });
 
@@ -753,14 +783,14 @@ describe('DAGExecutor', () => {
         test('should stop after step4 if step5 not allowed', async () => {
             executor.allowedSteps = [4]; // Only step 4 allowed
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false; // Will be created by step4
+                if (filePath.includes('execution.json')) return false; // Will be created by step4
                 return true;
             });
 
-            // Mock step4 creates TODO.md
+            // Mock step4 creates execution.json
             mockStep4.mockImplementation(() => {
                 fs.existsSync.mockImplementation(filePath => {
-                    if (filePath.includes('TODO.md')) return true;
+                    if (filePath.includes('execution.json')) return true;
                     return true;
                 });
             });
@@ -773,13 +803,13 @@ describe('DAGExecutor', () => {
 
         test('should implement step5 with retry logic', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true; // TODO.md exists
+                if (filePath.includes('execution.json')) return true; // execution.json exists
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
 
             // First attempt fails, second succeeds
-            isFullyImplemented
+            isCompletedFromExecution
                 .mockReturnValueOnce(false)
                 .mockReturnValueOnce(true);
 
@@ -796,11 +826,11 @@ describe('DAGExecutor', () => {
         test('should stop after step5 if step6 not allowed', async () => {
             executor.allowedSteps = [4, 5]; // Steps 4 and 5 allowed
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
 
             await executor.executeTask('testTask');
 
@@ -810,11 +840,11 @@ describe('DAGExecutor', () => {
 
         test('should execute step6 for code review', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
             hasApprovedCodeReview
                 .mockReturnValueOnce(false)
                 .mockReturnValueOnce(true);
@@ -829,11 +859,11 @@ describe('DAGExecutor', () => {
             process.argv.push('--push=false');
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
             hasApprovedCodeReview.mockReturnValue(false);
 
             await executor.executeTask('testTask');
@@ -844,10 +874,10 @@ describe('DAGExecutor', () => {
         test('should handle maximum attempts limit', async () => {
             executor.maxAttemptsPerTask = 2;
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return true;
             });
-            isFullyImplemented.mockReturnValue(false); // Never fully implemented
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 1.0, reason: 'test' }); // Never fully implemented
 
             await expect(executor.executeTask('testTask')).rejects.toThrow('Maximum attempts (2) reached');
 
@@ -860,15 +890,15 @@ describe('DAGExecutor', () => {
             executor.maxAttemptsPerTask = 1; // Low limit, but noLimit overrides
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
 
             let callCount = 0;
-            isFullyImplemented.mockImplementation(() => {
+            isCompletedFromExecution.mockImplementation(() => {
                 callCount++;
-                return callCount > 3; // Succeeds after 3 attempts
+                return { completed: callCount > 3, confidence: 1.0, reason: 'test' }; // Succeeds after 3 attempts
             });
 
             // Also mock hasApprovedCodeReview to prevent infinite loop
@@ -885,7 +915,7 @@ describe('DAGExecutor', () => {
 
         test('should handle TODO.old.md restoration', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 if (filePath.includes('TODO.old.md')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
@@ -900,7 +930,7 @@ describe('DAGExecutor', () => {
 
             expect(mockCpSync).toHaveBeenCalledWith(
                 expect.stringContaining('TODO.old.md'),
-                expect.stringContaining('TODO.md'),
+                expect.stringContaining('execution.json'),
             );
             expect(mockRmSync).toHaveBeenCalledWith(
                 expect.stringContaining('TODO.old.md'),
@@ -913,7 +943,7 @@ describe('DAGExecutor', () => {
             mockStep4.mockRejectedValue(error);
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 return true;
             });
 
@@ -929,7 +959,7 @@ describe('DAGExecutor', () => {
         test('should handle step5 retry with progressive delays', async () => {
             executor.maxAttemptsPerTask = 3;
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
@@ -942,7 +972,7 @@ describe('DAGExecutor', () => {
             });
 
             // Step5 fails twice, then succeeds
-            isFullyImplemented
+            isCompletedFromExecution
                 .mockReturnValueOnce(false)
                 .mockReturnValueOnce(false)
                 .mockReturnValueOnce(true);
@@ -967,7 +997,7 @@ describe('DAGExecutor', () => {
 
             // Mock step4 succeeds, step5 fails
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true; // TODO exists after step4
+                if (filePath.includes('execution.json')) return true; // TODO exists after step4
                 if (filePath.includes('CODE_REVIEW.md')) return false;
                 return true;
             });
@@ -1030,7 +1060,7 @@ describe('DAGExecutor', () => {
             const taskName = 'interruptedTask';
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return true;
             });
 
@@ -1062,7 +1092,7 @@ describe('DAGExecutor', () => {
             executor.maxAttemptsPerTask = 2;
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return true;
             });
 
@@ -1086,7 +1116,7 @@ describe('DAGExecutor', () => {
             executor.maxAttemptsPerTask = 3;
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 return true;
             });
 
@@ -1366,7 +1396,7 @@ describe('DAGExecutor', () => {
 
         test('should update StateManager with correct parameters during task execution', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
@@ -1463,12 +1493,12 @@ describe('DAGExecutor', () => {
 
         test('should handle StateManager updates for different step transitions', async () => {
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return false;
                 return true;
             });
 
-            isFullyImplemented.mockReturnValue(false);
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 1.0, reason: 'test' });
             // Note: step5 is mocked via jest.mock at file level
 
             await executor.executeTask('testTask');
@@ -1482,12 +1512,12 @@ describe('DAGExecutor', () => {
 
             // Simulate task that completes successfully
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return true;
+                if (filePath.includes('execution.json')) return true;
                 if (filePath.includes('CODE_REVIEW.md')) return true;
                 return true;
             });
 
-            isFullyImplemented.mockReturnValue(true);
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0, reason: 'test' });
             hasApprovedCodeReview.mockReturnValue(true);
 
             await executor.executeTask(taskName);
@@ -1521,7 +1551,7 @@ describe('DAGExecutor', () => {
             });
 
             fs.existsSync.mockImplementation(filePath => {
-                if (filePath.includes('TODO.md')) return false;
+                if (filePath.includes('execution.json')) return false;
                 return true;
             });
 
@@ -1684,16 +1714,17 @@ describe('DAGExecutor', () => {
                 expect(exec.canExecute('TASK1')).toBe(false);
             });
 
-            test('should allow backend task in multi-repo when backend scope has capacity', () => {
+            test('should block task when global limit reached even if scope has capacity', () => {
                 state.isMultiRepo.mockReturnValue(true);
 
                 const tasks = { TASK1: { deps: [], status: 'pending' } };
                 const exec = new DAGExecutor(tasks, null, 2);
                 // Manually set scope and runningByScope after construction
                 exec.tasks.TASK1.scope = 'backend';
-                exec.runningByScope = { backend: 1, frontend: 2, integration: 0 };
+                exec.runningByScope = { backend: 1, frontend: 2, integration: 0 }; // total = 3 > maxConcurrent
 
-                expect(exec.canExecute('TASK1')).toBe(true);
+                // Global limit exceeded (3 > 2), so should block
+                expect(exec.canExecute('TASK1')).toBe(false);
             });
 
             test('should block backend task in multi-repo when backend scope at limit', () => {
@@ -1802,7 +1833,7 @@ describe('DAGExecutor', () => {
         });
 
         describe('Multi-repo execution', () => {
-            test('should allow backend + frontend tasks to run in parallel in multi-repo', () => {
+            test('should enforce global limit even across different scopes in multi-repo', () => {
                 state.isMultiRepo.mockReturnValue(true);
 
                 fs.existsSync.mockImplementation(filePath => {
@@ -1826,14 +1857,14 @@ describe('DAGExecutor', () => {
                 };
                 const exec = new DAGExecutor(tasks, null, 1); // maxConcurrent = 1
 
-                // Both should be executable because they're different scopes
+                // TASK1 should be executable
                 expect(exec.canExecute('TASK1')).toBe(true);
 
                 exec.markRunning('TASK1');
                 expect(exec.runningByScope.backend).toBe(1);
 
-                // TASK2 is frontend, so it should still be executable
-                expect(exec.canExecute('TASK2')).toBe(true);
+                // TASK2 is frontend, but global limit (1) is reached, so it should be blocked
+                expect(exec.canExecute('TASK2')).toBe(false);
             });
 
             test('should block same-scope tasks when at capacity in multi-repo', () => {
@@ -1891,10 +1922,10 @@ describe('DAGExecutor', () => {
                 expect(exec.runningByScope.frontend).toBe(1);
                 expect(exec.runningByScope.integration).toBe(0);
 
-                // BE2 can run (backend at 1, limit is 2)
-                expect(exec.canExecute('BE2')).toBe(true);
+                // BE2 cannot run (global limit reached: 2 running >= 2 max)
+                expect(exec.canExecute('BE2')).toBe(false);
 
-                // INT1 cannot run (total is 2, at limit)
+                // INT1 cannot run (global limit reached: 2 running >= 2 max)
                 expect(exec.canExecute('INT1')).toBe(false);
             });
 
@@ -1916,6 +1947,39 @@ describe('DAGExecutor', () => {
 
                 // TASK2 should now be able to execute
                 expect(exec.canExecute('TASK2')).toBe(true);
+            });
+
+            test('should never exceed global maxConcurrent limit regardless of scope distribution', () => {
+                state.isMultiRepo.mockReturnValue(true);
+
+                const tasks = {
+                    BE1: { deps: [], status: 'pending' },
+                    BE2: { deps: [], status: 'pending' },
+                    FE1: { deps: [], status: 'pending' },
+                    FE2: { deps: [], status: 'pending' },
+                    INT1: { deps: [], status: 'pending' },
+                };
+                const exec = new DAGExecutor(tasks, null, 8); // maxConcurrent = 8
+                exec.tasks.BE1.scope = 'backend';
+                exec.tasks.BE2.scope = 'backend';
+                exec.tasks.FE1.scope = 'frontend';
+                exec.tasks.FE2.scope = 'frontend';
+                exec.tasks.INT1.scope = 'integration';
+
+                // Start with 8 tasks running across different scopes
+                exec.runningByScope = { backend: 3, frontend: 3, integration: 2 };
+
+                // Verify total is exactly 8
+                expect(exec.totalRunning()).toBe(8);
+
+                // No task should be executable when at global limit
+                expect(exec.canExecute('BE1')).toBe(false);
+                expect(exec.canExecute('FE1')).toBe(false);
+                expect(exec.canExecute('INT1')).toBe(false);
+
+                // This is the bug fix: previously in multi-repo mode, each scope could
+                // run up to maxConcurrent tasks independently, allowing 8 * 3 = 24 total tasks!
+                // Now the global limit is enforced first.
             });
         });
 

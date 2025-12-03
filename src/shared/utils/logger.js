@@ -14,7 +14,7 @@ class Logger {
 
     shouldSuppressOutput() {
         try {
-            const managerModule = require('../services/parallel-state-manager');
+            const managerModule = require('../executors/parallel-state-manager');
             const ParallelStateManager = managerModule.ParallelStateManager || managerModule;
             const instance = ParallelStateManager && ParallelStateManager.instance;
             return Boolean(instance && typeof instance.isUIRendererActive === 'function' && instance.isUIRendererActive());

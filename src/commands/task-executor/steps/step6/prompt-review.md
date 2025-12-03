@@ -39,10 +39,8 @@ The section below contains a **pre-built summary** of the project environment an
 Before analyzing code, read and understand the complete context:
 
 ### Required Reading:
-1. **{{promptMdPath}}** → Original requirements (what user asked for)
-2. **{{taskMdPath}}** → Task definition, acceptance criteria, dependencies
-3. **{{todoMdPath}}** → Implementation plan and current status
-{{researchSection}}
+1. **{{blueprintPath}}** → Task definition with identity, context, scope, and implementation strategy
+2. **{{executionJsonPath}}** → Execution state, phases, artifacts, and completion status
 
 ### Extract from reading:
 - List of ALL requirements (number them: R1, R2, R3...)
@@ -91,8 +89,8 @@ Now inspect the implementation systematically using this checklist:
 Use your Phase 2 mapping to verify:
 - [ ] **Every requirement (R1, R2, R3...)** has implementation
 - [ ] **Every acceptance criterion (AC1, AC2, AC3...)** is met
-- [ ] **Every TODO item** is checked [X] or has valid skip reason
-- [ ] **Edge cases** from RESEARCH.md (if exists) are addressed
+- [ ] **Every phase** in execution.json is marked as completed
+- [ ] **Edge cases** from BLUEPRINT.md are addressed
 - [ ] **No placeholder code** (TODO, FIXME, temporary debug statements)
 
 For each unchecked item, document:
@@ -149,7 +147,7 @@ For missing tests: what functionality → what test needed
 ### 3.6 Scope & File Integrity
 
 Prevent scope drift and unnecessary changes:
-- [ ] **Files touched** are all listed in {{todoMdPath}} "Touched" sections
+- [ ] **Files touched** are all listed in execution.json artifacts
 - [ ] **Each file change** directly serves a requirement (no unrelated refactors)
 - [ ] **Function modifications** are justified by requirements
 - [ ] **No style-only changes** (formatting, renaming without reason)
@@ -184,7 +182,7 @@ Instead, run ONLY tests affected by THIS task's changes.
 
 #### Step 1: Identify Changed Files
 
-Read `{{todoMdPath}}` and extract all files from "Touched (will modify/create)" sections.
+Read `{{executionJsonPath}}` and extract all files from the `artifacts` array.
 
 #### Step 2: Map Source Files to Test Files
 
@@ -297,9 +295,8 @@ Count issues from Phase 3 analysis:
 Now create the review documentation:
 
 **Requirements:**
-1. Confirm first line of \`{{todoMdPath}}\` is: \`Fully implemented: YES\`
-2. Add in the second line: \`Code review passed\`
-3. Create \`{{codeReviewMdPath}}\`:
+1. Update \`{{executionJsonPath}}\` with `status: "completed"` and `completion.codeReviewPassed: true`
+2. Create \`{{codeReviewMdPath}}\`:
 
 **Example APPROVED review (language-agnostic):**
 \`\`\`markdown
@@ -374,10 +371,9 @@ Minor improvements suggested for future:
 ### If FAILING (❌)
 
 **Requirements:**
-1. Set first line of \`{{todoMdPath}}\` to: \`Fully implemented: NO\`
-2. Add second line: \`Why code review failed: [brief summary]\`
-3. Update \`{{todoMdPath}}\` carefully (see rules below)
-4. Create detailed issue list
+1. Update \`{{executionJsonPath}}\` with `status: "blocked"` and add failure reason to `errorHistory`
+2. Add issues to `completion.blockedBy` array in execution.json
+3. Create detailed issue list in CODE_REVIEW.md
 
 **Example FAILED review (language-agnostic):**
 \`\`\`markdown
@@ -418,51 +414,48 @@ AC2: Invalid input returns error
    - Impact: No proof feature works
    - Fix: Add test file with create/validate scenarios
 
-## Next Steps (add to TODO.md)
-- [ ] Create path/to/validator.ext with validation logic
-- [ ] Fix response/status in path/to/handler.ext:55
-- [ ] Create path/to/test_file.ext with full coverage
+## Next Steps (added to execution.json blockedBy)
+- Create path/to/validator.ext with validation logic
+- Fix response/status in path/to/handler.ext:55
+- Create path/to/test_file.ext with full coverage
 \`\`\`
 
-**Rules for updating {{todoMdPath}} when FAILING:**
-            1. **Keep all existing checklist items as-is.**  
-              - Do **not** uncheck or remove previously completed items.  
-              - The goal is to preserve historical progress and continuity.
+**Rules for updating {{executionJsonPath}} when FAILING:**
 
-            2. **Add what needs to be done** to pass into code review in the **"Implementation Plan"** section.  
-              Follow this format:
-                - [ ] **Item X — [Consolidated action]**
-                - **What to do:** [detailed instructions of what to implement and how]
-                - **Context (read-only):** [files/dirs/docs to read]
-                - **Touched (will modify/create):** [files/modules]
-                - **Interfaces / Contracts:** [APIs/events/schemas/types]
-                - **Tests:** [type + key scenarios/edge cases]
-                - **Migrations / Data:** [DDL/backfill/ordering]
-                - **Observability:** [logs/metrics/traces/alerts]
-                - **Security & Permissions:** [authN/Z, PII, rate limits]
-                - **Performance:** [targets/limits/complexity]
-                - **Commands:** [local/CI commands to run]
-                - **Risks & Mitigations:** [risk → mitigation]
+1. **Set status to "blocked"** to indicate the task needs more work.
 
-            3. **Append or create a new section** titled:
-              \`\`\`markdown
-              ## Code Review Attempts
-              \`\`\`
-              - Log the current review date and briefly summarize issues found.
-              - Include clear, actionable guidance for each issue:
-              \`\`\`
-                - Issue: Missing validation for 'userId' in POST request
-                  Fix: Add Joi schema check before model.create()
-                - Issue: Race condition in cache refresh
-                  Fix: Move redis.set() call inside transaction block
-              \`\`\`
-              - Keep a chronological list of past review attempts for full traceability.
+2. **Add to errorHistory** array with timestamp and detailed message:
+   ```json
+   {
+     "errorHistory": [
+       {
+         "timestamp": "2025-01-18T10:30:00Z",
+         "phase": "code-review",
+         "message": "Code review failed: missing validation, wrong response status"
+       }
+     ]
+   }
+   ```
 
-            4. Ensure the resulting \`TODO.md\` remains **self-explanatory** — a new developer should be able to read it and immediately understand:
-              - What failed
-              - Why it failed
-              - What must be done next
-              - Who or what performed each review
+3. **Add to completion.blockedBy** array with specific issues:
+   ```json
+   {
+     "completion": {
+       "blockedBy": [
+         "Missing validation for 'userId' in POST request - add schema check",
+         "Wrong response status in handler.ext:55 - should return 201 not 200",
+         "Missing tests for create functionality"
+       ]
+     }
+   }
+   ```
+
+4. **Increment attempts** counter to track retry count.
+
+5. The execution.json should be **self-explanatory** — a new developer should understand:
+   - What failed (status: blocked)
+   - Why it failed (errorHistory + blockedBy)
+   - How many times it's been attempted (attempts)
 
 ---
 
@@ -471,13 +464,13 @@ AC2: Invalid input returns error
 Before you finish, validate YOUR OWN work:
 
 ### Checklist for your review:
-- [ ] I completed Phase 1 (Read everything, extracted requirements)
+- [ ] I completed Phase 1 (Read BLUEPRINT.md and execution.json, extracted requirements)
 - [ ] I completed Phase 2 (Created R1, R2... → code mapping)
 - [ ] I completed Phase 3 (Analyzed all 7 subsections: 3.1-3.7)
 - [ ] I ran tests and recorded results
 - [ ] I made a decision based on evidence (not gut feeling)
 - [ ] I created CODE_REVIEW.md with complete analysis
-- [ ] I updated TODO.md correctly (YES or NO + explanation)
+- [ ] I updated execution.json correctly (status + completion fields)
 
 ### Quality check:
 - [ ] My requirement mapping is SPECIFIC (file:line, not vague "somewhere")
@@ -502,10 +495,9 @@ Before you finish, validate YOUR OWN work:
 
 You MUST do these actions (no exceptions):
 
-1. **Update {{todoMdPath}}:**
-   - First line: \`Fully implemented: YES\` or \`NO\`
-   - Second line: \`Code review passed\` or \`Why code review failed: [reason]\`
-   - If failing: Add specific TODO items with all subsections filled
+1. **Update {{executionJsonPath}}:**
+   - If APPROVED: Set `status: "completed"` and `completion.codeReviewPassed: true`
+   - If FAILED: Set `status: "blocked"`, add to `errorHistory`, populate `completion.blockedBy`
 
 2. **Create {{codeReviewMdPath}}:**
    - Status (✅ APPROVED or ❌ FAILED)
@@ -515,8 +507,8 @@ You MUST do these actions (no exceptions):
    - Decision with evidence
    - If failing: Critical/Major/Minor issues with details
 
-3. **Verify files were created:**
-   - Check TODO.md first line is YES or NO
+3. **Verify files were updated:**
+   - Check execution.json has correct status (completed or blocked)
    - Check CODE_REVIEW.md exists and is complete
 
 **Your review is only complete when ALL three requirements above are met.**

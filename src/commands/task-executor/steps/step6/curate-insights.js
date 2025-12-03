@@ -62,11 +62,54 @@ const categorizeInsights = (insights = []) => {
     }, {});
 };
 
+/**
+ * Extracts insights from execution.json structured data
+ * @param {Object} execution - Parsed execution.json content
+ * @returns {Array} List of extracted insights
+ */
+const extractExecutionInsights = (execution) => {
+    if (!execution) return [];
+
+    const results = [];
+
+    // Extract from completion.forFutureTasks
+    if (execution.completion?.forFutureTasks && Array.isArray(execution.completion.forFutureTasks)) {
+        execution.completion.forFutureTasks.forEach(note => {
+            if (typeof note === 'string' && note.trim()) {
+                results.push({
+                    insight: note.trim(),
+                    description: note.trim(),
+                    confidence: 0.8,
+                    actionable: true,
+                    evidence: 'execution.json - forFutureTasks',
+                });
+            }
+        });
+    }
+
+    // Extract from uncertainties that were resolved
+    if (execution.uncertainties && Array.isArray(execution.uncertainties)) {
+        execution.uncertainties
+            .filter(u => u.resolution)
+            .forEach(u => {
+                results.push({
+                    insight: `${u.topic}: ${u.resolution}`,
+                    description: `Resolved uncertainty: ${u.assumption} → ${u.resolution}`,
+                    confidence: 0.85,
+                    actionable: true,
+                    evidence: 'execution.json - resolved uncertainty',
+                });
+            });
+    }
+
+    return results;
+};
+
 const resolvePaths = (task, overrides = {}) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
     return {
-        todoPath: overrides.todoPath || folder('TODO.md'),
-        contextPath: overrides.contextPath || folder('CONTEXT.md'),
+        executionPath: overrides.executionPath || folder('execution.json'),
+        blueprintPath: overrides.blueprintPath || folder('BLUEPRINT.md'),
         codeReviewPath: overrides.codeReviewPath || folder('CODE_REVIEW.md'),
         reflectionPath: overrides.reflectionPath || folder('REFLECTION.md'),
     };
@@ -91,12 +134,20 @@ const curateInsights = async (task, options = {}) => {
         candidates.push(...extractInsights(reflectionContent));
     }
 
-    // Extract implementation patterns from TODO/context documents
-    const todoContent = readIfExists(paths.todoPath);
-    candidates.push(...extractImplementationPatterns(todoContent));
+    // Extract insights from execution.json structured data
+    const executionContent = readIfExists(paths.executionPath);
+    if (executionContent) {
+        try {
+            const execution = JSON.parse(executionContent);
+            candidates.push(...extractExecutionInsights(execution));
+        } catch {
+            // Invalid JSON, skip execution insights
+        }
+    }
 
-    const contextContent = readIfExists(paths.contextPath);
-    candidates.push(...extractImplementationPatterns(contextContent));
+    // Extract implementation patterns from BLUEPRINT.md
+    const blueprintContent = readIfExists(paths.blueprintPath);
+    candidates.push(...extractImplementationPatterns(blueprintContent));
 
     const codeReviewContent = readIfExists(paths.codeReviewPath);
     candidates.push(...extractImplementationPatterns(codeReviewContent));
@@ -119,5 +170,6 @@ const curateInsights = async (task, options = {}) => {
 module.exports = {
     curateInsights,
     extractImplementationPatterns,
+    extractExecutionInsights,
     categorizeInsights,
 };

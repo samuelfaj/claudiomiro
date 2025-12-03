@@ -79,41 +79,85 @@ const getTaskFolders = (claudiomiroFolder) => {
 };
 
 /**
- * Checks if a task is fully implemented
+ * Checks if a task is completed based on execution.json
  * @param {string} claudiomiroFolder - Path to .claudiomiro folder
  * @param {string} taskId - Task identifier
- * @returns {boolean} True if fully implemented
+ * @returns {boolean} True if completed
  */
 const isTaskCompleted = (claudiomiroFolder, taskId) => {
-    const todoPath = path.join(claudiomiroFolder, taskId, 'TODO.md');
-    if (!fs.existsSync(todoPath)) {
+    const executionPath = path.join(claudiomiroFolder, taskId, 'execution.json');
+    if (!fs.existsSync(executionPath)) {
         return false;
     }
-    const content = fs.readFileSync(todoPath, 'utf8');
-    return content.startsWith('Fully implemented: YES');
+    try {
+        const content = fs.readFileSync(executionPath, 'utf8');
+        const execution = JSON.parse(content);
+        return execution.status === 'completed' || execution.completion?.status === 'completed';
+    } catch {
+        return false;
+    }
 };
 
 /**
- * Extracts summary from a CONTEXT.md file (sync, heuristic version)
- * @param {string} contextPath - Path to CONTEXT.md
- * @returns {object|null} Summary object or null
+ * Checks if task folder has required files (BLUEPRINT.md + execution.json)
+ * @param {string} taskFolder - Full path to task folder
+ * @returns {boolean} True if task has valid structure
  */
-const extractContextSummary = (contextPath) => {
-    if (!fs.existsSync(contextPath)) {
+const hasValidTaskStructure = (taskFolder) => {
+    const blueprintPath = path.join(taskFolder, 'BLUEPRINT.md');
+    const executionPath = path.join(taskFolder, 'execution.json');
+    return fs.existsSync(blueprintPath) && fs.existsSync(executionPath);
+};
+
+/**
+ * Extracts summary from execution.json completion section (internal helper)
+ * @param {string} executionPath - Path to execution.json
+ * @returns {object|null} Summary object or null if missing/malformed
+ */
+const extractContextSummaryFromExecutionJson = (executionPath) => {
+    if (!fs.existsSync(executionPath)) {
         return null;
     }
 
-    const content = fs.readFileSync(contextPath, 'utf8');
-    return extractContextSummaryFromContent(content, contextPath);
+    try {
+        const content = fs.readFileSync(executionPath, 'utf8');
+        const execution = JSON.parse(content);
+
+        if (execution.completion && Array.isArray(execution.completion.summary)) {
+            return {
+                summary: execution.completion.summary.join('\n'),
+                fullPath: executionPath,
+            };
+        }
+        // completion.summary exists but empty
+        return { summary: '', fullPath: executionPath };
+    } catch {
+        // JSON parse error - return null
+        return null;
+    }
 };
 
 /**
+ * Extracts summary from a task folder using execution.json
+ * @param {string} taskFolder - Full path to task folder
+ * @returns {object|null} Summary object or null
+ */
+const extractContextSummary = (taskFolder) => {
+    const executionPath = path.join(taskFolder, 'execution.json');
+    return extractContextSummaryFromExecutionJson(executionPath);
+};
+
+/**
+ * @deprecated CONTEXT.md is no longer used. Use execution.json instead.
  * Extracts summary from CONTEXT.md content (sync, heuristic version)
+ * Kept for backward compatibility with legacy code.
  * @param {string} content - CONTEXT.md content
  * @param {string} contextPath - Path for reference
  * @returns {object} Summary object
  */
 const extractContextSummaryFromContent = (content, contextPath = '') => {
+    console.warn('[DEPRECATED] extractContextSummaryFromContent is deprecated. CONTEXT.md is no longer used. Use execution.json instead.');
+
     // Extract key sections with regex
     const filesModifiedMatch = content.match(/## Files Modified\s*\n([\s\S]*?)(?=\n##|$)/);
     const decisionsMatch = content.match(/## (?:Key )?Decisions?\s*\n([\s\S]*?)(?=\n##|$)/);
@@ -126,138 +170,42 @@ const extractContextSummaryFromContent = (content, contextPath = '') => {
 };
 
 /**
- * Extracts summary from a CONTEXT.md file using LLM for better summarization
- * Falls back to heuristic extraction if LLM unavailable
- * @param {string} contextPath - Path to CONTEXT.md
- * @param {string} taskDescription - Optional task context for relevance
+ * Extracts summary from a task folder using execution.json
+ * execution.json data is already structured, no LLM needed
+ * @param {string} taskFolder - Full path to task folder
+ * @param {string} _taskDescription - Unused (kept for API compatibility)
  * @returns {Promise<object|null>} Summary object or null
  */
-const extractContextSummaryAsync = async (contextPath, _taskDescription = null) => {
-    if (!fs.existsSync(contextPath)) {
-        return null;
-    }
-
-    const content = fs.readFileSync(contextPath, 'utf8');
-
-    // Try LLM for better summarization
-    const llm = getLocalLLM();
-    if (llm) {
-        try {
-            await llm.initialize();
-            if (llm.isAvailable()) {
-                // Use LLM to create a focused summary
-                const summary = await llm.summarize(content, 400);
-
-                if (summary && summary.length > 50) {
-                    // Also extract structured sections with regex (fast)
-                    const filesModifiedMatch = content.match(/## Files Modified\s*\n([\s\S]*?)(?=\n##|$)/);
-
-                    return {
-                        summary, // LLM-generated summary
-                        filesModified: filesModifiedMatch ? filesModifiedMatch[1].trim().slice(0, 300) : '',
-                        decisions: '', // Included in summary
-                        fullPath: contextPath,
-                        llmEnhanced: true,
-                    };
-                }
-            }
-        } catch {
-            // Fall through to heuristic
-        }
-    }
-
-    // Fallback to heuristic extraction
-    return extractContextSummaryFromContent(content, contextPath);
+const extractContextSummaryAsync = async (taskFolder, _taskDescription = null) => {
+    const executionPath = path.join(taskFolder, 'execution.json');
+    return extractContextSummaryFromExecutionJson(executionPath);
 };
 
 /**
- * Extracts patterns from a RESEARCH.md file (sync, heuristic version)
- * @param {string} researchPath - Path to RESEARCH.md
- * @returns {object|null} Patterns object or null
+ * @deprecated RESEARCH.md is no longer used. Use execution.json instead.
+ * Kept for backward compatibility with legacy code.
  */
-const extractResearchPatterns = (researchPath) => {
-    if (!fs.existsSync(researchPath)) {
-        return null;
-    }
-
-    const content = fs.readFileSync(researchPath, 'utf8');
-    return extractResearchPatternsFromContent(content, researchPath);
+const extractResearchPatterns = (_researchPath) => {
+    console.warn('[DEPRECATED] extractResearchPatterns is deprecated. RESEARCH.md is no longer used. Use execution.json instead.');
+    return null;
 };
 
 /**
- * Extracts patterns from RESEARCH.md content (sync, heuristic version)
- * @param {string} content - RESEARCH.md content
- * @param {string} researchPath - Path to RESEARCH.md (for reference)
- * @returns {object} Patterns object
+ * @deprecated RESEARCH.md is no longer used. Use execution.json instead.
+ * Kept for backward compatibility with legacy code.
  */
-const extractResearchPatternsFromContent = (content, researchPath = '') => {
-    // Extract execution strategy and patterns
-    const strategyMatch = content.match(/## (?:Execution )?Strategy\s*\n([\s\S]*?)(?=\n##|$)/);
-    const patternsMatch = content.match(/## (?:Code )?Patterns?\s*\n([\s\S]*?)(?=\n##|$)/);
-
-    // Extract keywords/topics from content (fallback heuristic)
-    const topicKeywords = [];
-    const keywords = ['auth', 'api', 'database', 'test', 'config', 'route', 'middleware',
-        'service', 'model', 'controller', 'view', 'component', 'hook', 'util',
-        'validation', 'error', 'logging', 'cache', 'security', 'performance'];
-
-    keywords.forEach(kw => {
-        if (content.toLowerCase().includes(kw)) {
-            topicKeywords.push(kw);
-        }
-    });
-
-    return {
-        strategy: strategyMatch ? strategyMatch[1].trim().slice(0, 300) : '',
-        patterns: patternsMatch ? patternsMatch[1].trim().slice(0, 300) : '',
-        topics: topicKeywords,
-        fullPath: researchPath,
-    };
+const extractResearchPatternsFromContent = (_content, _researchPath = '') => {
+    console.warn('[DEPRECATED] extractResearchPatternsFromContent is deprecated. RESEARCH.md is no longer used. Use execution.json instead.');
+    return null;
 };
 
 /**
- * Extracts patterns from a RESEARCH.md file using LLM for better topic classification
- * Falls back to heuristic extraction if LLM unavailable
- * @param {string} researchPath - Path to RESEARCH.md
- * @returns {Promise<object|null>} Patterns object or null
+ * @deprecated RESEARCH.md is no longer used. Use execution.json instead.
+ * Kept for backward compatibility with legacy code.
  */
-const extractResearchPatternsAsync = async (researchPath) => {
-    if (!fs.existsSync(researchPath)) {
-        return null;
-    }
-
-    const content = fs.readFileSync(researchPath, 'utf8');
-
-    // Try LLM for better topic classification
-    const llm = getLocalLLM();
-    if (llm) {
-        try {
-            await llm.initialize();
-            if (llm.isAvailable()) {
-                // Use LLM to classify topics
-                const topics = await llm.classifyTopics(content);
-
-                if (topics && topics.length > 0) {
-                    // Extract sections with regex (fast)
-                    const strategyMatch = content.match(/## (?:Execution )?Strategy\s*\n([\s\S]*?)(?=\n##|$)/);
-                    const patternsMatch = content.match(/## (?:Code )?Patterns?\s*\n([\s\S]*?)(?=\n##|$)/);
-
-                    return {
-                        strategy: strategyMatch ? strategyMatch[1].trim().slice(0, 300) : '',
-                        patterns: patternsMatch ? patternsMatch[1].trim().slice(0, 300) : '',
-                        topics, // LLM-classified topics
-                        fullPath: researchPath,
-                        llmEnhanced: true,
-                    };
-                }
-            }
-        } catch {
-            // Fall through to heuristic
-        }
-    }
-
-    // Fallback to heuristic extraction
-    return extractResearchPatternsFromContent(content, researchPath);
+const extractResearchPatternsAsync = async (_researchPath) => {
+    console.warn('[DEPRECATED] extractResearchPatternsAsync is deprecated. RESEARCH.md is no longer used. Use execution.json instead.');
+    return null;
 };
 
 /**
@@ -468,23 +416,22 @@ const getIncrementalContext = (claudiomiroFolder, currentTask, options = {}) => 
 
         if (!isTaskCompleted(claudiomiroFolder, taskId)) continue;
 
-        const contextPath = path.join(claudiomiroFolder, taskId, 'CONTEXT.md');
-        const researchPath = path.join(claudiomiroFolder, taskId, 'RESEARCH.md');
+        const taskFolder = path.join(claudiomiroFolder, taskId);
 
         // Determine if this is a "new" task (processed after lastProcessed)
         const isNewTask = taskOrder > lastProcessedOrder;
 
         if (isNewTask) {
-            // Full summary for new tasks
+            // Full summary for new tasks - extractContextSummary uses execution.json
             context.newTasks[taskId] = {
-                context: extractContextSummary(contextPath),
-                research: extractResearchPatterns(researchPath),
+                context: extractContextSummary(taskFolder),
             };
         }
 
-        // Add to context files list
-        if (fs.existsSync(contextPath)) {
-            context.contextFiles.push(contextPath);
+        // Add BLUEPRINT.md to context files list
+        const blueprintPath = path.join(taskFolder, 'BLUEPRINT.md');
+        if (fs.existsSync(blueprintPath)) {
+            context.contextFiles.push(blueprintPath);
         }
     }
 
@@ -526,16 +473,8 @@ const buildConsolidatedContext = (claudiomiroFolder, currentTask) => {
         parts.push('\n## Recently Completed Tasks');
         for (const [taskId, taskData] of Object.entries(context.newTasks)) {
             let taskSection = `\n### ${taskId}`;
-            if (taskData.context) {
-                if (taskData.context.filesModified) {
-                    taskSection += `\n**Files Modified:**\n${taskData.context.filesModified}`;
-                }
-                if (taskData.context.decisions) {
-                    taskSection += `\n**Decisions:**\n${taskData.context.decisions}`;
-                }
-            }
-            if (taskData.research && taskData.research.patterns) {
-                taskSection += `\n**Patterns Used:**\n${taskData.research.patterns}`;
+            if (taskData.context && taskData.context.summary) {
+                taskSection += `\n**Summary:**\n${taskData.context.summary}`;
             }
             parts.push(taskSection);
         }
@@ -589,12 +528,10 @@ const buildConsolidatedContextAsync = async (claudiomiroFolder, currentTask, pro
  * @param {string} taskId - Task identifier
  */
 const markTaskCompleted = (claudiomiroFolder, taskId) => {
-    const contextPath = path.join(claudiomiroFolder, taskId, 'CONTEXT.md');
-    const researchPath = path.join(claudiomiroFolder, taskId, 'RESEARCH.md');
+    const taskFolder = path.join(claudiomiroFolder, taskId);
 
     const taskSummary = {
-        context: extractContextSummary(contextPath),
-        research: extractResearchPatterns(researchPath),
+        context: extractContextSummary(taskFolder),
         completedAt: new Date().toISOString(),
     };
 
@@ -707,6 +644,7 @@ const getFileSummary = async (projectFolder, filePath) => {
 
 /**
  * Gets context file paths without reading content (for reference only)
+ * Returns BLUEPRINT.md + execution.json for valid task structures
  * @param {string} claudiomiroFolder - Path to .claudiomiro folder
  * @param {string} currentTask - Current task
  * @param {object} options - Filter options
@@ -714,9 +652,6 @@ const getFileSummary = async (projectFolder, filePath) => {
  */
 const getContextFilePaths = (claudiomiroFolder, currentTask, options = {}) => {
     const {
-        includeResearch = true,
-        includeContext = true,
-        includeTodo = false,
         onlyCompleted = true,
     } = options;
 
@@ -733,28 +668,15 @@ const getContextFilePaths = (claudiomiroFolder, currentTask, options = {}) => {
             continue;
         }
 
-        if (includeContext) {
-            const contextPath = path.join(taskPath, 'CONTEXT.md');
-            if (fs.existsSync(contextPath)) {
-                paths.push(contextPath);
-            }
-        }
+        // Only return paths for valid task structures (BLUEPRINT.md + execution.json)
+        const blueprintPath = path.join(taskPath, 'BLUEPRINT.md');
+        const executionPath = path.join(taskPath, 'execution.json');
 
-        if (includeResearch) {
-            const researchPath = path.join(taskPath, 'RESEARCH.md');
-            if (fs.existsSync(researchPath)) {
-                paths.push(researchPath);
-            }
+        if (fs.existsSync(blueprintPath)) {
+            paths.push(blueprintPath);
         }
-
-        if (includeTodo) {
-            const todoPath = path.join(taskPath, 'TODO.md');
-            if (fs.existsSync(todoPath)) {
-                const content = fs.readFileSync(todoPath, 'utf8');
-                if (content.startsWith('Fully implemented: YES')) {
-                    paths.push(todoPath);
-                }
-            }
+        if (fs.existsSync(executionPath)) {
+            paths.push(executionPath);
         }
     }
 
@@ -916,11 +838,13 @@ module.exports = {
     getTaskOrder,
     getTaskFolders,
     isTaskCompleted,
-    // Context extraction (sync + async with LLM)
+    // Structure validation
+    hasValidTaskStructure,
+    // Context extraction (sync + async)
     extractContextSummary,
     extractContextSummaryAsync,
     extractContextSummaryFromContent,
-    // Research patterns (sync + async with LLM)
+    // Research patterns (deprecated - kept for backward compatibility)
     extractResearchPatterns,
     extractResearchPatternsAsync,
     extractResearchPatternsFromContent,

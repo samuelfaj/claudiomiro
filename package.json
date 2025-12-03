@@ -1,6 +1,6 @@
 {
   "name": "claudiomiro",
-  "version": "2.5.3",
+  "version": "2.6.0",
   "main": "index.js",
   "bin": {
     "claudiomiro": "./index.js"
@@ -32,6 +32,8 @@
   "dependencies": {
     "@ast-grep/napi": "^0.40.0",
     "@inquirer/prompts": "^7.8.6",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
     "boxen": "^5.1.2",
     "chalk": "^4.1.2",
     "diff": "^8.0.2",

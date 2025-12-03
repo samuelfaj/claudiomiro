@@ -19,23 +19,30 @@ const buildReflectionTrajectory = (task, additionalNotes = '') => {
     const taskFolder = path.join(state.claudiomiroFolder, task);
     const sections = [];
 
-    const todoPath = path.join(taskFolder, 'TODO.md');
-    const contextPath = path.join(taskFolder, 'CONTEXT.md');
-    const researchPath = path.join(taskFolder, 'RESEARCH.md');
+    // New 2-file model: BLUEPRINT.md + execution.json
+    const blueprintPath = path.join(taskFolder, 'BLUEPRINT.md');
+    const executionPath = path.join(taskFolder, 'execution.json');
 
-    const todo = readIfExists(todoPath);
-    if (todo) {
-        sections.push(`## Implementation Plan (TODO.md)\n${todo}`);
+    const blueprint = readIfExists(blueprintPath);
+    if (blueprint) {
+        sections.push(`## Task Blueprint (BLUEPRINT.md)\n${blueprint}`);
     }
 
-    const context = readIfExists(contextPath);
-    if (context) {
-        sections.push(`## Execution Summary (CONTEXT.md)\n${context}`);
-    }
-
-    const research = readIfExists(researchPath);
-    if (research) {
-        sections.push(`## Research Notes (RESEARCH.md)\n${research}`);
+    const executionContent = readIfExists(executionPath);
+    if (executionContent) {
+        try {
+            const execution = JSON.parse(executionContent);
+            const executionSummary = [
+                `Status: ${execution.status}`,
+                `Current Phase: ${execution.currentPhase?.name || 'N/A'}`,
+                `Phases: ${(execution.phases || []).map(p => `${p.name}(${p.status})`).join(', ')}`,
+                `Artifacts: ${(execution.artifacts || []).length} tracked`,
+                `Uncertainties: ${(execution.uncertainties || []).length} logged`,
+            ].join('\n');
+            sections.push(`## Execution State (execution.json)\n${executionSummary}`);
+        } catch (_e) {
+            sections.push(`## Execution State (execution.json)\n${executionContent}`);
+        }
     }
 
     if (additionalNotes) {

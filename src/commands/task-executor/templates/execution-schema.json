@@ -1,0 +1,357 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "execution-schema-v1",
+  "title": "Execution State Schema",
+  "description": "JSON Schema for execution.json - tracks task execution state",
+  "type": "object",
+  "required": ["$schema", "version", "task", "title", "status", "started", "attempts"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "const": "execution-schema-v1",
+      "description": "Schema identifier"
+    },
+    "version": {
+      "type": "string",
+      "description": "Schema version"
+    },
+    "task": {
+      "type": "string",
+      "pattern": "^TASK\\d+$",
+      "description": "Task identifier (e.g., TASK0, TASK1)"
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable task title"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "in_progress", "completed", "blocked"],
+      "description": "Current task status"
+    },
+    "started": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO timestamp when task started"
+    },
+    "attempts": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of execution attempts"
+    },
+    "errorHistory": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["timestamp", "message"],
+        "properties": {
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "ISO timestamp when error occurred"
+          },
+          "message": {
+            "type": "string",
+            "description": "Error message"
+          },
+          "stack": {
+            "type": ["string", "null"],
+            "description": "Error stack trace (first 3 lines)"
+          },
+          "phase": {
+            "type": ["string", "null"],
+            "description": "Phase where error occurred"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "History of errors encountered during execution"
+    },
+    "currentPhase": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Current phase number"
+        },
+        "name": {
+          "type": "string",
+          "description": "Current phase name"
+        },
+        "lastAction": {
+          "type": ["string", "null"],
+          "description": "Description of last action taken"
+        }
+      },
+      "required": ["id", "name"],
+      "additionalProperties": false
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "status"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Phase number"
+          },
+          "name": {
+            "type": "string",
+            "description": "Phase name (e.g., Preparation, Core Implementation)"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "in_progress", "completed", "blocked"],
+            "description": "Phase status"
+          },
+          "preConditions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["check", "command", "expected", "passed"],
+              "properties": {
+                "check": {
+                  "type": "string",
+                  "description": "Description of what is being checked"
+                },
+                "command": {
+                  "type": "string",
+                  "description": "Shell command to run"
+                },
+                "expected": {
+                  "type": "string",
+                  "description": "Expected output or condition"
+                },
+                "passed": {
+                  "type": "boolean",
+                  "description": "Whether the check passed"
+                },
+                "evidence": {
+                  "type": ["string", "null"],
+                  "description": "Actual output from command"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["description", "completed"],
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "description": "Description of phase item/task"
+                },
+                "completed": {
+                  "type": "boolean",
+                  "description": "Whether this item is completed"
+                },
+                "source": {
+                  "type": ["string", "null"],
+                  "description": "Source reference (e.g., file:line) for this item"
+                },
+                "evidence": {
+                  "type": ["string", "null"],
+                  "description": "Evidence or output demonstrating completion"
+                }
+              },
+              "additionalProperties": false
+            },
+            "description": "Individual items/tasks within this phase"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "uncertainties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "topic", "assumption", "confidence"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^U\\d+$",
+            "description": "Uncertainty identifier (e.g., U1, U2)"
+          },
+          "topic": {
+            "type": "string",
+            "description": "Topic of uncertainty"
+          },
+          "assumption": {
+            "type": "string",
+            "description": "What was assumed"
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["LOW", "MEDIUM", "HIGH"],
+            "description": "Confidence level in assumption"
+          },
+          "resolution": {
+            "type": ["string", "null"],
+            "description": "How the uncertainty was resolved (null if unresolved)"
+          },
+          "resolvedConfidence": {
+            "type": ["string", "null"],
+            "enum": ["LOW", "MEDIUM", "HIGH", null],
+            "description": "Confidence after resolution (null if unresolved)"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["type", "path", "verified"],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["created", "modified"],
+            "description": "Whether file was created or modified"
+          },
+          "path": {
+            "type": "string",
+            "description": "File path"
+          },
+          "verified": {
+            "type": "boolean",
+            "description": "Whether artifact was verified"
+          },
+          "verification": {
+            "type": ["string", "null"],
+            "description": "Command or description of verification"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "successCriteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["criterion", "passed"],
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "description": "Success criterion description"
+          },
+          "command": {
+            "type": ["string", "null"],
+            "description": "Command to verify criterion (null for manual checks)"
+          },
+          "expected": {
+            "type": ["string", "null"],
+            "description": "Expected output or condition"
+          },
+          "passed": {
+            "type": ["boolean", "null"],
+            "description": "Whether criterion passed (null for manual checks)"
+          },
+          "evidence": {
+            "type": ["string", "null"],
+            "description": "Actual output from command"
+          },
+          "source": {
+            "type": ["string", "null"],
+            "description": "Source reference for the criterion"
+          },
+          "testType": {
+            "type": ["string", "null"],
+            "enum": ["AUTO", "MANUAL", "BOTH", null],
+            "description": "Type of test (AUTO, MANUAL, or BOTH)"
+          },
+          "manualCheck": {
+            "type": ["string", "null"],
+            "description": "Manual check instructions"
+          }
+        },
+        "additionalProperties": false
+      },
+      "description": "Success criteria validation results"
+    },
+    "beyondTheBasics": {
+      "type": "object",
+      "properties": {
+        "extras": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Extra improvements made"
+        },
+        "edgeCases": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Edge cases handled"
+        },
+        "downstreamImpact": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Impact on downstream components"
+        },
+        "cleanup": {
+          "type": "object",
+          "required": ["debugLogsRemoved", "formattingConsistent", "deadCodeRemoved"],
+          "properties": {
+            "debugLogsRemoved": {
+              "type": "boolean",
+              "description": "Whether debug logs were removed"
+            },
+            "formattingConsistent": {
+              "type": "boolean",
+              "description": "Whether formatting is consistent"
+            },
+            "deadCodeRemoved": {
+              "type": "boolean",
+              "description": "Whether dead code was removed"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "completion": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["pending_validation", "completed", "blocked", "failed"],
+          "description": "Completion validation status"
+        },
+        "summary": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Summary of what was done"
+        },
+        "deviations": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Deviations from original plan"
+        },
+        "forFutureTasks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Notes for future related tasks"
+        },
+        "codeReviewPassed": {
+          "type": "boolean",
+          "description": "Whether code review passed"
+        },
+        "blockedBy": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of blocking issues or dependencies"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

@@ -27,24 +27,20 @@ If you choose **NOT** to split:
     - {{taskFolder}}.3
     (Create only as many as are logically necessary. Do not create empty subtasks.)
 
-  - You MUST update all TASK.md files inside {{claudiomiroFolder}} with the new dependencies and numbering.
+  - You MUST update all BLUEPRINT.md files inside {{claudiomiroFolder}} with the new dependencies and numbering.
 
 ### Required structure for EACH subtask
   You MUST create for each subtask:
-  - TASK.md   → objective, scope, and acceptance criteria
-  - PROMPT.md → the precise execution prompt for this subtask
-  - TODO.md   → concrete, verifiable steps to complete the subtask
+  - BLUEPRINT.md   → task definition with identity, context chain, scope, implementation strategy
 
 Example:
   {{taskFolder}}.1
-    ├─ TASK.md
-    ├─ PROMPT.md
-    └─ TODO.md
+    └─ BLUEPRINT.md
 
-CRITICAL: First line of EACH TASK.md MUST be the updated dependencies list:
+CRITICAL: First line of EACH BLUEPRINT.md MUST be the updated dependencies list:
 `@dependencies [LIST]`
 
-CRITICAL: If you split a task: You MUST update all TASK.md files inside {{claudiomiroFolder}} with the new dependencies and numbering.
+CRITICAL: If you split a task: You MUST update all BLUEPRINT.md files inside {{claudiomiroFolder}} with the new dependencies and numbering.
 
 ### Dependency & coherence rules
 - Each subtask must be independently executable and testable.

@@ -47,6 +47,105 @@ Read and understand the user's request **deeply**, incorporating the clarificati
 
 ---
 
+## 🧠 MANDATORY: REASONING.md (Chain of Thought Documentation)
+
+**CRITICAL:** Before creating AI_PROMPT.md, you MUST first create:
+`{{claudiomiroFolder}}/REASONING.md`
+
+This file documents YOUR REASONING PROCESS. It is NOT part of the final AI_PROMPT.md, but captures how you analyzed the request. This ensures transparent, auditable decision-making.
+
+### Structure of REASONING.md
+
+```markdown
+# Reasoning Analysis for AI_PROMPT.md Generation
+
+## 1. Requirement Extraction
+
+For EACH requirement identified in INITIAL_PROMPT.md:
+
+| Req ID | Exact Quote | Line | Intent Analysis | Hidden Dependencies | Complexity |
+|--------|-------------|------|-----------------|---------------------|------------|
+| R1 | "[verbatim text from INITIAL_PROMPT.md]" | 5 | [What user REALLY wants] | [What else is needed] | [Low/Med/High - Why?] |
+| R2 | "[verbatim text]" | 12 | [True intent] | [Dependencies] | [Complexity + reasoning] |
+
+**Checkpoint:** Every bullet/item from INITIAL_PROMPT.md must appear above.
+
+## 2. Clarification Impact Analysis
+
+For EACH answer in CLARIFICATION_ANSWERS.json:
+
+| Question | Answer | Impact on AI_PROMPT.md |
+|----------|--------|------------------------|
+| [Question asked] | [User's answer] | [How this changes/clarifies the prompt] |
+
+## 3. Context Gap Analysis
+
+Before gathering context, identify what's MISSING:
+
+### Architecture Gaps
+- [ ] Project structure clear? [YES/NO - what's unclear]
+- [ ] Tech stack identified? [YES/NO - what's missing]
+- [ ] Design patterns known? [YES/NO - what to investigate]
+
+### Pattern Gaps
+- [ ] Similar features exist? [YES/NO - need to find examples]
+- [ ] Coding conventions clear? [YES/NO - what to verify]
+- [ ] Testing approach known? [YES/NO - what to discover]
+
+### Integration Gaps
+- [ ] Affected modules identified? [YES/NO - what to map]
+- [ ] Dependencies clear? [YES/NO - what to trace]
+- [ ] Breaking changes possible? [YES/NO - what to check]
+
+## 4. Decision Log
+
+For EACH significant decision made while creating AI_PROMPT.md:
+
+| Decision | Alternatives Considered | Reasoning | Evidence | Confidence |
+|----------|------------------------|-----------|----------|------------|
+| [What you decided] | [Other options] | [Why this choice] | [file:line or clarification] | [Low/Med/High] |
+
+**Example:**
+| Use JWT auth pattern | Session-based, OAuth | Existing pattern in codebase | src/middleware/auth.ts:15 | HIGH |
+
+## 5. Uncertainty Register
+
+List any uncertainties that may affect AI_PROMPT.md quality:
+
+| ID | Topic | Assumption Made | Confidence | Evidence |
+|----|-------|-----------------|------------|----------|
+| U1 | [What's unclear] | [What you assumed] | [Low/Med/High] | [Why you think this] |
+
+**Stop Rule:** If confidence is LOW on a critical decision → Document in AI_PROMPT.md § Reasoning Boundaries
+
+## 6. Self-Validation
+
+Before proceeding to AI_PROMPT.md creation, verify:
+
+- [ ] All requirements from INITIAL_PROMPT.md are listed in § Requirement Extraction
+- [ ] All clarification answers are analyzed in § Clarification Impact
+- [ ] All context gaps are identified in § Context Gap Analysis
+- [ ] All significant decisions have evidence in § Decision Log
+- [ ] All uncertainties are documented in § Uncertainty Register
+
+**If ANY checkbox is unchecked → Complete it before proceeding**
+```
+
+**CRITICAL RULES:**
+1. MUST create REASONING.md BEFORE creating AI_PROMPT.md
+2. MUST include verbatim quotes from INITIAL_PROMPT.md (not paraphrasing)
+3. MUST provide file:line evidence for decisions
+4. MUST document uncertainties with confidence levels
+5. If confidence is LOW on critical items → Mark as uncertainty, don't guess
+
+**Why This Matters:**
+- Transparent reasoning = auditable decisions
+- Evidence-based = no hallucination
+- Gap identification = thorough context gathering
+- Uncertainty logging = honest about unknowns
+
+---
+
 ## STAGE 2 — CONTEXT RECONSTRUCTION (Most Important!)
 Expand the context intelligently — **Context > Instructions**
 
@@ -158,6 +257,59 @@ Convert **every bullet or implicit expectation** from the original user request 
 - [ ] Error case: what happens when X fails
 - [ ] Edge case: behavior when Y is empty/null/invalid
 
+### 4.1 🚫 Guardrails (Prohibitions)
+Define explicit constraints on what the agent MUST NOT do. These complement Acceptance Criteria by preventing common mistakes and scope creep.
+
+**Categories to Consider:**
+
+**Scope Guardrails (Prevent Scope Creep):**
+- DO NOT add features not explicitly requested
+- DO NOT refactor code outside the task scope
+- DO NOT "improve" unrelated code while implementing
+- DO NOT add dependencies unless strictly necessary
+
+**Code Quality Guardrails (Prevent Over-Engineering):**
+- DO NOT create abstractions for single-use cases
+- DO NOT add configuration options "for flexibility" unless requested
+- DO NOT add comments to code you didn't write
+- DO NOT add error handling for impossible scenarios
+
+**Architecture Guardrails (Preserve System Integrity):**
+- DO NOT change existing public APIs without explicit requirement
+- DO NOT modify shared utilities used by other modules
+- DO NOT introduce new patterns different from existing codebase conventions
+- DO NOT break backward compatibility unless explicitly requested
+
+**Testing Guardrails (Prevent Test Bloat):**
+- DO NOT write tests for unchanged code
+- DO NOT add integration tests when unit tests suffice
+- DO NOT mock internal implementation details
+- DO NOT test external library behavior
+
+**Security Guardrails (Prevent Vulnerabilities):**
+- DO NOT commit secrets, API keys, or credentials
+- DO NOT disable security validations for convenience
+- DO NOT expose internal endpoints publicly
+- DO NOT trust user input without validation
+
+**Format:**
+```markdown
+🚫 **Guardrails:**
+- [ ] DO NOT [specific prohibition + reason]
+- [ ] DO NOT [specific prohibition + reason]
+- [ ] NEVER [absolute prohibition]
+- [ ] AVOID [soft prohibition with exception]
+```
+
+**Example:**
+```markdown
+🚫 **Guardrails:**
+- [ ] DO NOT modify src/auth/* (out of scope - auth team owns this)
+- [ ] DO NOT add new npm packages without justification
+- [ ] NEVER store passwords in plain text
+- [ ] AVOID direct database queries (use repository pattern from existing code)
+```
+
 ### 5. ⚙️ Implementation Guidance
 Detail how the agent should think, plan, and execute:
 
@@ -204,7 +356,7 @@ Detail how the agent should think, plan, and execute:
 
 **Coverage Target:**
 - 100% of changed lines (if feasible)
-- If impossible, document why in TODO.md
+- If impossible, document why in execution.json (uncertainties or completion.notes)
 
 **Summary Rule:**
 > When in doubt, create a minimal test. Efficiency and relevance over total coverage.
@@ -261,6 +413,290 @@ Before outputting `AI_PROMPT.md`, verify using this checklist:
 - [ ] Not vague or open to interpretation
 - [ ] Not missing environmental context
 - [ ] Not skipping concrete examples
+
+**Guardrails Defined:**
+- [ ] Scope prohibitions identified (what NOT to touch)
+- [ ] Architecture guardrails defined (patterns to preserve)
+- [ ] Security prohibitions explicit (what NEVER to do)
+- [ ] Each guardrail has a reason (not just "don't")
+
+---
+
+## 📚 FEW-SHOT EXAMPLES
+
+Learn from these examples to understand what makes a GOOD vs BAD AI_PROMPT.md.
+
+### Example 1: ✅ GOOD — REST API Feature (Complete Context)
+
+**INITIAL_PROMPT.md:**
+```
+Add a products endpoint to the API with CRUD operations.
+Products should have: name, price, description, and category.
+```
+
+**REASONING.md (Summary):**
+```
+## Requirement Extraction
+| R1 | "Add a products endpoint to the API" | 1 | RESTful CRUD for products | DB schema, auth, validation | Medium |
+| R2 | "Products should have: name, price, description, category" | 2 | Schema definition | Prisma model, migrations | Low |
+
+## Context Gap Analysis
+- [x] Project structure: Found src/routes/, src/services/, src/models/
+- [x] Tech stack: Express + Prisma + PostgreSQL (package.json)
+- [x] Similar feature: src/routes/users.ts for pattern reference
+
+## Decision Log
+| Use Prisma model | Raw SQL, TypeORM | Existing pattern | schema.prisma:1 | HIGH |
+| Follow users.ts pattern | New pattern | Consistency | src/routes/users.ts | HIGH |
+```
+
+**AI_PROMPT.md (Generated):**
+```markdown
+# 🎯 Purpose
+Implement RESTful CRUD operations for products resource, enabling creation, retrieval, update, and deletion of product entities.
+
+# 📁 Environment & Codebase Context
+**Tech Stack:**
+- Runtime: Node.js 18+
+- Framework: Express 4.18.x with TypeScript 5.x
+- Database: PostgreSQL 15 with Prisma ORM 5.x
+- Testing: Jest 29.x with supertest
+- Validation: Joi 17.x
+
+**Project Structure:**
+- `src/routes/` - Express route handlers
+- `src/services/` - Business logic layer
+- `src/models/` - Prisma schema and types
+- `src/validators/` - Joi validation schemas
+- `src/middleware/` - Auth, error handling
+
+**Existing Patterns:**
+- CRUD pattern: See `src/routes/users.ts:20-120` for reference
+- Validation: See `src/validators/userValidator.ts:10-45`
+- Error handling: See `src/middleware/errorHandler.ts:15-40`
+- Auth: JWT middleware at `src/middleware/auth.ts:8-25`
+
+# 🧩 Related Code Context
+- **Follow this pattern:** `src/routes/users.ts:25-80` (CRUD structure)
+- **Validation approach:** `src/validators/userValidator.ts:12-30`
+- **Service layer:** `src/services/userService.ts:15-60`
+- **Prisma model example:** `prisma/schema.prisma:45-55` (User model)
+
+# ✅ Acceptance Criteria
+- [ ] GET /products returns paginated list (default 20, max 100 per page)
+- [ ] GET /products/:id returns single product or 404
+- [ ] POST /products creates product with validation (name required, 1-200 chars; price required, > 0)
+- [ ] PUT /products/:id updates product with same validation rules
+- [ ] DELETE /products/:id soft-deletes (sets deletedAt timestamp)
+- [ ] All endpoints require JWT authentication
+- [ ] Invalid input returns 400 with field-level error details
+- [ ] Non-existent ID returns 404 with clear message
+- [ ] Unauthorized request returns 401
+
+# 🚫 Guardrails
+**Scope:**
+- [ ] DO NOT modify existing user routes (out of scope)
+- [ ] DO NOT change auth middleware (shared module)
+- [ ] DO NOT add new packages (use existing Prisma + Express)
+
+**Architecture:**
+- [ ] DO NOT create new patterns (follow users.ts exactly)
+- [ ] DO NOT add global error handlers (use existing from errorHandler.ts)
+- [ ] AVOID raw SQL (use Prisma ORM consistently)
+
+**Security:**
+- [ ] NEVER expose product data without authentication
+- [ ] DO NOT skip input validation on any endpoint
+
+# ⚙️ Implementation Guidance
+**Layer 0 (Foundation):**
+- Create Prisma model for Product
+- Run migration: `npx prisma migrate dev`
+
+**Layer 1 (Features - Parallel):**
+- Create productValidator.ts
+- Create productService.ts
+- Create products.ts route
+
+**Layer 2 (Integration):**
+- Register route in app.ts
+- Add tests
+```
+
+**Why This is GOOD:**
+- ✅ Specific tech stack with versions
+- ✅ File references with line numbers
+- ✅ Measurable acceptance criteria
+- ✅ Edge cases covered (pagination limits, validation rules)
+- ✅ Concrete patterns to follow
+- ✅ Clear layered implementation guidance
+- ✅ Explicit guardrails with reasons
+
+---
+
+### Example 2: ❌ BAD — Vague Feature (Missing Context)
+
+**INITIAL_PROMPT.md:**
+```
+Add validation to the forms
+```
+
+**REASONING.md (Missing or Incomplete):**
+```
+## Requirement Extraction
+| R1 | "Add validation to the forms" | 1 | Validate forms | Unknown | Unknown |
+
+## Context Gap Analysis
+- [ ] Which forms? NOT INVESTIGATED
+- [ ] What framework? NOT CHECKED
+- [ ] Validation rules? NOT SPECIFIED
+```
+
+**AI_PROMPT.md (Generated - BAD):**
+```markdown
+# 🎯 Purpose
+Add validation to forms.
+
+# 📁 Environment & Codebase Context
+Unknown - please check.
+
+# ✅ Acceptance Criteria
+- [ ] Validate forms
+- [ ] Show errors
+```
+
+**Why This is BAD:**
+- ❌ No tech stack identified
+- ❌ No file references
+- ❌ Vague criteria ("validate forms" - which forms? what rules?)
+- ❌ No patterns referenced
+- ❌ No edge cases
+- ❌ Impossible to execute without asking questions
+
+**How to FIX:**
+1. Search codebase for form files (`*.form.ts`, `*.tsx`, etc.)
+2. Identify frontend framework (React, Vue, Angular)
+3. Find existing validation patterns
+4. Specify exact validation rules per field
+5. Reference concrete files with line numbers
+
+---
+
+### Example 3: ✅ GOOD — Complex Feature (Multi-Layer)
+
+**INITIAL_PROMPT.md:**
+```
+Implement real-time notifications for order status changes.
+Users should receive push notifications when their order status changes.
+Support: order placed, shipped, delivered, cancelled.
+```
+
+**REASONING.md (Summary):**
+```
+## Requirement Extraction
+| R1 | "real-time notifications for order status" | 1 | WebSocket/SSE + Push | FCM, WebSocket server, event system | HIGH |
+| R2 | "order placed, shipped, delivered, cancelled" | 3 | 4 distinct status events | Event handlers per status | Medium |
+
+## Decision Log
+| Use WebSocket | SSE, Polling | Real-time requirement, existing ws setup | src/websocket/server.ts | HIGH |
+| Use FCM | OneSignal, custom | Already configured in project | firebase.config.ts | HIGH |
+
+## Uncertainty Register
+| U1 | Rate limiting | Assume 1 notification per status change | Medium | No existing rate limit code |
+```
+
+**AI_PROMPT.md (Generated):**
+```markdown
+# 🎯 Purpose
+Implement real-time notification system for order status changes, supporting push notifications via FCM and WebSocket for in-app updates.
+
+# 📁 Environment & Codebase Context
+**Tech Stack:**
+- Backend: Node.js + Express
+- WebSocket: ws library (see src/websocket/server.ts)
+- Push: Firebase Cloud Messaging (configured in firebase.config.ts)
+- Database: PostgreSQL with Prisma
+- Events: Custom event emitter (src/events/emitter.ts)
+
+**Related Systems:**
+- Order service: src/services/orderService.ts
+- WebSocket server: src/websocket/server.ts:1-50
+- FCM setup: src/services/pushService.ts (partial implementation)
+- User tokens: users.fcmToken in Prisma schema
+
+# 🧩 Related Code Context
+- **Event pattern:** src/events/orderEvents.ts:10-30
+- **WebSocket broadcast:** src/websocket/broadcast.ts:15-25
+- **Push notification:** src/services/pushService.ts:20-40 (extend this)
+- **Order status enum:** prisma/schema.prisma:78-82
+
+# ✅ Acceptance Criteria
+**Functional:**
+- [ ] ORDER_PLACED triggers notification within 500ms
+- [ ] ORDER_SHIPPED triggers notification with tracking info
+- [ ] ORDER_DELIVERED triggers notification with delivery confirmation
+- [ ] ORDER_CANCELLED triggers notification with reason
+- [ ] WebSocket sends real-time update to connected clients
+- [ ] FCM push sent to user's registered devices
+- [ ] Notification stored in database for history
+
+**Edge Cases:**
+- [ ] User has no FCM token → Skip push, log warning
+- [ ] WebSocket disconnected → Rely on push only
+- [ ] Multiple devices → Send to all registered tokens
+- [ ] Rapid status changes → Debounce within 5 seconds
+
+**Error Handling:**
+- [ ] FCM failure → Retry 3 times with exponential backoff
+- [ ] WebSocket failure → Silent fail, logged
+- [ ] Database failure → Queue notification for retry
+
+# ⚙️ Implementation Guidance
+**Layer 0 (Foundation):**
+- Create Notification model in Prisma
+- Add migration for notifications table
+- Create notification event types
+
+**Layer 1 (Core - Parallel):**
+- NotificationService: create, store, retrieve
+- OrderStatusListener: subscribe to order events
+- WebSocketNotifier: broadcast to connected clients
+- PushNotifier: send via FCM
+
+**Layer 2 (Integration):**
+- Wire OrderService to emit events on status change
+- Connect listeners to event emitter
+- Add notification history endpoint
+
+**Layer 3 (Validation):**
+- Integration tests for each status transition
+- Verify WebSocket delivery
+- Verify push notification delivery (mock FCM)
+```
+
+**Why This is GOOD:**
+- ✅ Complex feature broken into clear layers
+- ✅ Multiple technologies documented (WebSocket, FCM)
+- ✅ Specific timing requirements (500ms)
+- ✅ Edge cases explicitly listed
+- ✅ Error handling defined
+- ✅ References to existing code patterns
+- ✅ Clear success criteria per status
+
+---
+
+### Key Takeaways from Examples
+
+| Aspect | ✅ GOOD | ❌ BAD |
+|--------|---------|--------|
+| Tech Stack | "Node.js 18+, Express 4.18.x, Prisma 5.x" | "Unknown" or missing |
+| File References | "src/routes/users.ts:25-80" | No files mentioned |
+| Criteria | "Returns 400 with field-level error details" | "Show errors" |
+| Edge Cases | "User has no FCM token → Skip push, log warning" | Not mentioned |
+| Patterns | "Follow pattern in src/validators/userValidator.ts:12-30" | "Please check" |
+| Layers | "Layer 0: Foundation → Layer 1: Features → Layer 2: Integration" | Single vague step |
+
+**Remember:** A stranger reading AI_PROMPT.md should be able to implement the feature WITHOUT asking questions.
 
 ---
 

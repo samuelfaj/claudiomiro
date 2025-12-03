@@ -5,27 +5,27 @@ const state = require('../../shared/config/state');
 const { startFresh } = require('./services/file-manager');
 const { step0, step1, step2, step3, step7, step8 } = require('./steps');
 const { DAGExecutor } = require('./services/dag-executor');
-const { isFullyImplemented, hasApprovedCodeReview } = require('./utils/validation');
+const { isCompletedFromExecution, hasApprovedCodeReview } = require('./utils/validation');
 const { detectGitConfiguration } = require('../../shared/services/git-detector');
 const { getMultilineInput, getSimpleInput } = require('../../shared/services/prompt-reader');
 const { createBranches, getCurrentBranch } = require('../../shared/services/git-manager');
 
-// Note: This uses the sync version (heuristic-based) for building the initial task graph.
-// The async version with Local LLM support is used in dag-executor.js for critical execution checks.
+// Uses execution.json to check if task is completed and approved
 const isTaskApproved = (taskName) => {
     if (!state.claudiomiroFolder) {
         return false;
     }
 
     const taskFolder = path.join(state.claudiomiroFolder, taskName);
-    const todoPath = path.join(taskFolder, 'TODO.md');
+    const executionPath = path.join(taskFolder, 'execution.json');
     const codeReviewPath = path.join(taskFolder, 'CODE_REVIEW.md');
 
-    if (!fs.existsSync(todoPath)) {
+    if (!fs.existsSync(executionPath)) {
         return false;
     }
 
-    if (!isFullyImplemented(todoPath)) {
+    const completionResult = isCompletedFromExecution(executionPath);
+    if (!completionResult.completed) {
         return false;
     }
 
@@ -432,7 +432,8 @@ const chooseAction = async (i, args) => {
                 logger.info('Step 1 skipped (not in --steps list)');
                 return { done: true };
             }
-            return { step: step1(sameBranch) };
+            const maxRefinementIterations = noLimit ? Infinity : maxAttemptsPerTask;
+            return { step: step1(sameBranch, maxRefinementIterations) };
         }
 
         // If AI_PROMPT.md exists but no tasks yet, run step2
@@ -480,7 +481,7 @@ const chooseAction = async (i, args) => {
     // ACTIVATE DAG EXECUTOR: If we already have @dependencies defined, use parallel execution
     let taskGraph = buildTaskGraph();
 
-    if (!allHasTodo()) {
+    if (!allHasExecution()) {
         const shouldRunDAG = shouldRunStep(4);
 
         if (!shouldRunDAG) {
@@ -713,7 +714,7 @@ const chooseAction = async (i, args) => {
     }
 };
 
-const allHasTodo = () => {
+const allHasExecution = () => {
     if (!fs.existsSync(state.claudiomiroFolder)) {
         return null;
     }
@@ -732,7 +733,7 @@ const allHasTodo = () => {
     }
 
     for (const task of tasks) {
-        if (!fs.existsSync(path.join(state.claudiomiroFolder, task, 'TODO.md'))) {
+        if (!fs.existsSync(path.join(state.claudiomiroFolder, task, 'execution.json'))) {
             return false;
         }
 
@@ -745,7 +746,7 @@ const allHasTodo = () => {
 };
 
 /**
- * Builds the task graph by reading dependencies from each TASK.md
+ * Builds the task graph by reading dependencies from each BLUEPRINT.md
  * @returns {Object|null} Task graph { TASK1: {deps: [], status: 'pending'}, ... } or null if no @dependencies
  */
 const buildTaskGraph = () => {
@@ -770,10 +771,10 @@ const buildTaskGraph = () => {
     let hasAnyDependencyTag = false;
 
     for (const task of tasks) {
-        const taskMdPath = path.join(state.claudiomiroFolder, task, 'TASK.md');
+        const taskMdPath = path.join(state.claudiomiroFolder, task, 'BLUEPRINT.md');
 
         if (!fs.existsSync(taskMdPath)) {
-            // Task without TASK.md yet, cannot build graph
+            // Task without BLUEPRINT.md yet, cannot build graph
             return null;
         }
         const taskMd = fs.readFileSync(taskMdPath, 'utf-8');
