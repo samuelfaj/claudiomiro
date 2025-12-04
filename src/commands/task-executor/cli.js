@@ -41,6 +41,54 @@ const hasCriticalReviewPassed = () => {
     return fs.existsSync(criticalReviewPassedPath);
 };
 
+// List of all known CLI flags for validation
+const KNOWN_FLAGS = [
+    '--continue',
+    '--prompt=',
+    '--backend=',
+    '--frontend=',
+    '--legacy-system=',
+    '--legacy-backend=',
+    '--legacy-frontend=',
+    '--fresh',
+    '--push=',
+    '--same-branch',
+    '--no-limit',
+    '--limit=',
+    '--codex',
+    '--claude',
+    '--deep-seek',
+    '--glm',
+    '--gemini',
+    '--steps=',
+    '--step=',
+    '--maxConcurrent=',
+];
+
+/**
+ * Validates that all arguments starting with '--' are known flags.
+ * Exits with error if unknown flags are found.
+ * @param {string[]} args - Command line arguments
+ */
+const validateArgs = (args) => {
+    const flagArgs = args.filter(arg => arg.startsWith('--'));
+
+    const unknownFlags = flagArgs.filter(flag => {
+        return !KNOWN_FLAGS.some(known => {
+            if (known.endsWith('=')) {
+                return flag.startsWith(known);
+            }
+            return flag === known;
+        });
+    });
+
+    if (unknownFlags.length > 0) {
+        logger.error(`Unknown argument(s): ${unknownFlags.join(', ')}`);
+        logger.info('Run "claudiomiro --help" to see available options.');
+        process.exit(1);
+    }
+};
+
 // Function to find all subtasks of a main task
 function findSubtasks(mainTask, allTasks) {
     return allTasks.filter(task => {
@@ -129,28 +177,8 @@ const chooseAction = async (i, args) => {
     };
 
     // Filter args to get only the directory
-    const filteredArgs = args.filter(arg =>
-        arg !== '--fresh' &&
-        arg !== '--continue' &&
-        !arg.startsWith('--push') &&
-        arg !== '--same-branch' &&
-        !arg.startsWith('--prompt') &&
-        !arg.startsWith('--maxConcurrent') &&
-        !arg.startsWith('--steps') &&
-        !arg.startsWith('--step=') &&
-        arg !== '--no-limit' &&
-        !arg.startsWith('--limit=') &&
-        arg !== '--codex' &&
-        arg !== '--claude' &&
-        arg !== '--deep-seek' &&
-        arg !== '--glm' &&
-        arg !== '--gemini' &&
-        !arg.startsWith('--backend=') &&
-        !arg.startsWith('--frontend=') &&
-        !arg.startsWith('--legacy-system=') &&
-        !arg.startsWith('--legacy-backend=') &&
-        !arg.startsWith('--legacy-frontend='),
-    );
+    // Any argument starting with '--' is treated as a flag, not a folder path
+    const filteredArgs = args.filter(arg => !arg.startsWith('--'));
     const folderArg = filteredArgs[0] || process.cwd();
 
     // Resolve the absolute path and set the global variable
@@ -831,21 +859,12 @@ const buildTaskGraph = () => {
 };
 
 const init = async (args) => {
+    // Validate arguments before processing
+    validateArgs(args || []);
+
     // Initialize state.folder before using it
-    const filteredArgs = (args || []).filter(arg =>
-        arg !== '--fresh' &&
-        !arg.startsWith('--push') &&
-        arg !== '--same-branch' &&
-        !arg.startsWith('--prompt') &&
-        !arg.startsWith('--maxConcurrent') &&
-        arg !== '--no-limit' &&
-        !arg.startsWith('--limit=') &&
-        !arg.startsWith('--backend=') &&
-        !arg.startsWith('--frontend=') &&
-        !arg.startsWith('--legacy-system=') &&
-        !arg.startsWith('--legacy-backend=') &&
-        !arg.startsWith('--legacy-frontend='),
-    );
+    // Any argument starting with '--' is treated as a flag, not a folder path
+    const filteredArgs = (args || []).filter(arg => !arg.startsWith('--'));
     const folderArg = filteredArgs[0] || process.cwd();
     state.setFolder(folderArg);
 
