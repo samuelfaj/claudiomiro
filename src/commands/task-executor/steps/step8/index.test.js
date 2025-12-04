@@ -11,10 +11,13 @@ jest.mock('child_process');
 jest.mock('../../../../shared/services/git-commit');
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro/task-executor',
+    workspaceClaudiomiroFolder: '/test/.claudiomiro/task-executor',
+    workspaceRoot: '/test/project',
     folder: '/test/project',
     isMultiRepo: jest.fn(),
     getGitMode: jest.fn(),
     getRepository: jest.fn(),
+    getGitRoots: jest.fn(),
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     info: jest.fn(),
@@ -38,6 +41,10 @@ describe('step8', () => {
         state.isMultiRepo.mockReturnValue(false);
         state.getGitMode.mockReturnValue(null);
         state.getRepository.mockReturnValue('/test/project');
+        state.getGitRoots.mockReturnValue([]);
+        // Reset workspace values
+        state.workspaceClaudiomiroFolder = '/test/.claudiomiro/task-executor';
+        state.workspaceRoot = '/test/project';
     });
 
     describe('step8', () => {
@@ -54,6 +61,7 @@ describe('step8', () => {
                 taskName: null,
                 shouldPush: true,
                 createPR: true,
+                cwd: '/test/project',
             });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 path.join('/test/.claudiomiro/task-executor', 'done.txt'),
@@ -79,6 +87,7 @@ describe('step8', () => {
                 taskName: null,
                 shouldPush: false,
                 createPR: false,
+                cwd: '/test/project',
             });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 path.join('/test/.claudiomiro/task-executor', 'done.txt'),
@@ -103,6 +112,7 @@ describe('step8', () => {
                 taskName: null,
                 shouldPush: true,
                 createPR: true,
+                cwd: '/test/project',
             });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 path.join('/test/.claudiomiro/task-executor', 'done.txt'),
@@ -227,6 +237,7 @@ describe('step8', () => {
                 taskName: null,
                 shouldPush: false,
                 createPR: false,
+                cwd: '/test/project',
             });
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 path.join('/test/.claudiomiro/task-executor', 'done.txt'),
@@ -240,9 +251,15 @@ describe('step8', () => {
         beforeEach(() => {
             state.isMultiRepo.mockReturnValue(true);
             state.getGitMode.mockReturnValue('monorepo');
+            state.getGitRoots.mockReturnValue(['/test/monorepo-root']);
+            state.getRepository.mockImplementation((scope) => {
+                if (scope === 'backend') return '/test/monorepo-root/backend';
+                if (scope === 'frontend') return '/test/monorepo-root/frontend';
+                return '/test/project';
+            });
         });
 
-        test('should use smartCommit with createPR for monorepo mode', async () => {
+        test('should use smartCommit with createPR for monorepo mode at git root', async () => {
             // Arrange
             smartCommit.mockResolvedValue({ success: true, method: 'shell' });
             fs.writeFileSync.mockImplementation(() => {});
@@ -250,13 +267,34 @@ describe('step8', () => {
             // Act
             await step8([], true);
 
-            // Assert - should use existing behavior (single PR via smartCommit)
+            // Assert - should use single PR via smartCommit at git root
             expect(smartCommit).toHaveBeenCalledWith({
                 taskName: null,
                 shouldPush: true,
                 createPR: true,
+                cwd: '/test/monorepo-root', // Uses git root, not workspace root
             });
             expect(smartCommit).toHaveBeenCalledTimes(1);
+            expect(logger.info).toHaveBeenCalledWith('📦 Multi-repo (monorepo) mode: creating single commit and PR at git root');
+            expect(mockExit).toHaveBeenCalledWith(0);
+        });
+
+        test('should fallback to workspaceRoot when gitRoots is empty', async () => {
+            // Arrange
+            state.getGitRoots.mockReturnValue([]);
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+            fs.writeFileSync.mockImplementation(() => {});
+
+            // Act
+            await step8([], true);
+
+            // Assert - should fallback to workspaceRoot
+            expect(smartCommit).toHaveBeenCalledWith({
+                taskName: null,
+                shouldPush: true,
+                createPR: true,
+                cwd: '/test/project', // Falls back to workspaceRoot
+            });
             expect(mockExit).toHaveBeenCalledWith(0);
         });
     });
@@ -362,6 +400,7 @@ describe('step8', () => {
                 taskName: null,
                 shouldPush: false,
                 createPR: false,
+                cwd: '/test/project',
             });
         });
 

@@ -33,11 +33,12 @@ const isTaskApproved = (taskName) => {
 };
 
 const hasCriticalReviewPassed = () => {
-    if (!state.claudiomiroFolder) {
+    // Use workspace-scoped folder to be consistent with step7's multi-repo handling
+    if (!state.workspaceClaudiomiroFolder) {
         return false;
     }
 
-    const criticalReviewPassedPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
+    const criticalReviewPassedPath = path.join(state.workspaceClaudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
     return fs.existsSync(criticalReviewPassedPath);
 };
 

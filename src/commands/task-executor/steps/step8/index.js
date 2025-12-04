@@ -176,14 +176,16 @@ Backend PR: ⚠️ Failed to create
 
 const step8 = async (tasks, shouldPush = true) => {
     try {
-        // Check if we're in multi-repo separate git mode
-        const isMultiRepoSeparate = state.isMultiRepo() && state.getGitMode() === 'separate';
+        // Use workspace-scoped paths that don't change during multi-repo execution
+        const workspaceFolder = state.workspaceClaudiomiroFolder;
+        const workspaceRoot = state.workspaceRoot;
 
-        if (isMultiRepoSeparate && shouldPush) {
-            // Multi-repo separate mode: commit in each repo and create linked PRs
-            logger.info('📦 Multi-repo mode detected: creating commits and PRs for each repository');
+        // Check if we're in multi-repo mode
+        const isMultiRepo = state.isMultiRepo();
+        const gitMode = state.getGitMode();
 
-            // Get and validate repository paths
+        if (isMultiRepo && shouldPush) {
+            // Get repository paths
             const backendCwd = state.getRepository('backend');
             const frontendCwd = state.getRepository('frontend');
 
@@ -191,46 +193,68 @@ const step8 = async (tasks, shouldPush = true) => {
                 throw new Error('Multi-repo mode requires both backend and frontend repositories configured');
             }
 
-            if (backendCwd === frontendCwd) {
-                throw new Error('Multi-repo separate mode requires distinct backend and frontend paths');
+            if (gitMode === 'separate') {
+                // Separate git repos: commit and create PRs in each repo independently
+                logger.info('📦 Multi-repo (separate git) mode: creating commits and PRs for each repository');
+
+                // Commit in backend repo
+                await smartCommit({
+                    taskName: null,
+                    shouldPush: true,
+                    createPR: false, // We'll create PRs separately with cross-references
+                    cwd: backendCwd,
+                });
+                logger.info('📦 Backend commit complete');
+
+                // Commit in frontend repo
+                await smartCommit({
+                    taskName: null,
+                    shouldPush: true,
+                    createPR: false,
+                    cwd: frontendCwd,
+                });
+                logger.info('📦 Frontend commit complete');
+
+                // Extract feature name from INITIAL_PROMPT.md for meaningful PR titles
+                const initialPromptPath = path.join(workspaceFolder, 'INITIAL_PROMPT.md');
+                let featureName = 'Multi-repo changes';
+                if (fs.existsSync(initialPromptPath)) {
+                    const content = fs.readFileSync(initialPromptPath, 'utf-8').trim();
+                    // Take first line or first 80 chars as feature name
+                    const firstLine = content.split('\n')[0].trim();
+                    featureName = firstLine.substring(0, 80) || featureName;
+                }
+
+                // Create PRs with cross-references
+                await createMultiRepoPullRequests(featureName);
+            } else {
+                // Monorepo mode: single commit at git root, single PR
+                logger.info('📦 Multi-repo (monorepo) mode: creating single commit and PR at git root');
+
+                // Get the git root (should be the same for both repos in monorepo)
+                const gitRoots = state.getGitRoots();
+                const gitRoot = gitRoots && gitRoots.length > 0 ? gitRoots[0] : workspaceRoot;
+
+                const commitResult = await smartCommit({
+                    taskName: null,
+                    shouldPush,
+                    createPR: shouldPush,
+                    cwd: gitRoot, // Use git root for monorepo
+                });
+
+                if (commitResult.method === 'shell') {
+                    logger.info('📦 Final commit via shell (saved Claude tokens)');
+                } else if (commitResult.method === 'claude') {
+                    logger.info('📦 Final commit/PR via Claude');
+                }
             }
-
-            // Commit in backend repo
-            await smartCommit({
-                taskName: null,
-                shouldPush: true,
-                createPR: false, // We'll create PRs separately with cross-references
-                cwd: backendCwd,
-            });
-            logger.info('📦 Backend commit complete');
-
-            // Commit in frontend repo
-            await smartCommit({
-                taskName: null,
-                shouldPush: true,
-                createPR: false,
-                cwd: frontendCwd,
-            });
-            logger.info('📦 Frontend commit complete');
-
-            // Extract feature name from INITIAL_PROMPT.md for meaningful PR titles
-            const initialPromptPath = path.join(state.claudiomiroFolder, 'INITIAL_PROMPT.md');
-            let featureName = 'Multi-repo changes';
-            if (fs.existsSync(initialPromptPath)) {
-                const content = fs.readFileSync(initialPromptPath, 'utf-8').trim();
-                // Take first line or first 80 chars as feature name
-                const firstLine = content.split('\n')[0].trim();
-                featureName = firstLine.substring(0, 80) || featureName;
-            }
-
-            // Create PRs with cross-references
-            await createMultiRepoPullRequests(featureName);
         } else {
-            // Single-repo or monorepo: use existing behavior
+            // Single-repo: use existing behavior with workspace root
             const commitResult = await smartCommit({
                 taskName: null, // Final commit, no specific task
                 shouldPush,
                 createPR: shouldPush, // Create PR if pushing
+                cwd: workspaceRoot, // Use workspace root to ensure correct directory
             });
 
             if (commitResult.method === 'shell') {
@@ -240,13 +264,13 @@ const step8 = async (tasks, shouldPush = true) => {
             }
         }
 
-        fs.writeFileSync(path.join(state.claudiomiroFolder, 'done.txt'), '1');
+        fs.writeFileSync(path.join(workspaceFolder, 'done.txt'), '1');
     } catch (error) {
         // Log but don't block execution
         logger.warning('⚠️  Commit/PR failed in step8, continuing anyway:', error.message);
     }
 
-    logger.info(`✅ Claudiomiro has been successfully executed. Check out: ${state.folder}`);
+    logger.info(`✅ Claudiomiro has been successfully executed. Check out: ${state.workspaceRoot || state.folder}`);
     process.exit(0);
 };
 

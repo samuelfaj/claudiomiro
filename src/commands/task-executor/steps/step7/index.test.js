@@ -7,7 +7,9 @@ jest.mock('path');
 jest.mock('child_process');
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro/task-executor',
-    _claudiomiroRoot: '/test/.claudiomiro/task-executor',
+    workspaceClaudiomiroFolder: '/test/.claudiomiro/task-executor',
+    workspaceClaudiomiroRoot: '/test/.claudiomiro',
+    _claudiomiroRoot: '/test/.claudiomiro',
     folder: '/test',
     branch: 'test-branch',
     isMultiRepo: jest.fn(() => false),
@@ -44,7 +46,9 @@ describe('step7', () => {
 
         // Default state
         state.claudiomiroFolder = '/test/.claudiomiro/task-executor';
-        state._claudiomiroRoot = '/test/.claudiomiro/task-executor';
+        state.workspaceClaudiomiroFolder = '/test/.claudiomiro/task-executor';
+        state.workspaceClaudiomiroRoot = '/test/.claudiomiro';
+        state._claudiomiroRoot = '/test/.claudiomiro';
         state.folder = '/test';
         state.branch = 'test-branch';
         state.isMultiRepo.mockReturnValue(false);
@@ -363,11 +367,11 @@ describe('step7', () => {
             expect(logger.success).toHaveBeenCalledWith('✅ Step 7 completed - Critical review passed!');
         });
 
-        test('should propagate CRITICAL_REVIEW_PASSED.md from loop-fixes to main folder', async () => {
-            const loopFixesPassedPath = '/test/.claudiomiro/task-executor/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+        test('should propagate CRITICAL_REVIEW_PASSED.md from loop-fixes to workspace folder (single-repo)', async () => {
+            const loopFixesPassedPath = '/test/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
 
             fs.existsSync.mockImplementation((filePath) => {
-                // Initial check: no CRITICAL_REVIEW_PASSED.md in main folder
+                // Initial check: no CRITICAL_REVIEW_PASSED.md in workspace folder
                 if (filePath === passedPath) return false;
                 // After fix-branch: file exists in loop-fixes folder
                 if (filePath === loopFixesPassedPath) return true;
@@ -382,15 +386,102 @@ describe('step7', () => {
             await step7();
 
             expect(fs.copyFileSync).toHaveBeenCalledWith(loopFixesPassedPath, passedPath);
-            expect(logger.info).toHaveBeenCalledWith('📋 Propagated CRITICAL_REVIEW_PASSED.md to main folder');
+            expect(logger.info).toHaveBeenCalledWith('📋 Propagated CRITICAL_REVIEW_PASSED.md to workspace folder');
         });
 
-        test('should not propagate if file already exists in main folder', async () => {
-            const loopFixesPassedPath = '/test/.claudiomiro/task-executor/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+        test('should propagate CRITICAL_REVIEW_PASSED.md from both repos in multi-repo mode', async () => {
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => {
+                if (scope === 'backend') return '/backend';
+                if (scope === 'frontend') return '/frontend';
+                return '/default';
+            });
 
-            // Simulate: file exists in both places (already propagated)
+            const backendLoopFixesPath = '/backend/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+            const frontendLoopFixesPath = '/frontend/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+
             fs.existsSync.mockImplementation((filePath) => {
-                if (filePath === passedPath) return true; // Already exists in main folder
+                if (filePath === passedPath) return false;
+                if (filePath === backendLoopFixesPath) return true;
+                if (filePath === frontendLoopFixesPath) return true;
+                if (filePath.includes('newbranch.txt')) return true;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                return false;
+            });
+
+            execSync.mockReturnValue('M src/test.js');
+            fs.copyFileSync = jest.fn();
+
+            await step7();
+
+            expect(fs.copyFileSync).toHaveBeenCalledWith(backendLoopFixesPath, passedPath);
+            expect(logger.info).toHaveBeenCalledWith('📋 Propagated CRITICAL_REVIEW_PASSED.md from multi-repo loop-fixes to workspace');
+        });
+
+        test('should warn when backend passed but frontend did not in multi-repo mode', async () => {
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => {
+                if (scope === 'backend') return '/backend';
+                if (scope === 'frontend') return '/frontend';
+                return '/default';
+            });
+
+            const backendLoopFixesPath = '/backend/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+            const frontendLoopFixesPath = '/frontend/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath === passedPath) return false;
+                if (filePath === backendLoopFixesPath) return true;
+                if (filePath === frontendLoopFixesPath) return false; // Frontend did not pass
+                if (filePath.includes('newbranch.txt')) return true;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                return false;
+            });
+
+            execSync.mockReturnValue('M src/test.js');
+            fs.copyFileSync = jest.fn();
+
+            await step7();
+
+            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(logger.warning).toHaveBeenCalledWith('⚠️ Backend passed critical review but frontend did not');
+        });
+
+        test('should warn when frontend passed but backend did not in multi-repo mode', async () => {
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => {
+                if (scope === 'backend') return '/backend';
+                if (scope === 'frontend') return '/frontend';
+                return '/default';
+            });
+
+            const backendLoopFixesPath = '/backend/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+            const frontendLoopFixesPath = '/frontend/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath === passedPath) return false;
+                if (filePath === backendLoopFixesPath) return false; // Backend did not pass
+                if (filePath === frontendLoopFixesPath) return true;
+                if (filePath.includes('newbranch.txt')) return true;
+                if (filePath.includes('AI_PROMPT.md')) return true;
+                return false;
+            });
+
+            execSync.mockReturnValue('M src/test.js');
+            fs.copyFileSync = jest.fn();
+
+            await step7();
+
+            expect(fs.copyFileSync).not.toHaveBeenCalled();
+            expect(logger.warning).toHaveBeenCalledWith('⚠️ Frontend passed critical review but backend did not');
+        });
+
+        test('should not propagate if file already exists in workspace folder', async () => {
+            const loopFixesPassedPath = '/test/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+
+            // Simulate: file exists in workspace folder (already propagated)
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath === passedPath) return true; // Already exists in workspace folder
                 if (filePath === loopFixesPassedPath) return true;
                 if (filePath.includes('newbranch.txt')) return true;
                 if (filePath.includes('AI_PROMPT.md')) return true;
@@ -403,8 +494,8 @@ describe('step7', () => {
             expect(runFixBranch).not.toHaveBeenCalled();
         });
 
-        test('should not propagate if file does not exist in loop-fixes folder', async () => {
-            const loopFixesPassedPath = '/test/.claudiomiro/task-executor/loop-fixes/CRITICAL_REVIEW_PASSED.md';
+        test('should warn if file does not exist in loop-fixes folder', async () => {
+            const loopFixesPassedPath = '/test/.claudiomiro/loop-fixes/CRITICAL_REVIEW_PASSED.md';
 
             fs.existsSync.mockImplementation((filePath) => {
                 // File doesn't exist in loop-fixes folder (fix-branch might have failed)
@@ -421,15 +512,15 @@ describe('step7', () => {
             await step7();
 
             expect(fs.copyFileSync).not.toHaveBeenCalled();
-            expect(logger.info).not.toHaveBeenCalledWith('📋 Propagated CRITICAL_REVIEW_PASSED.md to main folder');
+            expect(logger.warning).toHaveBeenCalledWith('⚠️ CRITICAL_REVIEW_PASSED.md was not found in loop-fixes folder(s)');
         });
     });
 
     describe('Error Handling', () => {
-        test('should throw error when state.claudiomiroFolder is undefined', async () => {
-            state.claudiomiroFolder = undefined;
+        test('should throw error when state.workspaceClaudiomiroFolder is undefined', async () => {
+            state.workspaceClaudiomiroFolder = undefined;
 
-            await expect(step7()).rejects.toThrow('state.claudiomiroFolder is not defined. Cannot run step7.');
+            await expect(step7()).rejects.toThrow('state.workspaceClaudiomiroFolder is not defined. Cannot run step7.');
         });
 
         test('should propagate fix-branch errors', async () => {

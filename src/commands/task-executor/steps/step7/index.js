@@ -41,6 +41,64 @@ const runIntegrationVerification = async (maxFixAttempts = 3) => {
 };
 
 /**
+ * Checks if CRITICAL_REVIEW_PASSED.md exists in loop-fixes folder for a given repository path
+ * @param {string} repoPath - Path to the repository
+ * @returns {string|null} Path to CRITICAL_REVIEW_PASSED.md if exists, null otherwise
+ */
+const getLoopFixesPassedPath = (repoPath) => {
+    const loopFixesPath = path.join(repoPath, '.claudiomiro', 'loop-fixes', 'CRITICAL_REVIEW_PASSED.md');
+    return fs.existsSync(loopFixesPath) ? loopFixesPath : null;
+};
+
+/**
+ * Propagates CRITICAL_REVIEW_PASSED.md from loop-fixes to the workspace folder
+ * In multi-repo mode, checks both backend and frontend repositories
+ * @param {string} destPath - Destination path for CRITICAL_REVIEW_PASSED.md
+ * @returns {boolean} True if propagation succeeded
+ */
+const propagateCriticalReviewPassed = (destPath) => {
+    if (fs.existsSync(destPath)) {
+        return true; // Already exists
+    }
+
+    if (state.isMultiRepo()) {
+        // Multi-repo mode: check both backend and frontend
+        const backendPath = state.getRepository('backend');
+        const frontendPath = state.getRepository('frontend');
+
+        const backendPassed = getLoopFixesPassedPath(backendPath);
+        const frontendPassed = getLoopFixesPassedPath(frontendPath);
+
+        // Both repos must have passed for multi-repo to be considered complete
+        if (backendPassed && frontendPassed) {
+            // Copy from backend (arbitrary choice, both have the file)
+            fs.copyFileSync(backendPassed, destPath);
+            logger.info('📋 Propagated CRITICAL_REVIEW_PASSED.md from multi-repo loop-fixes to workspace');
+            return true;
+        } else if (backendPassed && !frontendPassed) {
+            logger.warning('⚠️ Backend passed critical review but frontend did not');
+            return false;
+        } else if (!backendPassed && frontendPassed) {
+            logger.warning('⚠️ Frontend passed critical review but backend did not');
+            return false;
+        } else {
+            logger.warning('⚠️ Neither backend nor frontend have CRITICAL_REVIEW_PASSED.md in loop-fixes');
+            return false;
+        }
+    } else {
+        // Single-repo mode: check workspace root
+        const loopFixesPassedPath = path.join(state.workspaceClaudiomiroRoot, 'loop-fixes', 'CRITICAL_REVIEW_PASSED.md');
+        if (fs.existsSync(loopFixesPassedPath)) {
+            fs.copyFileSync(loopFixesPassedPath, destPath);
+            logger.info('📋 Propagated CRITICAL_REVIEW_PASSED.md to workspace folder');
+            return true;
+        }
+    }
+
+    return false;
+};
+
+/**
  * Step 7: Global Critical Bug Sweep
  *
  * Performs a final critical analysis of ALL code changes in the branch using fix-branch:
@@ -56,12 +114,13 @@ const runIntegrationVerification = async (maxFixAttempts = 3) => {
  * @returns {Promise<void>}
  */
 const step7 = async (maxIterations = 20) => {
-    // Validate state
-    if (!state.claudiomiroFolder) {
-        throw new Error('state.claudiomiroFolder is not defined. Cannot run step7.');
+    // Validate state - use workspace folder which doesn't change during multi-repo execution
+    if (!state.workspaceClaudiomiroFolder) {
+        throw new Error('state.workspaceClaudiomiroFolder is not defined. Cannot run step7.');
     }
 
-    const passedPath = path.join(state.claudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
+    // Use workspace-scoped path to avoid issues when fix-branch changes state in multi-repo mode
+    const passedPath = path.join(state.workspaceClaudiomiroFolder, 'CRITICAL_REVIEW_PASSED.md');
 
     // CRITICAL: Verify this is a Claudiomiro-managed session on a NEW branch
     // Step7 should only analyze changes made by Claudiomiro in THIS session
@@ -74,7 +133,7 @@ const step7 = async (maxIterations = 20) => {
 
     // Check 2: This branch was created by Claudiomiro? (CRITICAL - fail fast)
     // newbranch.txt is created by step0 when sameBranch=false
-    const newBranchMarkerPath = path.join(state.claudiomiroFolder, 'newbranch.txt');
+    const newBranchMarkerPath = path.join(state.workspaceClaudiomiroFolder, 'newbranch.txt');
     if (!fs.existsSync(newBranchMarkerPath)) {
         logger.warning('⚠️  Step 7 skipped: Not running on a new branch created by Claudiomiro');
         logger.info('💡 Step 7 only runs on branches created with Claudiomiro (without --same-branch flag)');
@@ -90,7 +149,7 @@ const step7 = async (maxIterations = 20) => {
     }
 
     // Check 3: AI_PROMPT.md exists? (valid session - step1 was executed)
-    const aiPromptPath = path.join(state.claudiomiroFolder, 'AI_PROMPT.md');
+    const aiPromptPath = path.join(state.workspaceClaudiomiroFolder, 'AI_PROMPT.md');
     if (!fs.existsSync(aiPromptPath)) {
         logger.warning('⚠️  Step 7 skipped: Incomplete Claudiomiro session');
         logger.info('💡 AI_PROMPT.md not found - session may be corrupted or step1 not executed');
@@ -166,12 +225,16 @@ const step7 = async (maxIterations = 20) => {
     try {
         await runFixBranch(args);
 
-        // After fix-branch completes, propagate CRITICAL_REVIEW_PASSED.md from loop-fixes to main folder
-        // fix-branch creates the file in .claudiomiro/loop-fixes/, but cli.js checks in .claudiomiro/
-        const loopFixesPassedPath = path.join(state._claudiomiroRoot, 'loop-fixes', 'CRITICAL_REVIEW_PASSED.md');
-        if (fs.existsSync(loopFixesPassedPath) && !fs.existsSync(passedPath)) {
-            fs.copyFileSync(loopFixesPassedPath, passedPath);
-            logger.info('📋 Propagated CRITICAL_REVIEW_PASSED.md to main folder');
+        // After fix-branch completes, propagate CRITICAL_REVIEW_PASSED.md from loop-fixes to workspace folder
+        // In multi-repo mode, checks both backend and frontend repositories
+        // fix-branch creates the file in .claudiomiro/loop-fixes/, but cli.js checks in workspace/.claudiomiro/task-executor/
+        const propagated = propagateCriticalReviewPassed(passedPath);
+
+        if (!propagated) {
+            // If propagation failed, the file wasn't created by loop-fixes in any repo
+            // This could mean fix-branch failed or there were unresolved issues
+            logger.warning('⚠️ CRITICAL_REVIEW_PASSED.md was not found in loop-fixes folder(s)');
+            logger.info('💡 This may indicate that fix-branch encountered issues or was interrupted');
         }
 
         // After fix-branch completes, run integration verification for multi-repo
