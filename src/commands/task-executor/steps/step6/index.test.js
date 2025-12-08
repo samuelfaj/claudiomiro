@@ -85,7 +85,7 @@ describe('step6', () => {
             const result = await step6(mockTask);
 
             // Assert
-            expect(reviewCode).toHaveBeenCalledWith(mockTask);
+            expect(reviewCode).toHaveBeenCalledWith(mockTask, expect.objectContaining({ model: 'fast' }));
             expect(result).toBe(mockResult);
         });
 
@@ -198,7 +198,7 @@ describe('step6', () => {
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeBlocked).toHaveBeenCalledWith(mockTask);
+            expect(reanalyzeBlocked).toHaveBeenCalledWith(mockTask, expect.objectContaining({ model: 'hard' }));
         });
 
         test('should call reanalyzeBlocked on 6th attempt when task not completed', async () => {
@@ -214,7 +214,7 @@ describe('step6', () => {
             await step6(mockTask);
 
             // Assert
-            expect(reanalyzeBlocked).toHaveBeenCalledWith(mockTask);
+            expect(reanalyzeBlocked).toHaveBeenCalledWith(mockTask, expect.objectContaining({ model: 'hard' }));
         });
 
         test('should not call reanalyzeBlocked on 1st attempt when task not completed', async () => {

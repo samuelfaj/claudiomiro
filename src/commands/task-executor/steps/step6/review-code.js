@@ -96,9 +96,11 @@ const buildReviewContext = (blueprint, execution, reviewChecklist = null) => {
  * @param {string} task - Task identifier
  * @param {function} folder - Helper function to build file paths
  * @param {string} projectFolder - Working directory
+ * @param {Object} options - Options object
+ * @param {string} options.model - Model to use ('fast', 'medium', 'hard')
  * @returns {Promise} Result of Claude execution
  */
-const reviewWithBlueprintFlow = async (task, folder, projectFolder) => {
+const reviewWithBlueprintFlow = async (task, folder, projectFolder, options = {}) => {
     logger.debug('[Step6] Using BLUEPRINT flow');
 
     // Read BLUEPRINT.md and execution.json
@@ -188,10 +190,21 @@ These provide:
         .replace(/\{\{codeReviewMdPath\}\}/g, folder('CODE_REVIEW.md'));
 
     const shellCommandRule = fs.readFileSync(path.join(__dirname, '..', '..', '..', '..', 'shared', 'templates', 'SHELL-COMMAND-RULE.md'), 'utf-8');
+
+    // Build Claude options
+    const claudeOptions = {};
+    if (projectFolder !== state.folder) {
+        claudeOptions.cwd = projectFolder;
+    }
+    if (options.model) {
+        claudeOptions.model = options.model;
+        logger.info(`[Step6] Code review using model: ${options.model}`);
+    }
+
     return await executeClaude(
         promptTemplate + '\n\n' + shellCommandRule,
         task,
-        projectFolder !== state.folder ? { cwd: projectFolder } : undefined,
+        Object.keys(claudeOptions).length > 0 ? claudeOptions : undefined,
     );
 };
 
@@ -202,9 +215,11 @@ These provide:
  * Uses BLUEPRINT.md + execution.json flow
  *
  * @param {string} task - Task identifier (e.g., 'TASK1')
+ * @param {Object} options - Options object
+ * @param {string} options.model - Model to use ('fast', 'medium', 'hard')
  * @returns {Promise} Result of Claude execution
  */
-const reviewCode = async (task) => {
+const reviewCode = async (task, options = {}) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
 
     if (fs.existsSync(folder('CODE_REVIEW.md'))) {
@@ -231,7 +246,7 @@ const reviewCode = async (task) => {
         ? state.getRepository(scope)
         : state.folder;
 
-    return await reviewWithBlueprintFlow(task, folder, projectFolder);
+    return await reviewWithBlueprintFlow(task, folder, projectFolder, options);
 };
 
 module.exports = {

@@ -48,12 +48,13 @@ const getLevelName = (level) => {
  * @param {string} reviewPrompt - The review prompt content
  * @param {number} maxIterations - Maximum number of iterations
  * @param {boolean} clearFolder - Whether to clear the folder before starting
+ * @param {string} model - Model to use ('fast', 'medium', 'hard')
  * @returns {Promise<void>}
  */
-const runForRepository = async (repoPath, repoName, reviewPrompt, maxIterations, clearFolder) => {
+const runForRepository = async (repoPath, repoName, reviewPrompt, maxIterations, clearFolder, model) => {
     logger.info(`\n📁 Processing ${repoName} repository: ${repoPath}`);
     state.setFolder(repoPath);
-    await loopFixes(reviewPrompt, maxIterations, { clearFolder });
+    await loopFixes(reviewPrompt, maxIterations, { clearFolder, model });
     logger.info(`✅ ${repoName} repository review completed`);
 };
 
@@ -72,6 +73,7 @@ const runForRepository = async (repoPath, repoName, reviewPrompt, maxIterations,
  *   claudiomiro --fix-branch --no-suggestions [folder]
  *   claudiomiro --fix-branch --limit=5 [folder]
  *   claudiomiro --fix-branch --no-limit [folder]
+ *   claudiomiro --fix-branch --model=fast [folder]
  *
  * @param {string[]} args - Command line arguments
  */
@@ -102,12 +104,17 @@ const run = async (args) => {
         }
     }
 
+    // Parse model argument
+    const modelArg = args.find(arg => arg.startsWith('--model='));
+    const model = modelArg ? modelArg.split('=')[1] : undefined;
+
     // Parse folder path (positional argument that doesn't start with --)
     const folderArg = args.find(arg => !arg.startsWith('--')) || process.cwd();
     state.setFolder(folderArg);
 
     logger.info('Starting fix-branch (Staff+ Engineer Code Review)...');
-    logger.info(`Running fix-branch (level: ${level} - ${getLevelName(level)}, max iterations: ${noLimit ? 'no limit' : maxIterations})`);
+    const modelInfo = model ? `, model: ${model}` : '';
+    logger.info(`Running fix-branch (level: ${level} - ${getLevelName(level)}, max iterations: ${noLimit ? 'no limit' : maxIterations}${modelInfo})`);
 
     // Get the self-contained prompt content for this level
     const reviewPrompt = getLevelPrompt(level);
@@ -120,15 +127,15 @@ const run = async (args) => {
         const frontendPath = state.getRepository('frontend');
 
         // Run loop-fixes for backend repository
-        await runForRepository(backendPath, 'Backend', reviewPrompt, maxIterations, !noClear);
+        await runForRepository(backendPath, 'Backend', reviewPrompt, maxIterations, !noClear, model);
 
         // Run loop-fixes for frontend repository
-        await runForRepository(frontendPath, 'Frontend', reviewPrompt, maxIterations, !noClear);
+        await runForRepository(frontendPath, 'Frontend', reviewPrompt, maxIterations, !noClear, model);
 
         logger.info('\n✅ All repositories reviewed successfully');
     } else {
         // Single-repo mode: execute normally
-        await loopFixes(reviewPrompt, maxIterations, { clearFolder: !noClear });
+        await loopFixes(reviewPrompt, maxIterations, { clearFolder: !noClear, model });
     }
 };
 

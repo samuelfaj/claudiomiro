@@ -100,7 +100,12 @@ const generateReviewChecklist = async (task, options = {}) => {
     // Build and execute prompt
     const prompt = buildChecklistPrompt(artifacts, blueprintContent, checklistPath, task);
 
-    await executeClaude(prompt, task, options.cwd ? { cwd: options.cwd } : undefined);
+    // Review checklist generation - use medium model (simpler task)
+    const claudeOptions = { model: 'medium' };
+    if (options.cwd) {
+        claudeOptions.cwd = options.cwd;
+    }
+    await executeClaude(prompt, task, claudeOptions);
 
     // Verify output was created
     if (!fs.existsSync(checklistPath)) {

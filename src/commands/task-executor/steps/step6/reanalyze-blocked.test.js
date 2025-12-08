@@ -215,12 +215,13 @@ describe('reanalyze-blocked', () => {
     });
 
     describe('executeClaude integration', () => {
-        test('should call executeClaude with task identifier', async () => {
+        test('should call executeClaude with task identifier and model option', async () => {
             await reanalyzeBlocked(mockTask);
 
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
+                expect.objectContaining({ model: 'hard' }),
             );
         });
 

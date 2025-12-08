@@ -67,6 +67,7 @@ When working with multi-repository projects (backend + frontend), every BLUEPRIN
 ```markdown
 @dependencies [TASK0, TASK1]
 @scope backend
+@difficulty medium
 
 # BLUEPRINT: TASKX
 ...
@@ -95,6 +96,64 @@ When working with multi-repository projects (backend + frontend), every BLUEPRIN
 4. When in doubt, prefer `@scope integration`
 
 **Note:** Missing @scope in multi-repo mode will cause task execution to fail.
+
+---
+
+## Task Difficulty (Model Selection)
+
+Every BLUEPRINT.md MUST include a `@difficulty` tag to optimize AI model selection during task execution.
+
+### Format
+```markdown
+@dependencies [TASK0, TASK1]
+@scope backend
+@difficulty medium
+```
+
+### Valid Difficulty Levels
+
+- **@difficulty fast** - Simple task, straightforward implementation
+  - Single file changes, <100 LOC
+  - Well-defined patterns exist in codebase
+  - No architectural decisions needed
+  - Simple CRUD operations, config changes
+  - Uses haiku model (cheapest, fastest)
+
+- **@difficulty medium** - Moderate complexity (DEFAULT)
+  - Multiple files, cross-module interaction
+  - Some integration points
+  - Following existing patterns with minor adaptations
+  - Standard feature implementation
+  - Uses sonnet model (balanced)
+
+- **@difficulty hard** - Complex task, deep reasoning required
+  - System-wide impact, multiple integration points
+  - Architectural decisions needed
+  - New patterns or significant refactoring
+  - Complex business logic, edge cases
+  - Significant uncertainty or unknowns
+  - Uses opus model (most capable, expensive)
+
+### Difficulty Selection Guidelines
+
+1. **Start with complexity analysis from Phase B**
+   - LOW complexity → `@difficulty fast`
+   - MEDIUM complexity → `@difficulty medium`
+   - HIGH complexity → `@difficulty hard`
+
+2. **Consider these escalation factors:**
+   - Multiple phases (>3) → escalate to medium or hard
+   - Multiple artifacts (>5) → escalate to hard
+   - Uncertainties present → escalate to hard
+   - Integration across modules → at least medium
+
+3. **When in doubt:**
+   - For foundation/scaffold tasks (Layer 0) → `@difficulty medium`
+   - For integration tasks (Layer Ω) → `@difficulty hard`
+   - For parallel feature tasks → `@difficulty medium`
+   - For simple config/setup → `@difficulty fast`
+
+**Note:** The @difficulty tag directly impacts execution cost and speed. Use 'fast' when possible, 'hard' only when necessary.
 
 ---
 
@@ -606,6 +665,7 @@ Identify prohibitions for this specific task (inherited from AI_PROMPT.md + task
 <!-- BLUEPRINT: Read-only after creation -->
 @dependencies [Tasks]  // Task name MUST BE COMPLETE AND FOLLOW THE PATTERN "TASK{number}"
 @scope [backend|frontend|integration]  // Only required for multi-repo projects
+@difficulty [fast|medium|hard]  // Task complexity for model selection
 
 # BLUEPRINT: TASKX
 
@@ -764,6 +824,7 @@ LOW confidence on critical decision → BLOCKED (do not proceed with guesses)
 - First line must be `<!-- BLUEPRINT: Read-only after creation -->`
 - Second line must be `@dependencies [...]`
 - Third line is `@scope [...]` for multi-repo projects only
+- `@difficulty [fast|medium|hard]` must follow @scope (or @dependencies if no @scope) - REQUIRED for model selection
 - All 6 sections (IDENTITY, CONTEXT CHAIN, EXECUTION CONTRACT, IMPLEMENTATION STRATEGY, UNCERTAINTY LOG, INTEGRATION IMPACT) are REQUIRED
 - IDENTITY section MUST include: IS, IS NOT, Anti-Hallucination Anchors, AND 🚫 Guardrails
 - Guardrails MUST have at least one item per category (Scope, Architecture, Quality, Security)
@@ -800,6 +861,7 @@ Decomposition into BLUEPRINTs:
 ```markdown
 <!-- BLUEPRINT: Read-only after creation -->
 @dependencies []
+@difficulty medium
 
 # BLUEPRINT: TASK0
 
@@ -838,6 +900,7 @@ Decomposition into BLUEPRINTs:
 ```markdown
 <!-- BLUEPRINT: Read-only after creation -->
 @dependencies [TASK0]
+@difficulty fast
 
 # BLUEPRINT: TASK1
 

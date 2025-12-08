@@ -77,13 +77,13 @@ describe('analyze-split', () => {
                 path.join(__dirname, 'prompt-split.md'),
                 'utf-8',
             );
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toContain('Carefully analyze the task located at: /test/.claudiomiro/task-executor/TASK1');
+            expect(promptArg).toContain('Evaluate complexity and parallelism for /test/.claudiomiro/task-executor');
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Carefully analyze the task located at: /test/.claudiomiro/task-executor/TASK1'),
+                expect.any(String),
                 mockTask,
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Evaluate complexity and parallelism for /test/.claudiomiro/task-executor'),
-                mockTask,
+                expect.objectContaining({ model: 'medium' }),
             );
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 path.join(mockTaskFolder, 'split.txt'),
@@ -114,9 +114,12 @@ describe('analyze-split', () => {
             const result = await analyzeSplit(mockTask);
 
             // Assert
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toContain('Analyze task at: /test/.claudiomiro/task-executor/TASK1');
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Analyze task at: /test/.claudiomiro/task-executor/TASK1'),
+                expect.any(String),
                 mockTask,
+                expect.objectContaining({ model: 'medium' }),
             );
             expect(fs.writeFileSync).not.toHaveBeenCalled();
             expect(result).toEqual({ success: true });
@@ -147,23 +150,19 @@ describe('analyze-split', () => {
             await analyzeSplit(mockTask2);
 
             // Assert
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toContain('Task folder: /test/.claudiomiro/task-executor/TASK2');
+            expect(promptArg).toContain('Claudiomiro folder: /test/.claudiomiro/task-executor');
+            expect(promptArg).toContain('Analyze the task');
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Task folder: /test/.claudiomiro/task-executor/TASK2'),
+                expect.any(String),
                 mockTask2,
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Claudiomiro folder: /test/.claudiomiro/task-executor'),
-                mockTask2,
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Analyze the task'),
-                mockTask2,
+                expect.objectContaining({ model: 'medium' }),
             );
 
             // Verify no placeholder remains unreplaced
-            const promptCall = executeClaude.mock.calls[0][0];
-            expect(promptCall).not.toContain('{{taskFolder}}');
-            expect(promptCall).not.toContain('{{claudiomiroFolder}}');
+            expect(promptArg).not.toContain('{{taskFolder}}');
+            expect(promptArg).not.toContain('{{claudiomiroFolder}}');
         });
 
         test('should handle executeClaude failure', async () => {
@@ -188,9 +187,12 @@ describe('analyze-split', () => {
             // Act & Assert
             await expect(analyzeSplit(mockTask)).rejects.toThrow('Claude execution failed');
 
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toContain('Analyze task at: /test/.claudiomiro/task-executor/TASK1');
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Analyze task at: /test/.claudiomiro/task-executor/TASK1'),
+                expect.any(String),
                 mockTask,
+                expect.objectContaining({ model: 'medium' }),
             );
             expect(fs.writeFileSync).not.toHaveBeenCalled();
         });

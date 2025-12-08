@@ -1,7 +1,9 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:docs.z.ai)"
+      "WebFetch(domain:docs.z.ai)",
+      "Bash(for step in step0 step1 step2 step3 step4 step5 step6 step7 step8)",
+      "Bash(do echo \"=== $step ===\" ls -1 /Users/samuelfajreldines/Desenvolvimento/claudiomiro/src/commands/task-executor/steps/$step/)"
     ],
     "deny": [],
     "ask": []

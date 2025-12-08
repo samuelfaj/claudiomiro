@@ -108,7 +108,12 @@ const completeChecklist = async (task, options = {}) => {
     // Build and execute prompt
     const prompt = buildCompleteChecklistPrompt(checklist, checklistPath);
 
-    await executeClaude(prompt, task, cwd !== state.folder ? { cwd } : undefined);
+    // Checklist completion uses fast model (simpler verification task)
+    const claudeOptions = { model: 'fast' };
+    if (cwd !== state.folder) {
+        claudeOptions.cwd = cwd;
+    }
+    await executeClaude(prompt, task, claudeOptions);
 
     // Load updated checklist to count completed items
     const updatedChecklist = loadChecklist(checklistPath);

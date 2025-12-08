@@ -34,6 +34,7 @@ Give Claudiomiro a task and it will:
 
 - [Basic Usage Guide](./docs/basic-usage.md) - Complete guide from installation to your first task
 - [Commands Reference](./docs/commands/README.md) - All available commands and options
+- [Model Configuration](./docs/model-configuration.md) - AI model selection and cost optimization
 - [ACE](./docs/agentic-context-engineering.md) - Agentic Context Engineering and Reflections in Claudiomiro
 
 ### Examples
@@ -73,6 +74,34 @@ claudiomiro --glm         # GLM
 
 - [DeepSeek Setup](./docs/HOW-TO-RUN-WITH-DEEPSEEK.md)
 - [GLM Setup](./docs/HOW-TO-RUN-WITH-GLM.md)
+
+### Smart Model Selection
+
+Claudiomiro automatically selects the optimal model for each step to balance cost and performance:
+
+| Model | Maps To | Use Case |
+|-------|---------|----------|
+| `fast` | Haiku | Simple tasks, commits, quick operations |
+| `medium` | Sonnet | Standard features, balanced performance |
+| `hard` | Opus | Complex reasoning, architectural decisions |
+
+```bash
+# Force a specific model for all steps
+CLAUDIOMIRO_MODEL=fast claudiomiro --prompt="Simple README update"
+
+# Override model for specific step
+CLAUDIOMIRO_STEP5_MODEL=hard claudiomiro --prompt="Complex refactoring"
+```
+
+Tasks can declare their complexity with `@difficulty` tags in BLUEPRINT.md:
+
+```markdown
+@difficulty fast    # Simple bug fix → uses Haiku
+@difficulty medium  # Standard feature → uses Sonnet
+@difficulty hard    # Architectural change → uses Opus
+```
+
+See [Model Configuration Guide](./docs/model-configuration.md) for details.
 
 ### Multi-Repository Mode
 

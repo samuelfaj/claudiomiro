@@ -6,6 +6,7 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
 const { askClarificationQuestions } = require('../../../../shared/services/prompt-reader');
 const { startFresh } = require('../../services/file-manager');
 const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system');
+const { getStepModel } = require('../../utils/model-config');
 
 /**
  * Step 0: Generate clarification questions (if needed)
@@ -65,14 +66,18 @@ const step0 = async (sameBranch = false, promptText = null) => {
     logger.newline();
     logger.startSpinner('Exploring codebase and generating clarification questions...');
 
+    // Git hooks check - use fast model (simple check)
     await executeClaude(
         'If the repository uses Husky, lint-staged, or any other Git hooks, verify that they are properly configured and functioning.' +
         'If no such hooks exist, take no action.',
+        null,
+        { model: 'fast' },
     );
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');
     const legacyContext = generateLegacySystemContext();
-    await executeClaude(replace(branchStep + prompt + legacyContext));
+    // Main exploration - use step0 model (default: medium)
+    await executeClaude(replace(branchStep + prompt + legacyContext), null, { model: getStepModel(0) });
 
     logger.stopSpinner();
 

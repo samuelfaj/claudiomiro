@@ -356,7 +356,7 @@ describe('generate-review-checklist', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
-                { cwd: '/custom/path' },
+                expect.objectContaining({ cwd: '/custom/path' }),
             );
         });
 
@@ -408,7 +408,7 @@ describe('generate-review-checklist', () => {
             expect(result.itemCount).toBe(2); // Falls back to artifacts.length
         });
 
-        test('should not pass cwd when option not provided', async () => {
+        test('should use model option without cwd when cwd not provided', async () => {
             // Act
             await generateReviewChecklist(mockTask);
 
@@ -416,7 +416,7 @@ describe('generate-review-checklist', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
-                undefined,
+                { model: 'medium' },
             );
         });
 

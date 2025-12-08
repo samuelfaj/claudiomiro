@@ -8,9 +8,11 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
  * Updates execution.json with new strategy based on BLUEPRINT.md
  *
  * @param {string} task - Task identifier
+ * @param {Object} options - Options object
+ * @param {string} options.model - Model to use ('fast', 'medium', 'hard')
  * @returns {Promise} Result of Claude execution
  */
-const reanalyzeBlocked = async (task) => {
+const reanalyzeBlocked = async (task, options = {}) => {
     const folder = (file) => path.join(state.claudiomiroFolder, task, file);
     const logger = require('../../../../shared/utils/logger');
 
@@ -108,7 +110,20 @@ DO NOT create new files. Only update execution.json.
 
     logger.debug(`[Step6] Re-analyzing blocked task ${task} (attempt ${execution.attempts})`);
 
-    const result = await executeClaude(prompt + '\n\n' + shellCommandRule, task);
+    // Deep re-analysis uses hard model by default (requires complex reasoning)
+    const claudeOptions = {};
+    if (options.model) {
+        claudeOptions.model = options.model;
+        logger.debug(`[Step6] Re-analysis using model: ${options.model}`);
+    } else {
+        claudeOptions.model = 'hard'; // Default to hard for deep analysis
+    }
+
+    const result = await executeClaude(
+        prompt + '\n\n' + shellCommandRule,
+        task,
+        Object.keys(claudeOptions).length > 0 ? claudeOptions : undefined,
+    );
 
     // Verify execution.json was updated
     if (fs.existsSync(executionPath)) {

@@ -19,6 +19,7 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
 const { markTaskCompleted } = require('../../../../shared/services/context-cache');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 const reflectionHook = require('./reflection-hook');
+const { determineStep5Model } = require('../../utils/model-config');
 
 // Utils
 const {
@@ -223,8 +224,12 @@ const executeTask = async (task, taskFolder, cwd) => {
 
     const prompt = `${selectedPrompt}\n\n---\n\n## BLUEPRINT.md\n\n${blueprintContent}\n\n---\n\n${shellCommandRule}`;
 
-    // 9. Execute Claude
-    const result = await executeClaude(prompt, task, { cwd });
+    // 9. Determine model based on task complexity (dynamic)
+    const model = determineStep5Model(execution, blueprintContent);
+    logger.info(`Model selected: ${model}`);
+
+    // 10. Execute Claude with dynamic model
+    const result = await executeClaude(prompt, task, { cwd, model });
     markTaskCompleted(state.claudiomiroFolder, task);
 
     // 10. Reload execution.json (Claude may have updated it)

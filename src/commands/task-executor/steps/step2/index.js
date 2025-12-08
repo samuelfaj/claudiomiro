@@ -7,6 +7,7 @@ const { getLocalLLMService } = require('../../../../shared/services/local-llm');
 const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
 const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system/context-generator');
 const { runValidation } = require('./decomposition-json-validator');
+const { getStepModel } = require('../../utils/model-config');
 
 /**
  * Step 2: Task Decomposition
@@ -49,7 +50,8 @@ const step2 = async () => {
     let decompositionSuccess = false;
 
     try {
-        await executeClaude(replace(prompt));
+        // Task decomposition - use step2 model (default: hard)
+        await executeClaude(replace(prompt), null, { model: getStepModel(2) });
 
         logger.stopSpinner();
         logger.success('Tasks created successfully');

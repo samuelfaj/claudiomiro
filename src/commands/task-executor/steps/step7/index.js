@@ -5,6 +5,7 @@ const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { run: runFixBranch } = require('../../../fix-branch');
 const { verifyAndFixIntegration } = require('../../../../shared/services/integration-verifier');
+const { getStepModel, isEscalationStep } = require('../../utils/model-config');
 
 /**
  * Runs integration verification for multi-repo projects with auto-fix
@@ -204,37 +205,84 @@ const step7 = async (maxIterations = 20) => {
     logger.info('🔍 Starting global critical bug sweep...');
     logger.info(`📍 Analyzing branch: ${state.branch || 'current branch'}`);
 
-    // Delegate to fix-branch with level=2 (Blockers + Warnings) and --no-clear
-    // --no-clear prevents fix-branch from deleting the existing .claudiomiro folder
-    const args = [
-        '--continue',
-        '--level=2',
-        '--no-clear',
-        state.folder,
-    ];
+    // Check for escalation model configuration
+    const modelConfig = getStepModel(7);
+    const useEscalation = isEscalationStep(7) || modelConfig === 'escalation';
 
-    // Add iteration limit
-    if (maxIterations === Infinity) {
-        args.unshift('--no-limit');
-    } else {
-        args.unshift(`--limit=${maxIterations}`);
-    }
+    // Build base args for fix-branch
+    const buildArgs = (model) => {
+        const args = [
+            '--continue',
+            '--level=2',
+            '--no-clear',
+            state.folder,
+        ];
 
-    logger.info('🔧 Using fix-branch (level: 2 - blockers + warnings)');
+        // Add iteration limit
+        if (maxIterations === Infinity) {
+            args.unshift('--no-limit');
+        } else {
+            args.unshift(`--limit=${maxIterations}`);
+        }
+
+        // Add model if specified
+        if (model) {
+            args.unshift(`--model=${model}`);
+        }
+
+        return args;
+    };
 
     try {
-        await runFixBranch(args);
+        if (useEscalation) {
+            // ESCALATION MODEL: fast → hard
+            logger.info('🔧 Using ESCALATION model for step7 (fast → hard)');
 
-        // After fix-branch completes, propagate CRITICAL_REVIEW_PASSED.md from loop-fixes to workspace folder
-        // In multi-repo mode, checks both backend and frontend repositories
-        // fix-branch creates the file in .claudiomiro/loop-fixes/, but cli.js checks in workspace/.claudiomiro/task-executor/
-        const propagated = propagateCriticalReviewPassed(passedPath);
+            // Phase 1: Run with fast model
+            logger.info('[Step7] Critical review with FAST model (escalation step 1)');
+            await runFixBranch(buildArgs('fast'));
 
-        if (!propagated) {
-            // If propagation failed, the file wasn't created by loop-fixes in any repo
-            // This could mean fix-branch failed or there were unresolved issues
-            logger.warning('⚠️ CRITICAL_REVIEW_PASSED.md was not found in loop-fixes folder(s)');
-            logger.info('💡 This may indicate that fix-branch encountered issues or was interrupted');
+            // Check if fast review passed
+            const fastPassed = fs.existsSync(passedPath) || propagateCriticalReviewPassed(passedPath);
+
+            if (fastPassed) {
+                // Fast passed - escalate to hard for final validation
+                logger.info('[Step7] Fast review passed, escalating to HARD model for final validation');
+
+                // Remove the passed file to allow hard review to run fresh
+                if (fs.existsSync(passedPath)) {
+                    fs.unlinkSync(passedPath);
+                }
+
+                // Also remove loop-fixes passed files to allow hard review
+                const loopFixesPassedPath = path.join(state.workspaceClaudiomiroFolder, 'loop-fixes', 'CRITICAL_REVIEW_PASSED.md');
+                if (fs.existsSync(loopFixesPassedPath)) {
+                    fs.unlinkSync(loopFixesPassedPath);
+                }
+
+                // Phase 2: Run with hard model
+                await runFixBranch(buildArgs('hard'));
+
+                // Propagate hard review result
+                propagateCriticalReviewPassed(passedPath);
+            }
+        } else {
+            // Non-escalation: use configured model or default
+            const model = modelConfig !== 'dynamic' && modelConfig !== 'escalation' ? modelConfig : undefined;
+            logger.info(`🔧 Using fix-branch (level: 2 - blockers + warnings${model ? `, model: ${model}` : ''})`);
+            await runFixBranch(buildArgs(model));
+
+            // After fix-branch completes, propagate CRITICAL_REVIEW_PASSED.md from loop-fixes to workspace folder
+            // In multi-repo mode, checks both backend and frontend repositories
+            // fix-branch creates the file in .claudiomiro/loop-fixes/, but cli.js checks in workspace/.claudiomiro/task-executor/
+            const propagated = propagateCriticalReviewPassed(passedPath);
+
+            if (!propagated) {
+                // If propagation failed, the file wasn't created by loop-fixes in any repo
+                // This could mean fix-branch failed or there were unresolved issues
+                logger.warning('⚠️ CRITICAL_REVIEW_PASSED.md was not found in loop-fixes folder(s)');
+                logger.info('💡 This may indicate that fix-branch encountered issues or was interrupted');
+            }
         }
 
         // After fix-branch completes, run integration verification for multi-repo

@@ -9,6 +9,7 @@ const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 const { curateInsights } = require('./curate-insights');
+const { getStepModel, isEscalationStep } = require('../../utils/model-config');
 
 /**
  * Commits changes based on task scope for multi-repo support
@@ -121,8 +122,40 @@ const step6 = async (task, shouldPush = true) => {
         }
     }
 
-    // Step 2: Perform main code review
-    const reviewResult = await reviewCode(task);
+    // Step 2: Perform code review with ESCALATION model
+    // First pass: fast model for quick review
+    // If fast passes (completed): escalate to hard for final validation
+    const modelConfig = getStepModel(6);
+    const useEscalation = isEscalationStep(6) || modelConfig === 'escalation';
+
+    let reviewResult;
+
+    if (useEscalation) {
+        // ESCALATION MODEL: fast → hard
+        const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
+        const stateManager = ParallelStateManager.getInstance();
+        const isUIActive = stateManager && stateManager.isUIRendererActive();
+
+        // First pass: fast model
+        if (!isUIActive) {
+            logger.info('[Step6] Code review with FAST model (escalation step 1)');
+        }
+        reviewResult = await reviewCode(task, { model: 'fast' });
+
+        // Check if fast review passed (task is completed)
+        const fastCompletionResult = isCompletedFromExecution(executionPath);
+
+        if (fastCompletionResult.completed) {
+            // Escalate to hard model for final validation
+            if (!isUIActive) {
+                logger.info('[Step6] Fast review passed, escalating to HARD model for final validation');
+            }
+            await reviewCode(task, { model: 'hard' });
+        }
+    } else {
+        // Non-escalation: use configured model
+        reviewResult = await reviewCode(task, { model: modelConfig !== 'dynamic' ? modelConfig : 'medium' });
+    }
 
     // Check if implementation is complete from execution.json
     const completionResult = isCompletedFromExecution(executionPath);
@@ -172,9 +205,9 @@ const step6 = async (task, shouldPush = true) => {
         // If task is blocked, check if we need deep re-analysis
         const execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
         const attempts = execution.attempts || 0;
-        // Every 3 attempts, perform re-analysis
+        // Every 3 attempts, perform re-analysis (use hard model for deep analysis)
         if (attempts > 0 && attempts % 3 === 0) {
-            await reanalyzeBlocked(task);
+            await reanalyzeBlocked(task, { model: 'hard' });
         }
     }
 

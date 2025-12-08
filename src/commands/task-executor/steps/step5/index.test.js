@@ -285,7 +285,7 @@ describe('step5 orchestration', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
-                { cwd: '/test/project' },
+                expect.objectContaining({ cwd: '/test/project' }),
             );
         });
 
@@ -312,7 +312,7 @@ describe('step5 orchestration', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
-                { cwd: '/test/backend' },
+                expect.objectContaining({ cwd: '/test/backend' }),
             );
         });
 

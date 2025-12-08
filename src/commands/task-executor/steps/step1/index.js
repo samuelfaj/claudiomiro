@@ -12,6 +12,7 @@ const {
     deleteOverview,
     createPassedFile,
 } = require('./state-manager');
+const { getStepModel } = require('../../utils/model-config');
 
 /**
  * Generates multi-repository context section for AI_PROMPT.md
@@ -123,7 +124,8 @@ const runRefinementLoop = async (maxIterations) => {
         }
 
         try {
-            await executeClaude(prompt);
+            // Refinement loop - use step1 model (default: hard)
+            await executeClaude(prompt, null, { model: getStepModel(1) });
         } catch (error) {
             logger.stopSpinner();
             logger.error(`Refinement failed on iteration ${iteration}: ${error.message}`);
@@ -219,7 +221,8 @@ const step1 = async (sameBranch = false, maxIterations = 20) => {
         const multiRepoContext = generateMultiRepoContext();
         const legacyContext = generateLegacySystemContext();
 
-        await executeClaude(replace(branchStep + prompt + multiRepoContext + legacyContext));
+        // Main AI_PROMPT.md generation - use step1 model (default: hard)
+        await executeClaude(replace(branchStep + prompt + multiRepoContext + legacyContext), null, { model: getStepModel(1) });
 
         logger.stopSpinner();
 

@@ -80,6 +80,8 @@ describe('step2', () => {
             expect(logger.startSpinner).toHaveBeenCalledWith('Creating tasks...');
             expect(executeClaude).toHaveBeenCalledWith(
                 'Create tasks in /test/.claudiomiro/task-executor/TASKX directory',
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(logger.stopSpinner).toHaveBeenCalled();
             expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
@@ -272,6 +274,8 @@ describe('step2', () => {
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
                 'Tasks go in /test/.claudiomiro/task-executor/TASKX and /test/.claudiomiro/task-executor/TASKY',
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
         });
@@ -335,9 +339,13 @@ describe('step2', () => {
             expect(generateLegacySystemContext).toHaveBeenCalled();
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('## Legacy Systems Reference'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('Legacy backend at /legacy/backend'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
         });
 
@@ -376,6 +384,8 @@ describe('step2', () => {
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('optimized project context here'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
         });
 
@@ -404,6 +414,8 @@ describe('step2', () => {
             expect(generateLegacySystemContext).toHaveBeenCalled();
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('None - no legacy systems configured'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(logger.success).toHaveBeenCalledWith('Tasks created successfully');
         });

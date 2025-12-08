@@ -347,6 +347,8 @@ describe('step0', () => {
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
                 'If the repository uses Husky, lint-staged, or any other Git hooks, verify that they are properly configured and functioning.If no such hooks exist, take no action.',
+                null,
+                { model: 'fast' },
             );
             expect(executeClaude).toHaveBeenCalledTimes(2); // git hooks + prompt
         });

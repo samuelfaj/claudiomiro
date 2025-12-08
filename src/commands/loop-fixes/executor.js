@@ -147,10 +147,11 @@ const initializeFolder = (clearFolder = false) => {
  * @param {number} maxIterations - Maximum number of iterations (default: 20)
  * @param {Object} options - Optional settings
  * @param {boolean} options.clearFolder - Whether to clear .claudiomiro folder before starting (default: true)
+ * @param {string} options.model - Model to use ('fast', 'medium', 'hard')
  * @returns {Promise<void>}
  */
 const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart: false }) => {
-    const { clearFolder = true } = options;
+    const { clearFolder = true, model } = options;
 
     // Validate inputs
     if (!userPrompt || !userPrompt.trim()) {
@@ -296,7 +297,9 @@ const loopFixes = async (userPrompt, maxIterations = 20, options = { freshStart:
         }
 
         try {
-            await executeClaude(prompt + '\n\n' + shellCommandRule);
+            // Pass model option if specified
+            const claudeOptions = model ? { model } : undefined;
+            await executeClaude(prompt + '\n\n' + shellCommandRule, null, claudeOptions);
             lastIterationError = ''; // Clear error on success
         } catch (error) {
             logger.stopSpinner();

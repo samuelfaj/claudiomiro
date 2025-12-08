@@ -114,7 +114,12 @@ const createReflection = async (task, options = {}) => {
                 fs.rmSync(targetPath, { force: true });
             }
 
-            await executeClaude(prompt, task, cwd ? { cwd } : undefined);
+            // Reflection - use hard model (deep analysis and synthesis)
+            const claudeOptions = { model: 'hard' };
+            if (cwd) {
+                claudeOptions.cwd = cwd;
+            }
+            await executeClaude(prompt, task, claudeOptions);
 
             const content = readIfExists(targetPath);
             return { content };

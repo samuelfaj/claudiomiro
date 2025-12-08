@@ -102,9 +102,13 @@ describe('step1', () => {
             expect(logger.startSpinner).toHaveBeenCalledWith('Generating AI_PROMPT.md with clarifications...');
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('## FIRST STEP: \n\nCreate a git branch for this task\n\n'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('Generate AI_PROMPT.md for task: This is the initial task content from user at /test/.claudiomiro/task-executor'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(logger.stopSpinner).toHaveBeenCalled();
             expect(logger.success).toHaveBeenCalledWith('AI_PROMPT.md created successfully');
@@ -172,10 +176,14 @@ describe('step1', () => {
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('Generate AI_PROMPT.md for task: Task content for same branch test at /test/.claudiomiro/task-executor'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             // Verify that the prompt does NOT contain the branch step text
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.not.stringContaining('## FIRST STEP: \n\nCreate a git branch for this task\n\n'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(logger.success).toHaveBeenCalledWith('AI_PROMPT.md created successfully');
         });
@@ -209,6 +217,8 @@ describe('step1', () => {
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('Generate AI_PROMPT.md for task:  at /test/.claudiomiro/task-executor'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(logger.success).toHaveBeenCalledWith('AI_PROMPT.md created successfully');
         });
@@ -308,15 +318,23 @@ describe('step1', () => {
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('## Multi-Repository Context'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('/project/backend'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('/project/frontend'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('@scope'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
         });
 
@@ -349,9 +367,13 @@ describe('step1', () => {
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.not.stringContaining('## Multi-Repository Context'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('Base prompt Single-repo task'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
         });
     });
@@ -389,9 +411,13 @@ describe('step1', () => {
             expect(generateLegacySystemContext).toHaveBeenCalled();
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('## Legacy System Reference'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('⚠️ REFERENCE ONLY - DO NOT MODIFY'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
         });
 
@@ -426,6 +452,8 @@ describe('step1', () => {
             expect(generateLegacySystemContext).toHaveBeenCalled();
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.not.stringContaining('## Legacy System Reference'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
         });
 
@@ -501,15 +529,23 @@ describe('step1', () => {
             // Assert - both contexts are present
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('## Multi-Repository Context'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('## Legacy System Reference'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('/project/backend'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.stringContaining('/legacy'),
+                null,
+                expect.objectContaining({ model: 'hard' }),
             );
         });
     });

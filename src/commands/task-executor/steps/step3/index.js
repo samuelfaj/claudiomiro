@@ -3,6 +3,7 @@ const path = require('path');
 const logger = require('../../../../shared/utils/logger');
 const state = require('../../../../shared/config/state');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
+const { getStepModel } = require('../../utils/model-config');
 
 /**
  * Step 3: Analyze task dependencies
@@ -88,8 +89,8 @@ const step3 = async () => {
         .replace(/\{\{taskList\}\}/g, taskList)
         .replace('{{taskDescriptions}}', taskDescContent);
 
-    // Execute Claude to analyze dependencies
-    await executeClaude(promptTemplate);
+    // Execute Claude to analyze dependencies - use step3 model (default: medium)
+    await executeClaude(promptTemplate, null, { model: getStepModel(3) });
 
     logger.stopSpinner();
     logger.success('Task dependencies analyzed and configured');

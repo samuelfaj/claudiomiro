@@ -20,6 +20,7 @@ Detailed documentation for each Claudiomiro command:
 
 ### Advanced Features
 
+- [Model Configuration](./model-configuration.md) - AI model selection and cost optimization
 - [Multi-Repository Mode](./multi-repository-mode.md) - Working with backend + frontend codebases
 - [Local LLM Setup](./HOW-TO-RUN-WITH-LOCAL-LLM.md) - Using Ollama for token optimization
 

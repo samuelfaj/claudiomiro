@@ -273,11 +273,11 @@ describe('complete-checklist', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
-                { cwd: '/custom/path' },
+                expect.objectContaining({ cwd: '/custom/path', model: 'fast' }),
             );
         });
 
-        test('should use state.folder as cwd when no option provided and single-repo', async () => {
+        test('should use model fast when no cwd option provided in single-repo', async () => {
             // Act
             await completeChecklist(mockTask);
 
@@ -285,7 +285,7 @@ describe('complete-checklist', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
-                undefined,
+                expect.objectContaining({ model: 'fast' }),
             );
         });
 
@@ -301,7 +301,7 @@ describe('complete-checklist', () => {
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
-                { cwd: '/test/backend' },
+                expect.objectContaining({ cwd: '/test/backend', model: 'fast' }),
             );
         });
 

@@ -14,6 +14,13 @@ try {
     // ParallelStateManager not available in shared context - this is expected
 }
 
+// Model mapping: fast/medium/hard to Claude CLI model names
+const MODEL_MAP = {
+    fast: 'haiku',
+    medium: 'sonnet',
+    hard: 'opus',
+};
+
 const overwriteBlock = (lines) => {
     // Move cursor up N lines and clear each one
     process.stdout.write(`\x1b[${lines}A`);
@@ -33,8 +40,12 @@ const runClaude = (text, taskName = null, options = {}) => {
         const tmpFile = path.join(os.tmpdir(), `claudiomiro-prompt-${Date.now()}.txt`);
         fs.writeFileSync(tmpFile, text, 'utf-8');
 
+        // Determine model from options (default: medium -> sonnet)
+        const modelLevel = options.model || 'medium';
+        const modelName = MODEL_MAP[modelLevel] || MODEL_MAP.medium;
+
         // Use sh to execute command with cat substitution
-        const command = `claude --dangerously-skip-permissions -p "$(cat '${tmpFile}')" --output-format stream-json --verbose`;
+        const command = `claude --dangerously-skip-permissions --model=${modelName} -p "$(cat '${tmpFile}')" --output-format stream-json --verbose`;
 
         if (!suppressStreamingLogs) {
             logger.stopSpinner();

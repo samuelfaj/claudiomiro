@@ -27,6 +27,10 @@ jest.mock('../../../fix-branch', () => ({
 jest.mock('../../../../shared/services/integration-verifier', () => ({
     verifyAndFixIntegration: jest.fn(),
 }));
+jest.mock('../../utils/model-config', () => ({
+    getStepModel: jest.fn(() => 'dynamic'),
+    isEscalationStep: jest.fn(() => false),
+}));
 
 // Import after mocks
 const { step7, runIntegrationVerification } = require('./index');
@@ -268,13 +272,13 @@ describe('step7', () => {
 
             await step7();
 
-            expect(runFixBranch).toHaveBeenCalledWith([
-                '--limit=20',
-                '--continue',
-                '--level=2',
-                '--no-clear',
-                '/test',
-            ]);
+            const args = runFixBranch.mock.calls[0][0];
+            expect(args).toContain('--limit=20');
+            expect(args).toContain('--continue');
+            expect(args).toContain('--level=2');
+            expect(args).toContain('--no-clear');
+            expect(args).toContain('/test');
+            // No --model flag when using 'dynamic' config (non-escalation path)
             expect(logger.info).toHaveBeenCalledWith('🔧 Using fix-branch (level: 2 - blockers + warnings)');
         });
 
@@ -290,13 +294,13 @@ describe('step7', () => {
 
             await step7(10);
 
-            expect(runFixBranch).toHaveBeenCalledWith([
-                '--limit=10',
-                '--continue',
-                '--level=2',
-                '--no-clear',
-                '/test',
-            ]);
+            const args = runFixBranch.mock.calls[0][0];
+            expect(args).toContain('--limit=10');
+            expect(args).toContain('--continue');
+            expect(args).toContain('--level=2');
+            expect(args).toContain('--no-clear');
+            expect(args).toContain('/test');
+            // No --model flag when using 'dynamic' config
         });
 
         test('should call fix-branch with --no-limit when maxIterations is Infinity', async () => {
@@ -311,13 +315,13 @@ describe('step7', () => {
 
             await step7(Infinity);
 
-            expect(runFixBranch).toHaveBeenCalledWith([
-                '--no-limit',
-                '--continue',
-                '--level=2',
-                '--no-clear',
-                '/test',
-            ]);
+            const args = runFixBranch.mock.calls[0][0];
+            expect(args).toContain('--no-limit');
+            expect(args).toContain('--continue');
+            expect(args).toContain('--level=2');
+            expect(args).toContain('--no-clear');
+            expect(args).toContain('/test');
+            // No --model flag when using 'dynamic' config
         });
 
         test('should always pass --no-clear to fix-branch', async () => {
@@ -572,13 +576,13 @@ describe('step7', () => {
 
             await step7(); // No maxIterations provided
 
-            expect(runFixBranch).toHaveBeenCalledWith([
-                '--limit=20',
-                '--continue',
-                '--level=2',
-                '--no-clear',
-                '/test',
-            ]);
+            const args = runFixBranch.mock.calls[0][0];
+            expect(args).toContain('--limit=20');
+            expect(args).toContain('--continue');
+            expect(args).toContain('--level=2');
+            expect(args).toContain('--no-clear');
+            expect(args).toContain('/test');
+            // No --model flag when using 'dynamic' config
         });
     });
 

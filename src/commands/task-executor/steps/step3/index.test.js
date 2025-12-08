@@ -164,21 +164,17 @@ describe('step3', () => {
             // Act
             await step3();
 
-            // Assert
+            // Assert - check prompt content via mock call args
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toContain('HARD MODE: Deep Dependency Analysis');
+            expect(promptArg).toContain('Analyze 3 tasks (TASK1, TASK2, TASK3)');
+            expect(promptArg).toContain('### TASK1');
+            expect(promptArg).toContain('### TASK2');
+            expect(promptArg).toContain('### TASK3');
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('HARD MODE: Deep Dependency Analysis'),
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('Analyze 3 tasks (TASK1, TASK2, TASK3)'),
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('### TASK1'),
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('### TASK2'),
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('### TASK3'),
+                expect.any(String),
+                null,
+                expect.objectContaining({ model: 'medium' }),
             );
             expect(logger.stopSpinner).toHaveBeenCalled();
             expect(logger.success).toHaveBeenCalledWith('Task dependencies analyzed and configured');
@@ -211,16 +207,16 @@ describe('step3', () => {
             // Act
             await step3();
 
-            // Assert
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('### TASK1'),
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('### TASK2'),
-            );
+            // Assert - check prompt content via mock call args
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toContain('### TASK1');
+            expect(promptArg).toContain('### TASK2');
             // Should contain empty sections for missing files
+            expect(promptArg).toMatch(/### TASK1\s*\n\n\s*\n\n/);
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringMatching(/### TASK1\s*\n\n\s*\n\n/),
+                expect.any(String),
+                null,
+                expect.objectContaining({ model: 'medium' }),
             );
         });
     });
@@ -245,18 +241,16 @@ describe('step3', () => {
             // Act
             await step3();
 
-            // Assert
+            // Assert - check prompt content via mock call args
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toMatch(/Count: 2/);
+            expect(promptArg).toMatch(/List: TASK2, TASK10/);
+            expect(promptArg).toMatch(/Descriptions:\s*### TASK2/);
+            expect(promptArg).toMatch(/### TASK10/);
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringMatching(/Count: 2/),
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringMatching(/List: TASK2, TASK10/),
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringMatching(/Descriptions:\s*### TASK2/),
-            );
-            expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringMatching(/### TASK10/),
+                expect.any(String),
+                null,
+                expect.objectContaining({ model: 'medium' }),
             );
         });
     });
@@ -296,10 +290,13 @@ describe('step3', () => {
             // Act
             await step3();
 
-            // Assert
-            // The sort should be applied when building task descriptions
+            // Assert - check prompt content via mock call args
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toMatch(/TASK1.*TASK2.*TASK10/s);
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringMatching(/TASK1.*TASK2.*TASK10/s),
+                expect.any(String),
+                null,
+                expect.objectContaining({ model: 'medium' }),
             );
             expect(fs.readdirSync).toHaveBeenCalledWith('/test/.claudiomiro/task-executor');
         });
@@ -381,13 +378,14 @@ describe('step3', () => {
             // Act
             await step3();
 
-            // Assert
-            // Only directories should be processed
+            // Assert - check prompt content via mock call args
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toMatch(/TASK1.*TASK2/s);
+            expect(promptArg).not.toContain('file.txt');
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringMatching(/TASK1.*TASK2/s),
-            );
-            expect(executeClaude).not.toHaveBeenCalledWith(
-                expect.stringContaining('file.txt'),
+                expect.any(String),
+                null,
+                expect.objectContaining({ model: 'medium' }),
             );
         });
     });

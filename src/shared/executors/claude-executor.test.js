@@ -426,6 +426,66 @@ describe('Claude Executor', () => {
                 stdio: ['ignore', 'pipe', 'pipe'],
             });
         });
+
+        test('should use sonnet model by default (medium)', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt');
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model=sonnet')], expect.any(Object));
+        });
+
+        test('should use haiku model when model is fast', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt', null, { model: 'fast' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model=haiku')], expect.any(Object));
+        });
+
+        test('should use sonnet model when model is medium', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt', null, { model: 'medium' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model=sonnet')], expect.any(Object));
+        });
+
+        test('should use opus model when model is hard', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt', null, { model: 'hard' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model=opus')], expect.any(Object));
+        });
+
+        test('should fallback to sonnet for invalid model option', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeClaude('test prompt', null, { model: 'invalid' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model=sonnet')], expect.any(Object));
+        });
     });
 
     describe('Edge cases and error handling', () => {
