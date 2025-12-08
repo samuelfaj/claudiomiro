@@ -19,10 +19,10 @@ const LEGACY_CONFIG_FILE = path.join(LEGACY_PACKAGE_ROOT, 'claudiomiro.config.js
 const CONFIG_SCHEMA = {
     CLAUDIOMIRO_LOCAL_LLM: {
         name: 'Local LLM Model',
-        description: 'Ollama model for local LLM co-pilot (e.g., qwen2.5-coder:7b)',
+        description: 'Ollama model for local LLM co-pilot. Leave empty to disable and use Claude fast model as fallback',
         type: 'string',
         default: '',
-        examples: ['qwen2.5-coder:7b', 'codellama:7b', 'deepseek-coder:6.7b'],
+        examples: ['qwen2.5-coder:7b', 'codellama:7b', 'deepseek-coder:6.7b', '(empty to disable)'],
     },
     OLLAMA_HOST: {
         name: 'Ollama Host',
