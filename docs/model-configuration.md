@@ -224,6 +224,149 @@ export CLAUDIOMIRO_STEP6_MODEL=hard  # Thorough review
 claudiomiro --prompt="Add feature"
 ```
 
+## Concurrency Configuration
+
+Claudiomiro supports configurable parallel task execution for faster performance.
+
+### Default Concurrency
+
+By default, Claudiomiro runs **CPU cores × 2** concurrent tasks (capped at 10):
+
+| CPU Cores | Default Concurrency |
+|-----------|---------------------|
+| 1-2       | 2-4 tasks           |
+| 4         | 8 tasks             |
+| 6+        | 10 tasks (cap)      |
+
+### Environment Variable Override
+
+Control maximum concurrent tasks with `CLAUDIOMIRO_CONCURRENCY`:
+
+```bash
+# Run up to 4 tasks in parallel
+export CLAUDIOMIRO_CONCURRENCY=4
+claudiomiro --prompt="Complex multi-task project"
+
+# Or inline
+CLAUDIOMIRO_CONCURRENCY=6 claudiomiro --prompt="Feature implementation"
+```
+
+### Configuration File
+
+Set in `.claudiomiro.config.json`:
+
+```json
+{
+  "CLAUDIOMIRO_CONCURRENCY": "8"
+}
+```
+
+## File Conflict Prevention
+
+When tasks run in parallel, Claudiomiro automatically prevents file overwrite conflicts.
+
+### @files Tag
+
+Tasks declare which files they modify using the `@files` tag in BLUEPRINT.md:
+
+```markdown
+@dependencies [TASK0, TASK1]
+@scope backend
+@difficulty medium
+@files [src/models/user.js, src/models/user.test.js, src/validators/userValidator.js]
+
+# BLUEPRINT: TASK2 - User Validation
+...
+```
+
+### Automatic Conflict Resolution
+
+When two parallel tasks declare the same files, Claudiomiro automatically adds a dependency to serialize them:
+
+```
+⚠️  FILE CONFLICTS DETECTED - Auto-resolving:
+   TASK2 ↔ TASK5: src/models/user.js
+   → TASK5 now depends on TASK2
+
+✅ Conflicts resolved. Tasks will run sequentially to prevent overwrites.
+```
+
+### How It Works
+
+1. **Detection**: Before execution, Claudiomiro scans all `@files` declarations
+2. **Conflict Check**: Identifies pairs of tasks that could run in parallel but modify the same files
+3. **Auto-Resolution**: Adds a dependency from the later task to the earlier one (alphabetically)
+4. **Execution**: Tasks with shared files now run sequentially, preventing conflicts
+
+### Best Practices for @files
+
+1. **Be Specific**: List all files the task will modify, including test files
+2. **Include Related Files**: If modifying a module, include its test file
+3. **Granular Tasks**: Smaller tasks with fewer files maximize parallelism
+
+```markdown
+# Good: Specific file listing
+@files [src/services/auth.js, src/services/auth.test.js]
+
+# Avoid: Vague or missing file declarations
+@files []  # No files declared - potential conflicts
+```
+
+## Granular Task Decomposition
+
+To maximize parallelism and use cheaper models (Haiku), Claudiomiro decomposes tasks by responsibility layer:
+
+### Decomposition Strategy
+
+| Layer | Description | Example Task |
+|-------|-------------|--------------|
+| Model | Data structures, schemas | "Add User model with validation" |
+| Validation | Input/output validation | "Add userValidator for registration" |
+| Service | Business logic | "Implement createUser service" |
+| Controller/API | Request handling | "Add POST /api/users endpoint" |
+| Tests | Unit/integration tests | "Add tests for User registration" |
+
+### Benefits
+
+1. **More Parallelism**: Independent layers run simultaneously
+2. **Cheaper Execution**: Simpler tasks qualify for `@difficulty fast` (Haiku)
+3. **Better Isolation**: Failures don't affect unrelated layers
+4. **Cleaner Code**: Clear separation of concerns
+
+### Example Decomposition
+
+A feature like "Add user registration" becomes:
+
+```
+TASK1: Add User model with email/password fields
+  @files [src/models/user.js]
+  @difficulty fast
+
+TASK2: Add userValidator for registration
+  @files [src/validators/userValidator.js]
+  @difficulty fast
+
+TASK3: Implement createUser service
+  @dependencies [TASK1, TASK2]
+  @files [src/services/userService.js]
+  @difficulty medium
+
+TASK4: Add POST /api/users endpoint
+  @dependencies [TASK3]
+  @files [src/controllers/userController.js]
+  @difficulty fast
+
+TASK5: Add User model tests
+  @files [src/models/user.test.js]
+  @difficulty fast
+
+TASK6: Add userValidator tests
+  @files [src/validators/userValidator.test.js]
+  @difficulty fast
+```
+
+TASK1, TASK2, TASK5, and TASK6 can all run in parallel with Haiku, while TASK3 and TASK4 run sequentially using Sonnet.
+
 ## Related Documentation
 
 - [Task Executor Command](./commands/task-executor.md) - Main command documentation

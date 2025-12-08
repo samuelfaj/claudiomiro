@@ -10,17 +10,37 @@ const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
 const { resolveDeadlock } = require('./deadlock-resolver');
+const { detectFileConflicts, autoResolveConflicts } = require('./file-conflict-detector');
 
 const CORE_COUNT = Math.max(1, os.cpus().length);
 
+/**
+ * Get default concurrency from environment variable or calculated default
+ * Default: CPU cores * 2, capped at 10
+ * @returns {number} Default concurrency limit
+ */
+const getDefaultConcurrency = () => {
+    const envConcurrency = process.env.CLAUDIOMIRO_CONCURRENCY;
+    if (envConcurrency) {
+        const parsed = parseInt(envConcurrency, 10);
+        if (!isNaN(parsed) && parsed > 0) {
+            return parsed;
+        }
+    }
+    // Default: CPU cores * 2, capped at 10
+    return Math.min(CORE_COUNT * 2, 10);
+};
+
+const DEFAULT_CONCURRENCY = getDefaultConcurrency();
+
 class DAGExecutor {
     constructor(tasks, allowedSteps = null, maxConcurrent = null, noLimit = false, maxAttemptsPerTask = 20) {
-        this.tasks = tasks; // { TASK1: {deps: [], status: 'pending'}, ... }
+        this.tasks = tasks; // { TASK1: {deps: [], status: 'pending', files: []}, ... }
         this.allowedSteps = allowedSteps; // null = todos os steps, ou array de números
         this.noLimit = noLimit; // Se true, remove limite de ciclos por tarefa
         this.maxAttemptsPerTask = maxAttemptsPerTask; // Limite customizável de ciclos por tarefa (padrão: 20)
-        const defaultMax = Math.max(1, CORE_COUNT);
-        this.maxConcurrent = maxConcurrent || defaultMax;
+        this.maxConcurrent = maxConcurrent || DEFAULT_CONCURRENCY;
+        this._fileConflictsResolved = false; // Track if file conflicts have been resolved
         this.running = new Set(); // Tasks atualmente em execução
 
         // Scope-aware concurrency tracking
@@ -135,10 +155,46 @@ class DAGExecutor {
     }
 
     /**
-   * Returns the state manager instance
-   */
+     * Returns the state manager instance
+     */
     getStateManager() {
         return this.stateManager;
+    }
+
+    /**
+     * Detects and auto-resolves file conflicts between tasks.
+     * If two tasks can run in parallel but modify the same file,
+     * automatically adds a dependency to serialize them.
+     * @returns {Object[]} Array of resolutions applied
+     */
+    _resolveFileConflicts() {
+        if (this._fileConflictsResolved) {
+            return []; // Already resolved
+        }
+
+        const conflicts = detectFileConflicts(this.tasks);
+
+        if (conflicts.length === 0) {
+            this._fileConflictsResolved = true;
+            return [];
+        }
+
+        logger.warning('');
+        logger.warning('⚠️  FILE CONFLICTS DETECTED - Auto-resolving:');
+
+        const resolutions = autoResolveConflicts(this.tasks, conflicts);
+
+        for (const resolution of resolutions) {
+            logger.warning(`   ${resolution.task1} ↔ ${resolution.task2}: ${resolution.files.join(', ')}`);
+            logger.warning(`   → ${resolution.resolution}`);
+        }
+
+        logger.warning('');
+        logger.warning('✅ Conflicts resolved. Tasks will run sequentially to prevent overwrites.');
+        logger.warning('');
+
+        this._fileConflictsResolved = true;
+        return resolutions;
     }
 
     /**
@@ -431,10 +487,23 @@ class DAGExecutor {
    */
     async run(buildTaskGraph) {
         const coreCount = CORE_COUNT;
-        const defaultMax = CORE_COUNT;
-        const isCustom = this.maxConcurrent !== defaultMax;
+        const envConcurrency = process.env.CLAUDIOMIRO_CONCURRENCY;
+        const isFromEnv = !!envConcurrency;
+        const isCustom = this.maxConcurrent !== DEFAULT_CONCURRENCY;
 
-        logger.info(`Starting DAG executor with max ${this.maxConcurrent} concurrent tasks${isCustom ? ' (custom)' : ` (${coreCount} cores × 2, capped at 5)`}`);
+        let concurrencySource = '';
+        if (isCustom && !isFromEnv) {
+            concurrencySource = ' (custom)';
+        } else if (isFromEnv) {
+            concurrencySource = ' (from CLAUDIOMIRO_CONCURRENCY)';
+        } else {
+            concurrencySource = ` (${coreCount} cores × 2, capped at 10)`;
+        }
+
+        logger.info(`Starting DAG executor with max ${this.maxConcurrent} concurrent tasks${concurrencySource}`);
+
+        // Detect and auto-resolve file conflicts before execution
+        this._resolveFileConflicts();
         if (state.isMultiRepo()) {
             logger.info(`Multi-repo mode: ${state.getGitMode()}, backend and frontend tasks can run in parallel`);
         }
@@ -674,10 +743,20 @@ class DAGExecutor {
    */
     async runStep2() {
         const coreCount = CORE_COUNT;
-        const defaultMax = CORE_COUNT;
-        const isCustom = this.maxConcurrent !== defaultMax;
+        const envConcurrency = process.env.CLAUDIOMIRO_CONCURRENCY;
+        const isFromEnv = !!envConcurrency;
+        const isCustom = this.maxConcurrent !== DEFAULT_CONCURRENCY;
 
-        logger.info(`Starting step 4 (planning) with max ${this.maxConcurrent} concurrent tasks${isCustom ? ' (custom)' : ` (${coreCount} cores × 2, capped at 5)`}`);
+        let concurrencySource = '';
+        if (isCustom && !isFromEnv) {
+            concurrencySource = ' (custom)';
+        } else if (isFromEnv) {
+            concurrencySource = ' (from CLAUDIOMIRO_CONCURRENCY)';
+        } else {
+            concurrencySource = ` (${coreCount} cores × 2, capped at 10)`;
+        }
+
+        logger.info(`Starting step 4 (planning) with max ${this.maxConcurrent} concurrent tasks${concurrencySource}`);
         logger.newline();
 
         // Initialize and start UI renderer
@@ -824,4 +903,4 @@ class DAGExecutor {
     }
 }
 
-module.exports = { DAGExecutor };
+module.exports = { DAGExecutor, getDefaultConcurrency, DEFAULT_CONCURRENCY };

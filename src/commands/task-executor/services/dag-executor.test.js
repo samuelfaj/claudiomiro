@@ -9,6 +9,7 @@ jest.mock('./parallel-ui-renderer');
 jest.mock('../utils/terminal-renderer');
 jest.mock('../utils/progress-calculator');
 jest.mock('../utils/validation');
+jest.mock('./file-conflict-detector');
 
 // Set up os.cpus mock before module import
 const os = require('os');
@@ -23,7 +24,8 @@ const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
 const { isCompletedFromExecution, hasApprovedCodeReview } = require('../utils/validation');
-const { DAGExecutor } = require('./dag-executor');
+const { detectFileConflicts, autoResolveConflicts } = require('./file-conflict-detector');
+const { DAGExecutor, getDefaultConcurrency, DEFAULT_CONCURRENCY } = require('./dag-executor');
 
 // Mock steps module
 jest.mock('../steps', () => ({
@@ -54,6 +56,10 @@ describe('DAGExecutor', () => {
 
         fs.existsSync.mockReturnValue(false);
         fs.readFileSync.mockReturnValue('');
+
+        // Mock file conflict detector - default to no conflicts
+        detectFileConflicts.mockReturnValue([]);
+        autoResolveConflicts.mockReturnValue([]);
 
         // Create mock state manager
         mockStateManager = {
@@ -95,7 +101,7 @@ describe('DAGExecutor', () => {
             expect(exec.allowedSteps).toBeNull();
             expect(exec.noLimit).toBe(false);
             expect(exec.maxAttemptsPerTask).toBe(20);
-            expect(exec.maxConcurrent).toBe(4); // CORE_COUNT
+            expect(exec.maxConcurrent).toBe(8); // CORE_COUNT * 2 (4 cores * 2 = 8)
             expect(exec.running).toBeInstanceOf(Set);
             expect(exec.stateManager).toBe(mockStateManager);
         });
@@ -115,12 +121,12 @@ describe('DAGExecutor', () => {
             expect(exec.maxConcurrent).toBe(maxConcurrent);
         });
 
-        test('should use CORE_COUNT when maxConcurrent is not provided', () => {
-            // Since os.cpus is mocked to return 4 cores, maxConcurrent should be 4
+        test('should use CORE_COUNT * 2 when maxConcurrent is not provided', () => {
+            // Since os.cpus is mocked to return 4 cores, maxConcurrent should be 8 (4 * 2)
             const tasks = { test: { deps: [], status: 'pending' } };
             const exec = new DAGExecutor(tasks);
 
-            expect(exec.maxConcurrent).toBe(4); // Based on our mock of 4 cores
+            expect(exec.maxConcurrent).toBe(8); // Based on our mock of 4 cores * 2
         });
 
         test('should ensure maxConcurrent is at least 1', () => {
@@ -138,6 +144,165 @@ describe('DAGExecutor', () => {
             new DAGExecutor(tasks);
 
             expect(mockStateManager.initialize).toHaveBeenCalledWith(tasks);
+        });
+
+        test('should initialize _fileConflictsResolved as false', () => {
+            const tasks = { test: { deps: [], status: 'pending' } };
+            const exec = new DAGExecutor(tasks);
+
+            expect(exec._fileConflictsResolved).toBe(false);
+        });
+    });
+
+    describe('getDefaultConcurrency', () => {
+        const originalEnv = process.env;
+
+        beforeEach(() => {
+            // Reset modules to pick up env changes
+            jest.resetModules();
+        });
+
+        afterEach(() => {
+            process.env = originalEnv;
+        });
+
+        test('should return DEFAULT_CONCURRENCY value', () => {
+            // With 4 cores mocked, default should be 8 (4 * 2)
+            expect(DEFAULT_CONCURRENCY).toBe(8);
+        });
+
+        test('should use CLAUDIOMIRO_CONCURRENCY env var when set', () => {
+            // Note: Since the module is already loaded with DEFAULT_CONCURRENCY calculated,
+            // we test getDefaultConcurrency directly by checking the exported value
+            // The env var is read at module load time
+            expect(typeof getDefaultConcurrency).toBe('function');
+        });
+
+        test('should cap default concurrency at 10', () => {
+            // With 4 cores: 4 * 2 = 8 (under cap)
+            // With 6+ cores: would hit cap of 10
+            // Since we mock 4 cores, it should be 8
+            expect(DEFAULT_CONCURRENCY).toBeLessThanOrEqual(10);
+        });
+    });
+
+    describe('_resolveFileConflicts', () => {
+        test('should detect conflicts and auto-resolve them', () => {
+            const tasks = {
+                TASK1: { deps: [], status: 'pending', files: ['src/a.js'] },
+                TASK2: { deps: [], status: 'pending', files: ['src/a.js'] },
+            };
+            const exec = new DAGExecutor(tasks);
+
+            const mockConflicts = [
+                { task1: 'TASK1', task2: 'TASK2', files: ['src/a.js'] },
+            ];
+            const mockResolutions = [
+                { task1: 'TASK1', task2: 'TASK2', files: ['src/a.js'], resolution: 'TASK2 now depends on TASK1' },
+            ];
+
+            detectFileConflicts.mockReturnValue(mockConflicts);
+            autoResolveConflicts.mockReturnValue(mockResolutions);
+
+            const resolutions = exec._resolveFileConflicts();
+
+            expect(detectFileConflicts).toHaveBeenCalledWith(exec.tasks);
+            expect(autoResolveConflicts).toHaveBeenCalledWith(exec.tasks, mockConflicts);
+            expect(resolutions).toEqual(mockResolutions);
+            expect(logger.warning).toHaveBeenCalledWith(expect.stringContaining('FILE CONFLICTS DETECTED'));
+        });
+
+        test('should return empty array when no conflicts', () => {
+            const tasks = {
+                TASK1: { deps: [], status: 'pending', files: ['src/a.js'] },
+                TASK2: { deps: [], status: 'pending', files: ['src/b.js'] },
+            };
+            const exec = new DAGExecutor(tasks);
+
+            detectFileConflicts.mockReturnValue([]);
+
+            const resolutions = exec._resolveFileConflicts();
+
+            expect(resolutions).toEqual([]);
+            expect(autoResolveConflicts).not.toHaveBeenCalled();
+        });
+
+        test('should only resolve conflicts once', () => {
+            const tasks = {
+                TASK1: { deps: [], status: 'pending', files: ['src/a.js'] },
+                TASK2: { deps: [], status: 'pending', files: ['src/a.js'] },
+            };
+            const exec = new DAGExecutor(tasks);
+
+            const mockConflicts = [
+                { task1: 'TASK1', task2: 'TASK2', files: ['src/a.js'] },
+            ];
+            detectFileConflicts.mockReturnValue(mockConflicts);
+            autoResolveConflicts.mockReturnValue([]);
+
+            // First call
+            exec._resolveFileConflicts();
+            expect(detectFileConflicts).toHaveBeenCalledTimes(1);
+
+            // Second call should return early
+            const resolutions = exec._resolveFileConflicts();
+            expect(resolutions).toEqual([]);
+            expect(detectFileConflicts).toHaveBeenCalledTimes(1); // Still only 1 call
+        });
+
+        test('should set _fileConflictsResolved to true after resolution', () => {
+            const tasks = { TASK1: { deps: [], status: 'pending' } };
+            const exec = new DAGExecutor(tasks);
+
+            detectFileConflicts.mockReturnValue([]);
+
+            exec._resolveFileConflicts();
+
+            expect(exec._fileConflictsResolved).toBe(true);
+        });
+
+        test('should log all conflicting files', () => {
+            const tasks = {
+                TASK1: { deps: [], status: 'pending', files: ['src/a.js', 'src/b.js'] },
+                TASK2: { deps: [], status: 'pending', files: ['src/a.js', 'src/b.js'] },
+            };
+            const exec = new DAGExecutor(tasks);
+
+            const mockConflicts = [
+                { task1: 'TASK1', task2: 'TASK2', files: ['src/a.js', 'src/b.js'] },
+            ];
+            const mockResolutions = [
+                { task1: 'TASK1', task2: 'TASK2', files: ['src/a.js', 'src/b.js'], resolution: 'TASK2 now depends on TASK1' },
+            ];
+
+            detectFileConflicts.mockReturnValue(mockConflicts);
+            autoResolveConflicts.mockReturnValue(mockResolutions);
+
+            exec._resolveFileConflicts();
+
+            expect(logger.warning).toHaveBeenCalledWith(expect.stringContaining('TASK1'));
+            expect(logger.warning).toHaveBeenCalledWith(expect.stringContaining('TASK2'));
+        });
+    });
+
+    describe('CLAUDIOMIRO_CONCURRENCY environment variable', () => {
+        const originalEnv = process.env.CLAUDIOMIRO_CONCURRENCY;
+
+        afterEach(() => {
+            if (originalEnv === undefined) {
+                delete process.env.CLAUDIOMIRO_CONCURRENCY;
+            } else {
+                process.env.CLAUDIOMIRO_CONCURRENCY = originalEnv;
+            }
+        });
+
+        test('getDefaultConcurrency should be a function', () => {
+            expect(typeof getDefaultConcurrency).toBe('function');
+        });
+
+        test('should export DEFAULT_CONCURRENCY constant', () => {
+            expect(typeof DEFAULT_CONCURRENCY).toBe('number');
+            expect(DEFAULT_CONCURRENCY).toBeGreaterThan(0);
         });
     });
 

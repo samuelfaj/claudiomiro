@@ -9,6 +9,7 @@ const { isCompletedFromExecution, hasApprovedCodeReview } = require('./utils/val
 const { detectGitConfiguration } = require('../../shared/services/git-detector');
 const { getMultilineInput, getSimpleInput } = require('../../shared/services/prompt-reader');
 const { createBranches, getCurrentBranch } = require('../../shared/services/git-manager');
+const { parseFilesTag } = require('./services/file-conflict-detector');
 
 // Uses execution.json to check if task is completed and approved
 const isTaskApproved = (taskName) => {
@@ -849,8 +850,12 @@ const buildTaskGraph = () => {
         // Remove duplicates and prevent self-dependency again
         const finalDeps = Array.from(new Set(allDepsWithSubtasks)).filter(d => d !== task);
 
+        // Parse @files tag for file conflict detection
+        const files = parseFilesTag(taskMd);
+
         graph[task] = {
             deps: finalDeps,
+            files: files,
             status: isTaskApproved(task) ? 'completed' : 'pending',
         };
     }

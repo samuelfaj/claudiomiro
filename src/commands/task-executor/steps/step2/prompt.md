@@ -99,6 +99,159 @@ When working with multi-repository projects (backend + frontend), every BLUEPRIN
 
 ---
 
+## File Scope Declaration (Conflict Prevention)
+
+**CRITICAL:** Every BLUEPRINT.md MUST include a `@files` tag declaring ALL files the task will modify or create.
+
+### Purpose
+
+The `@files` tag prevents file conflicts when tasks run in parallel:
+- If two parallel tasks declare the same file → system auto-resolves by adding dependency
+- Tasks with exclusive file scopes can safely run in parallel
+- This prevents silent data loss from parallel overwrites
+
+### Format
+```markdown
+@dependencies [TASK0, TASK1]
+@scope backend
+@difficulty medium
+@files [src/models/user.js, src/models/user.test.js, src/validators/userValidator.js]
+
+# BLUEPRINT: TASKX
+...
+```
+
+### File Declaration Rules
+
+1. **EXCLUSIVE FILES**: Each task should declare files ONLY IT will touch
+2. **NO OVERLAP**: Two parallel tasks should NOT declare the same file
+3. **COMPLETE LIST**: Declare ALL files (created AND modified)
+4. **TESTS INCLUDED**: Include test files in the declaration
+
+### Handling File Conflicts
+
+**When two tasks NEED to modify the same file:**
+
+| Situation | Solution |
+|-----------|----------|
+| Tasks are independent | Split file into modules OR make one depend on the other |
+| Tasks are sequential | Use @dependencies to serialize them |
+| Tasks must be parallel | One task handles ALL changes to that file |
+
+**Example - Conflict Resolution:**
+
+```markdown
+# ❌ BAD: Both tasks modify same file, can run in parallel
+TASK1: @files [src/api/users.js]     @dependencies []
+TASK2: @files [src/api/users.js]     @dependencies []
+
+# ✅ GOOD: Sequential via dependency
+TASK1: @files [src/api/users.js]     @dependencies []
+TASK2: @files [src/api/users.js]     @dependencies [TASK1]
+
+# ✅ GOOD: Split file into modules
+TASK1: @files [src/api/users/create.js]     @dependencies []
+TASK2: @files [src/api/users/update.js]     @dependencies []
+```
+
+**Note:** Missing @files will trigger a warning during execution. The system will attempt to detect conflicts but explicit declaration is strongly recommended.
+
+---
+
+## Granular Decomposition for Parallelism
+
+**CRITICAL:** Maximize parallelism by decomposing tasks by RESPONSIBILITY, not by difficulty.
+
+### Principle: Divide by Responsibility, Not Difficulty
+
+**WRONG**: Take a complex task and force `@difficulty fast`
+**RIGHT**: Divide a complex task into sub-tasks that are NATURALLY simple
+
+### Decomposition Strategy by Layers
+
+A complex feature should be divided into responsibility layers:
+
+| Sub-task | Type | Typical @difficulty | Justification |
+|----------|------|---------------------|---------------|
+| Create model/schema | Structure | fast | Follow existing pattern |
+| Create validations | Validation | fast | Follow existing validators |
+| Create service | Logic | medium/hard | Depends on complexity |
+| Create controller/API | Interface | fast | Follow existing pattern |
+| Create unit tests | Tests | fast | Follow test patterns |
+| Create integration tests | Tests | medium | May have edge cases |
+
+### Example: Feature "User Authentication"
+
+**BEFORE (1 complex task):**
+```
+TASK1: Implement user authentication
+@difficulty hard
+@files [src/models/user.js, src/services/authService.js, src/routes/auth.js, src/middleware/authMiddleware.js, tests/auth.test.js]
+```
+
+**AFTER (5 granular tasks):**
+```
+TASK1: Create User model with password hash field
+@difficulty fast
+@files [src/models/user.js, src/models/user.test.js]
+@dependencies []
+
+TASK2: Create password validation utils
+@difficulty fast
+@files [src/validators/passwordValidator.js, src/validators/passwordValidator.test.js]
+@dependencies []
+
+TASK3: Implement auth service with JWT logic
+@difficulty medium
+@files [src/services/authService.js, src/services/authService.test.js]
+@dependencies [TASK1, TASK2]
+
+TASK4: Create login/logout API endpoints
+@difficulty fast
+@files [src/routes/auth.js, src/routes/auth.test.js]
+@dependencies [TASK3]
+
+TASK5: Create auth middleware + integration tests
+@difficulty fast
+@files [src/middleware/authMiddleware.js, tests/auth.integration.test.js]
+@dependencies [TASK3]
+```
+
+**Result:**
+- 4 tasks can use Haiku legitimately (genuine simplicity)
+- TASK1, TASK2 run in parallel (Layer 0)
+- TASK4, TASK5 run in parallel (Layer 2)
+- Maximum parallelism achieved
+- No file conflicts (exclusive @files)
+
+### Task Size Targets
+
+| Size | LOC Range | Action |
+|------|-----------|--------|
+| Too Small | < 30 LOC | Merge with related task |
+| Ideal | 30-150 LOC | Perfect granularity |
+| Acceptable | 150-300 LOC | Keep if cohesive |
+| Too Large | > 300 LOC | Split by responsibility |
+
+### Layer Optimization Goal
+
+**Maximize tasks per layer, minimize total layers.**
+
+**Good decomposition:**
+```
+Layer 0: 2 tasks (foundation, parallel)
+Layer 1: 4 tasks (parallel features)
+Layer 2: 2 tasks (parallel integration)
+Layer Ω: 1 task (final validation)
+```
+
+**Bad decomposition:**
+```
+Layer 0 → Layer 1 → Layer 2 → Layer 3 → Layer 4 (sequential, slow)
+```
+
+---
+
 ## Task Difficulty (Model Selection)
 
 Every BLUEPRINT.md MUST include a `@difficulty` tag to optimize AI model selection during task execution.
@@ -468,8 +621,10 @@ Before generating BLUEPRINTs, critique your decomposition:
 - [ ] Missing integration/validation task
 - [ ] Dependency cycle detected
 - [ ] Task without clear success criteria
-- [ ] Over-fragmentation (tasks with <50 LOC each)
-- [ ] Under-decomposition (tasks with >500 LOC each)
+- [ ] Over-fragmentation (tasks with <30 LOC each)
+- [ ] Under-decomposition (tasks with >300 LOC each)
+- [ ] File conflicts (two parallel tasks declaring same file in @files)
+- [ ] Missing @files declaration
 
 ### Revisions Made
 
@@ -666,6 +821,7 @@ Identify prohibitions for this specific task (inherited from AI_PROMPT.md + task
 @dependencies [Tasks]  // Task name MUST BE COMPLETE AND FOLLOW THE PATTERN "TASK{number}"
 @scope [backend|frontend|integration]  // Only required for multi-repo projects
 @difficulty [fast|medium|hard]  // Task complexity for model selection
+@files [path/to/file1.ext, path/to/file2.ext]  // ALL files this task will create/modify
 
 # BLUEPRINT: TASKX
 
@@ -825,6 +981,7 @@ LOW confidence on critical decision → BLOCKED (do not proceed with guesses)
 - Second line must be `@dependencies [...]`
 - Third line is `@scope [...]` for multi-repo projects only
 - `@difficulty [fast|medium|hard]` must follow @scope (or @dependencies if no @scope) - REQUIRED for model selection
+- `@files [...]` must list ALL files this task will create/modify - REQUIRED for conflict prevention
 - All 6 sections (IDENTITY, CONTEXT CHAIN, EXECUTION CONTRACT, IMPLEMENTATION STRATEGY, UNCERTAINTY LOG, INTEGRATION IMPACT) are REQUIRED
 - IDENTITY section MUST include: IS, IS NOT, Anti-Hallucination Anchors, AND 🚫 Guardrails
 - Guardrails MUST have at least one item per category (Scope, Architecture, Quality, Security)
