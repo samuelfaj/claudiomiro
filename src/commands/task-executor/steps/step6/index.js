@@ -9,7 +9,7 @@ const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
 const { curateInsights } = require('./curate-insights');
-const { getStepModel, isEscalationStep } = require('../../utils/model-config');
+const { getStepModel, isEscalationStep, parseDifficultyTag } = require('../../utils/model-config');
 
 /**
  * Commits changes based on task scope for multi-repo support
@@ -125,13 +125,19 @@ const step6 = async (task, shouldPush = true) => {
     // Step 2: Perform code review with ESCALATION model
     // First pass: fast model for quick review
     // If fast passes (completed): escalate to hard for final validation
+    // EXCEPTION: @difficulty fast tasks skip escalation to hard
     const modelConfig = getStepModel(6);
     const useEscalation = isEscalationStep(6) || modelConfig === 'escalation';
+
+    // Check task difficulty from BLUEPRINT.md
+    const blueprintPath = folder('BLUEPRINT.md');
+    const blueprintContent = fs.existsSync(blueprintPath) ? fs.readFileSync(blueprintPath, 'utf-8') : '';
+    const taskDifficulty = parseDifficultyTag(blueprintContent);
 
     let reviewResult;
 
     if (useEscalation) {
-        // ESCALATION MODEL: fast → hard
+        // ESCALATION MODEL: fast → hard (unless @difficulty fast)
         const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
         const stateManager = ParallelStateManager.getInstance();
         const isUIActive = stateManager && stateManager.isUIRendererActive();
@@ -146,11 +152,18 @@ const step6 = async (task, shouldPush = true) => {
         const fastCompletionResult = isCompletedFromExecution(executionPath);
 
         if (fastCompletionResult.completed) {
-            // Escalate to hard model for final validation
-            if (!isUIActive) {
-                logger.info('[Step6] Fast review passed, escalating to HARD model for final validation');
+            // Skip escalation to hard if task is marked @difficulty fast
+            if (taskDifficulty === 'fast') {
+                if (!isUIActive) {
+                    logger.info('[Step6] Task has @difficulty fast - skipping HARD model escalation');
+                }
+            } else {
+                // Escalate to hard model for final validation
+                if (!isUIActive) {
+                    logger.info('[Step6] Fast review passed, escalating to HARD model for final validation');
+                }
+                await reviewCode(task, { model: 'hard' });
             }
-            await reviewCode(task, { model: 'hard' });
         }
     } else {
         // Non-escalation: use configured model

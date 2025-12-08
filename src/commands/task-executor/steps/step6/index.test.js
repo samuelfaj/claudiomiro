@@ -317,6 +317,166 @@ describe('step6', () => {
         });
     });
 
+    describe('escalation with @difficulty tag', () => {
+        beforeEach(() => {
+            // Common setup for escalation tests
+            reviewCode.mockResolvedValue({ success: true });
+            smartCommit.mockResolvedValue({ success: true, method: 'shell' });
+        });
+
+        test('should skip HARD model escalation when @difficulty fast', async () => {
+            // Arrange
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('execution.json')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '@difficulty fast\n# BLUEPRINT\nTask content';
+                }
+                return JSON.stringify({
+                    status: 'completed',
+                    attempts: 1,
+                    phases: [],
+                    completion: { status: 'completed' },
+                });
+            });
+            // First call returns completed (after fast model review)
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
+
+            // Act
+            await step6(mockTask);
+
+            // Assert
+            // Should only call reviewCode once with fast model (no escalation to hard)
+            expect(reviewCode).toHaveBeenCalledTimes(1);
+            expect(reviewCode).toHaveBeenCalledWith(mockTask, { model: 'fast' });
+            expect(logger.info).toHaveBeenCalledWith('[Step6] Task has @difficulty fast - skipping HARD model escalation');
+        });
+
+        test('should escalate to HARD model when @difficulty medium', async () => {
+            // Arrange
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('execution.json')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '@difficulty medium\n# BLUEPRINT\nTask content';
+                }
+                return JSON.stringify({
+                    status: 'completed',
+                    attempts: 1,
+                    phases: [],
+                    completion: { status: 'completed' },
+                });
+            });
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
+
+            // Act
+            await step6(mockTask);
+
+            // Assert
+            // Should call reviewCode twice: fast then hard (escalation)
+            expect(reviewCode).toHaveBeenCalledTimes(2);
+            expect(reviewCode).toHaveBeenNthCalledWith(1, mockTask, { model: 'fast' });
+            expect(reviewCode).toHaveBeenNthCalledWith(2, mockTask, { model: 'hard' });
+            expect(logger.info).toHaveBeenCalledWith('[Step6] Fast review passed, escalating to HARD model for final validation');
+        });
+
+        test('should escalate to HARD model when @difficulty hard', async () => {
+            // Arrange
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('execution.json')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '@difficulty hard\n# BLUEPRINT\nTask content';
+                }
+                return JSON.stringify({
+                    status: 'completed',
+                    attempts: 1,
+                    phases: [],
+                    completion: { status: 'completed' },
+                });
+            });
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
+
+            // Act
+            await step6(mockTask);
+
+            // Assert
+            // Should call reviewCode twice: fast then hard (escalation)
+            expect(reviewCode).toHaveBeenCalledTimes(2);
+            expect(reviewCode).toHaveBeenNthCalledWith(1, mockTask, { model: 'fast' });
+            expect(reviewCode).toHaveBeenNthCalledWith(2, mockTask, { model: 'hard' });
+        });
+
+        test('should escalate to HARD model when no @difficulty tag', async () => {
+            // Arrange
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('execution.json')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '# BLUEPRINT\nTask content without difficulty tag';
+                }
+                return JSON.stringify({
+                    status: 'completed',
+                    attempts: 1,
+                    phases: [],
+                    completion: { status: 'completed' },
+                });
+            });
+            isCompletedFromExecution.mockReturnValue({ completed: true, confidence: 1.0 });
+
+            // Act
+            await step6(mockTask);
+
+            // Assert
+            // Should call reviewCode twice: fast then hard (escalation)
+            expect(reviewCode).toHaveBeenCalledTimes(2);
+            expect(reviewCode).toHaveBeenNthCalledWith(1, mockTask, { model: 'fast' });
+            expect(reviewCode).toHaveBeenNthCalledWith(2, mockTask, { model: 'hard' });
+        });
+
+        test('should not escalate when fast review fails (task not completed)', async () => {
+            // Arrange
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('execution.json')) return true;
+                if (filePath.includes('BLUEPRINT.md')) return true;
+                return false;
+            });
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('BLUEPRINT.md')) {
+                    return '@difficulty medium\n# BLUEPRINT\nTask content';
+                }
+                return JSON.stringify({
+                    status: 'in_progress',
+                    attempts: 1,
+                    phases: [],
+                    completion: { status: 'pending' },
+                });
+            });
+            // Fast review fails - task not completed
+            isCompletedFromExecution.mockReturnValue({ completed: false, confidence: 0.5 });
+
+            // Act
+            await step6(mockTask);
+
+            // Assert
+            // Should only call reviewCode once (no escalation since fast failed)
+            expect(reviewCode).toHaveBeenCalledTimes(1);
+            expect(reviewCode).toHaveBeenCalledWith(mockTask, { model: 'fast' });
+        });
+    });
+
     describe('multi-repo commit scenarios', () => {
         beforeEach(() => {
             // Common setup for multi-repo tests
