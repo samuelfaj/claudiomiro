@@ -75,12 +75,24 @@ describe('LocalLLMService', () => {
         });
 
         test('should fallback when Ollama is unavailable', async () => {
-            const service = new LocalLLMService({ shouldFail: true });
+            // Disable Claude fallback to test pure fallback mode
+            const service = new LocalLLMService({ shouldFail: true, useClaudeFallback: false });
             const result = await service.initialize();
 
             expect(result.available).toBe(false);
             expect(result.fallbackMode).toBe(true);
             expect(service.isAvailable()).toBe(false);
+        });
+
+        test('should use Claude fast model when Ollama unavailable and useClaudeFallback enabled', async () => {
+            const service = new LocalLLMService({ shouldFail: true, useClaudeFallback: true });
+            const result = await service.initialize();
+
+            expect(result.available).toBe(false);
+            expect(result.fallbackMode).toBe(true);
+            expect(service.useClaudeFallback).toBe(true);
+            // isAvailable returns true because Claude fallback is available
+            expect(service.isAvailable()).toBe(true);
         });
 
         test('should be disabled by default when CLAUDIOMIRO_LOCAL_LLM not set', async () => {

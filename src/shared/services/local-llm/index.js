@@ -10,6 +10,20 @@ const OllamaClient = require('./ollama-client');
 const LocalLLMCache = require('./cache');
 const { templates: _templates, TOPIC_CATEGORIES } = require('./prompt-templates');
 
+// Lazy load claude-executor to avoid circular dependencies
+let executeClaude = null;
+const getClaudeExecutor = () => {
+    if (!executeClaude) {
+        try {
+            const executor = require('../../executors/claude-executor');
+            executeClaude = executor.executeClaude;
+        } catch {
+            executeClaude = null;
+        }
+    }
+    return executeClaude;
+};
+
 // Lazy load state to avoid circular dependencies
 let state = null;
 const getState = () => {
@@ -36,11 +50,40 @@ class LocalLLMService {
         this.initialized = false;
         this.initError = null;
         this.currentTaskName = null;
+        // Use Claude 'fast' model when Ollama is not available (default: true)
+        this.useClaudeFallback = options.useClaudeFallback !== false;
         this.ParallelStateManager = null;
         try {
             this.ParallelStateManager = require('../../executors/parallel-state-manager');
         } catch (e) {
             // Ignore if not available (e.g. in tests)
+        }
+    }
+
+    /**
+     * Execute Claude with 'fast' model as fallback
+     * @param {string} prompt - Prompt to send
+     * @param {string} taskContext - Optional task context for folder location
+     * @returns {Promise<string|null>} - Response or null if failed
+     * @private
+     */
+    async _executeClaudeFast(prompt, taskContext = null) {
+        if (!this.useClaudeFallback) {
+            return null;
+        }
+
+        const claudeExecutor = getClaudeExecutor();
+        if (!claudeExecutor) {
+            return null;
+        }
+
+        try {
+            this._logToFile('Claude Fast Fallback', `Executing prompt (${prompt.length} chars)`);
+            const result = await claudeExecutor(prompt, taskContext, { model: 'fast' });
+            return result;
+        } catch (error) {
+            this._logToFile('Claude Fast Fallback - ERROR', error.message);
+            return null;
         }
     }
 
@@ -195,6 +238,20 @@ class LocalLLMService {
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
+            // Try Claude fast fallback first
+            const claudeResult = await this._executeClaudeFast(
+                `Classify this content into relevant topic categories. Return ONLY a JSON array of strings with the topics.\n\nCategories: ${TOPIC_CATEGORIES.join(', ')}\n\nContent:\n${content.slice(0, 2000)}\n\nRespond with JSON array only, no explanation.`,
+            );
+            if (claudeResult) {
+                try {
+                    const parsed = JSON.parse(claudeResult.match(/\[[\s\S]*\]/)?.[0] || '[]');
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        return parsed;
+                    }
+                } catch {
+                    // Fall through to regex
+                }
+            }
             const { classifyTopics } = this._loadFallbacks().topicClassifier;
             return classifyTopics(content);
         }
@@ -249,6 +306,13 @@ class LocalLLMService {
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
+            // Try Claude fast fallback first
+            const claudeResult = await this._executeClaudeFast(
+                `Summarize the following content in ${maxTokens} tokens or less. Be concise and focus on key points.\n\nContent:\n${content.slice(0, 4000)}`,
+            );
+            if (claudeResult && claudeResult.length > 10) {
+                return claudeResult;
+            }
             // Simple truncation fallback
             return content.slice(0, maxTokens * 4);
         }
@@ -350,7 +414,9 @@ class LocalLLMService {
         await this._ensureInitialized();
 
         if (this.fallbackMode) {
-            return null;
+            // Try Claude fast fallback
+            const claudeResult = await this._executeClaudeFast(prompt);
+            return claudeResult || null;
         }
 
         // Check cache
@@ -423,6 +489,21 @@ class LocalLLMService {
         }
 
         if (this.fallbackMode) {
+            // Try Claude fast fallback first
+            const fileListStr = filePaths.slice(0, 50).join('\n');
+            const claudeResult = await this._executeClaudeFast(
+                `Rank these files by relevance to the task. Return ONLY a JSON array of objects with "path", "relevance" (0-1), and "reason".\n\nTask: ${taskDescription}\n\nFiles:\n${fileListStr}\n\nRespond with JSON array only.`,
+            );
+            if (claudeResult) {
+                try {
+                    const parsed = JSON.parse(claudeResult.match(/\[[\s\S]*\]/)?.[0] || '[]');
+                    if (Array.isArray(parsed) && parsed.length > 0) {
+                        return parsed.sort((a, b) => b.relevance - a.relevance);
+                    }
+                } catch {
+                    // Fall through to keyword matching
+                }
+            }
             // Fallback: keyword-based relevance scoring
             return filePaths
                 .map(p => ({
@@ -597,6 +678,28 @@ class LocalLLMService {
         this._logToFile('prescreenDiff - LocalChecks', `Found ${localIssues.length} local issues`);
 
         if (this.fallbackMode) {
+            // Try Claude fast fallback first
+            const claudeResult = await this._executeClaudeFast(
+                `Analyze this git diff for critical bugs, security issues, or incomplete implementations. Return ONLY a JSON object with "issues" (array of {file, type, severity, description}), "summary" (string), and "hasCritical" (boolean).\n\nDiff:\n${diff.slice(0, 6000)}\n\nRespond with JSON only.`,
+            );
+            if (claudeResult) {
+                try {
+                    const parsed = JSON.parse(claudeResult.match(/\{[\s\S]*\}/)?.[0] || '{}');
+                    if (parsed.issues && Array.isArray(parsed.issues)) {
+                        // Merge with local issues
+                        const mergedIssues = [...localIssues, ...parsed.issues];
+                        const result = {
+                            issues: mergedIssues,
+                            summary: parsed.summary || `Found ${mergedIssues.length} issue(s)`,
+                            hasCritical: mergedIssues.some(i => i.severity === 'critical'),
+                        };
+                        this._logToFile('prescreenDiff - Claude Fast Result', `Issues: ${result.issues.length}, HasCritical: ${result.hasCritical}`);
+                        return result;
+                    }
+                } catch {
+                    // Fall through to local-only result
+                }
+            }
             const result = {
                 issues: localIssues,
                 summary: localIssues.length > 0
@@ -1130,18 +1233,19 @@ class LocalLLMService {
             initialized: this.initialized,
             available: this.available,
             fallbackMode: this.fallbackMode,
+            useClaudeFallback: this.useClaudeFallback,
             error: this.initError,
-            model: this.client?.model || null,
+            model: this.client?.model || (this.fallbackMode && this.useClaudeFallback ? 'claude-fast' : null),
             cacheStats: this.cache?.getStats() || null,
         };
     }
 
     /**
-   * Check if LLM features are available (not in fallback mode)
+   * Check if LLM features are available (Ollama or Claude fallback)
    * @returns {boolean}
    */
     isAvailable() {
-        return this.available && !this.fallbackMode;
+        return this.available || (this.fallbackMode && this.useClaudeFallback);
     }
 }
 
