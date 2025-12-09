@@ -1153,88 +1153,241 @@ Explicit constraints inherited from AI_PROMPT.md + task-specific prohibitions.
 
 **HARD STOP:** If ANY check fails → status: blocked
 
-### 3.2 Success Criteria (VERIFY AFTER COMPLETE):
+### 3.2 Success Criteria (MUST DO - VERIFY AFTER COMPLETE):
 
-**MANDATORY FORMAT - 5 COLUMNS:**
-| Criterion | Source | Testable? | Command | Manual Check |
-|-----------|--------|-----------|---------|--------------|
-| Tests pass | AI_PROMPT:§AC:L10 | AUTO | `npm test --testPathPattern="module" --silent` | - |
-| No lint errors | AI_PROMPT:§AC:L12 | AUTO | `eslint path/to/files --quiet` | - |
-| Feature works | AI_PROMPT:§AC:L15 | BOTH | `curl -s http://localhost/api/endpoint` | Verify response contains expected data |
+**MANDATORY FORMAT - 6 COLUMNS (includes MUST marker):**
+| Criterion | Source | Testable? | Command | Manual Check | MUST? |
+|-----------|--------|-----------|---------|--------------|-------|
+| Function X exists | AI_PROMPT:§AC:L10 | AUTO | `grep "functionName" path/to/file.ext` | - | ✅ MUST |
+| Tests pass | AI_PROMPT:§AC:L12 | AUTO | `[test_command] --testPathPattern="module"` | - | ✅ MUST |
+| No lint errors | AI_PROMPT:§AC:L14 | AUTO | `[lint_command] path/to/files` | - | ✅ MUST |
+| Feature works | AI_PROMPT:§AC:L15 | BOTH | `curl -s http://localhost/api/endpoint` | Verify response | ⚠️ SHOULD |
 
 **COLUMN RULES:**
 - **Testable?** MUST be: `AUTO`, `MANUAL`, or `BOTH` (exactly these values)
 - **Command** MUST be executable shell command (not description) or `-` for MANUAL
 - **Manual Check** describes human verification steps or `-` for AUTO
+- **MUST?** marks criteria as `✅ MUST` (blocking) or `⚠️ SHOULD` (warning only)
+
+**VALIDATION RULE:** If ANY `✅ MUST` criterion fails → Task is INCOMPLETE
 
 ### 3.3 Output Artifacts:
 | Artifact | Type | Path | Verification |
 |----------|------|------|--------------|
 | [File name] | CREATE/MODIFY | [Full path] | `test -f path` |
 
-## 4. IMPLEMENTATION STRATEGY
+### 3.4 FINISHING TOUCHES (Auto-inferred during execution)
+
+This section will be populated automatically during Step 5 execution.
+The system will analyze the generated code and infer obvious consequences that may have been forgotten.
+
+**Categories of finishing touches:**
+
+| Category | Examples |
+|----------|----------|
+| **UI State** | Reload table after create, show toast, update badge, hide spinner |
+| **Navigation** | Redirect after delete, update breadcrumb, back button behavior |
+| **Data Sync** | Invalidate cache, refresh related queries, update store |
+| **Validation** | State constraints (e.g., can't sign out without sign in) |
+| **Cleanup** | Close connections, clear temp data, release locks |
+
+**Format when populated:**
+
+| Action | Finishing Touch | Category | Status |
+|--------|-----------------|----------|--------|
+| createRecord() | Reload table listing | ui_state | ⏳ Pending |
+| deleteItem() | Redirect to list page | navigation | ✅ Applied |
+
+**Note:** Items marked as "Pending" require manual review before task completion.
+
+## 4. IMPLEMENTATION STRATEGY (Bulletproof TODO)
 
 **MANDATORY FORMAT:**
 - Use EXACTLY `### Phase N: Name` format (### + space + Phase + space + number + colon + space + name)
 - Steps MUST be numbered (1., 2., 3.) not bullets (-)
-- Each phase MUST end with `**Gate:** [criteria]`
+- Each phase MUST include: **Pre-check**, **TODO**, **DO NOT**, **Post-check (Gate)**, **Se falhar**, **Checkpoint**
 
 ### Phase 1: Preparation
-1. Read required context files
-2. Verify pre-conditions
-3. Set up any required scaffolding
 
-**Gate:** All pre-conditions verified, context understood
+**Pre-check (antes de iniciar):**
+- [ ] `ls [project_root]` → project structure exists
+- [ ] `[dependency_check]` → dependencies installed
+- [ ] `test -f [artifact_from_dependency_task]` → dependency artifacts exist
+
+**TODO:**
+1. Read reference file `path/to/reference.ext:lines`
+   - **Verify:** `test -f path/to/reference.ext`
+2. Create directory if needed
+   - **Verify:** `ls path/to/dir/`
+3. Verify dependencies from other tasks
+   - **Verify:** `test -f [artifact_from_TASK0]`
+
+**DO NOT (this phase):**
+- ❌ DO NOT start implementation without reading references
+- ❌ DO NOT assume directories exist
+
+**Post-check (Gate):**
+- [ ] All Verify above pass
+- [ ] Context understood (files read)
+
+**Se falhar:** Report missing dependency in execution.json
+
+**Checkpoint:** `git commit -m "[TASKX] Phase 1: Preparation complete"`
+
+---
 
 ### Phase 2: Core Implementation
-1. Detailed implementation step 1
-2. Detailed implementation step 2
-3. Follow pattern from file:line-range
 
-**Gate:** Core functionality implemented, compiles without errors
+**Pre-check:**
+- [ ] Phase 1 committed (`git log --oneline -1 | grep "Phase 1"`)
+- [ ] `ls src/[module]/` → directory exists
+- [ ] `grep "ModelName" src/models/` → required model exists
+
+**TODO:**
+1. Create file `path/to/new-file.ext`
+   - **Verify:** `test -f path/to/new-file.ext`
+
+2. Implement main function(arg1, arg2)
+   - **Verify:** `grep "async functionName" path/to/new-file.ext`
+   - **Pattern:** Copy pattern from `reference/file.ext:45-80`
+
+3. Add input validation
+   - **Verify:** `grep "validate" path/to/new-file.ext`
+
+4. Handle edge cases
+   - **Verify:** `grep "if.*exists" path/to/new-file.ext`
+
+**DO NOT (this phase):**
+- ❌ DO NOT create methods that don't exist in models
+- ❌ DO NOT invent types/interfaces (use existing ones)
+- ❌ DO NOT import modules that don't exist in project
+- ❌ DO NOT use patterns different from reference file
+
+**Expected Output (Skeleton):**
+```
+// path/to/new-file.ext
+// Show EXACTLY how the code should look
+// With real imports, real types, real patterns
+```
+
+**Post-check (Gate):**
+- [ ] `[build_command]` → compiles without errors
+- [ ] All Verify above pass
+- [ ] Code follows pattern from reference file
+
+**Se falhar:** `git checkout -- path/to/new-file.ext`
+
+**Checkpoint:** `git commit -m "[TASKX] Phase 2: Core implementation complete"`
+
+---
 
 ### Phase 3: Testing
+
+**Pre-check:**
+- [ ] Phase 2 committed
+- [ ] Core implementation compiles
+
+**TODO:**
 1. Write/update unit tests
+   - **Verify:** `test -f path/to/new-file.test.ext`
 2. Run affected tests only
+   - **Verify:** `[test_command] --testPathPattern="module"`
 3. Fix any failures
 
-**Gate:** All affected tests pass
+**DO NOT (this phase):**
+- ❌ DO NOT skip writing tests
+- ❌ DO NOT run full test suite (only affected)
+
+**Post-check (Gate):**
+- [ ] All affected tests pass
+
+**Se falhar:** Fix failing tests before proceeding
+
+**Checkpoint:** `git commit -m "[TASKX] Phase 3: Tests passing"`
+
+---
 
 ### Phase 4: Integration
+
+**Pre-check:**
+- [ ] Phase 3 committed
+- [ ] Tests passing
+
+**TODO:**
 1. Verify integration points
+   - **Verify:** `grep "import.*newModule" src/index.ext`
 2. Check imports/exports work
+   - **Verify:** `[build_command]`
 3. Validate with dependent modules
 
-**Gate:** Integration verified, no breaking changes
+**DO NOT (this phase):**
+- ❌ DO NOT modify unrelated modules
+- ❌ DO NOT break existing imports
+
+**Post-check (Gate):**
+- [ ] Integration verified, no breaking changes
+
+**Se falhar:** Revert integration changes
+
+**Checkpoint:** `git commit -m "[TASKX] Phase 4: Integration complete"`
+
+---
 
 ### Phase 5: Validation
-1. Final success criteria check
-2. Verify output artifacts exist
-3. Mark task complete
 
-## 5. UNCERTAINTY LOG
+**Pre-check:**
+- [ ] All previous phases committed
+- [ ] `[build_command]` → compiles
 
-| ID | Topic | Assumption | Confidence | Evidence |
-|----|-------|------------|------------|----------|
-| U1 | [Topic] | [What we assume] | LOW/MEDIUM/HIGH | [Why we think this] |
+**TODO:**
+1. Execute §3.2 Success Criteria validations
+   - **Verify:** Each command in §3.2 table passes
+2. Verify all artifacts in §3.3 exist
+   - **Verify:** `test -f [each_artifact]`
+3. Verify correct exports
+   - **Verify:** `grep "export" path/to/index.ext`
+
+**DO NOT (this phase):**
+- ❌ DO NOT mark complete if any Verify fails
+- ❌ DO NOT skip validations
+
+**Post-check (Gate):**
+- [ ] ALL Success Criteria (§3.2) with `✅ MUST` pass
+- [ ] ALL artifacts (§3.3) exist
+- [ ] Build passes
+
+**Se falhar:** Return to phase that failed, do not commit
+
+**Checkpoint:** `git commit -m "[TASKX] Complete"`
+
+## 5. RISKS & DEPENDENCIES
+
+| Risk/Uncertainty | Impact | Mitigation | Confidence |
+|------------------|--------|------------|------------|
+| [Risk description] | HIGH/MEDIUM/LOW | [How to handle] | HIGH/MEDIUM/LOW |
+| [Dependency on TASK0] | Blocker | Verify before starting | HIGH |
+
+**Integration Points:**
+- **Affects:** [list of files/modules this task modifies]
+- **Affected by:** [list of dependencies from other tasks]
+
+**Files Modified:**
+| File | Modification | Impact |
+|------|--------------|--------|
+| [path] | [What changes] | [Effect on other modules] |
+
+**Files Created:**
+| File | Exports |
+|------|---------|
+| [path] | [Public API] |
 
 ### Stop Rule:
 LOW confidence on critical decision → BLOCKED (do not proceed with guesses)
 
-## 6. INTEGRATION IMPACT
+## 6. CONTEXT RECOVERY
 
-### Files Modified:
-| File | Modification | Who Imports | Impact |
-|------|--------------|-------------|--------|
-| [path] | [What changes] | [Importers] | [Effect] |
-
-### Files Created:
-| File | Imports From | Exports |
-|------|--------------|---------|
-| [path] | [Dependencies] | [Public API] |
-
-### Breaking Changes:
-[None or detailed description of what breaks and migration path]
+**Se perdeu contexto:** `git log --oneline --grep="TASKX"` → continue from next uncommitted phase
+**Quick ref:** [1 sentence describing what this task does]
 ```
 
 🚨 CRITICAL BLUEPRINT RULES:
@@ -1243,11 +1396,15 @@ LOW confidence on critical decision → BLOCKED (do not proceed with guesses)
 - Third line is `@scope [...]` for frontend+backend projects (mono or multi-repo)
 - `@difficulty [fast|medium|hard]` must follow @scope (or @dependencies if no @scope) - REQUIRED for model selection
 - `@files [...]` must list ALL files this task will create/modify - REQUIRED for conflict prevention
-- All 6 sections (IDENTITY, CONTEXT CHAIN, EXECUTION CONTRACT, IMPLEMENTATION STRATEGY, UNCERTAINTY LOG, INTEGRATION IMPACT) are REQUIRED
+- All 6 sections (IDENTITY, CONTEXT CHAIN, EXECUTION CONTRACT, IMPLEMENTATION STRATEGY, RISKS & DEPENDENCIES, CONTEXT RECOVERY) are REQUIRED
 - IDENTITY section MUST include: IS, IS NOT, Anti-Hallucination Anchors, AND 🚫 Guardrails
 - Guardrails MUST have at least one item per category (Scope, Architecture, Quality, Security)
 - Context Chain must include legacy reference section (even if "None")
 - Pre-conditions table must have at least one verifiable check
+- §3.2 Success Criteria MUST include MUST? column marking blocking criteria
+- §4 Implementation Strategy phases MUST include: Pre-check, TODO with Verify, DO NOT, Post-check, Se falhar, Checkpoint
+- §5 RISKS & DEPENDENCIES merges uncertainties and integration impact
+- §6 CONTEXT RECOVERY must have git log command and quick reference
 - Anti-hallucination anchors prevent the agent from inventing code
 - Guardrails prevent scope creep, over-engineering, and security violations
 
@@ -1673,10 +1830,10 @@ Before finishing, perform these validations:
 - [ ] All BLUEPRINTs contain all 6 required sections
 - [ ] IDENTITY section has IS, IS NOT, and Anti-Hallucination Anchors
 - [ ] CONTEXT CHAIN includes Priority 0 (legacy) through Priority 3
-- [ ] EXECUTION CONTRACT has pre-conditions, success criteria, and artifacts
-- [ ] IMPLEMENTATION STRATEGY has 5 phases with gates
-- [ ] UNCERTAINTY LOG has stop rule
-- [ ] INTEGRATION IMPACT lists files modified and created
+- [ ] EXECUTION CONTRACT has pre-conditions, success criteria (with MUST column), artifacts, and finishing touches placeholder
+- [ ] IMPLEMENTATION STRATEGY has bulletproof phases (Pre-check, TODO+Verify, DO NOT, Post-check, Se falhar, Checkpoint)
+- [ ] RISKS & DEPENDENCIES has stop rule and integration points
+- [ ] CONTEXT RECOVERY has git log command and quick reference
 
 ### ✅ Context Reference Checklist
 - [ ] All tasks reference AI_PROMPT.md in Priority 1

@@ -27,6 +27,69 @@ You are a **Senior Software Engineer** implementing a task based on the BLUEPRIN
 
 ---
 
+## 🔄 CONTEXT RECOVERY PROTOCOL (If You Lost Context)
+
+**CRITICAL:** If you lost context or are resuming execution, follow this protocol BEFORE continuing.
+
+### Quick Recovery Steps:
+
+1. **Check git history for checkpoints:**
+   ```bash
+   git log --oneline --grep="[TASKX]" -5
+   ```
+   This shows which phases were already committed (e.g., `[TASK1] Phase 2: Core Implementation complete`)
+
+2. **Read BLUEPRINT.md §6 CONTEXT RECOVERY section:**
+   - Contains quick reference (1 sentence summary)
+   - Shows what this task does
+
+3. **Check execution.json current state:**
+   - `currentPhase.id` shows where you stopped
+   - `phases[].status` shows which phases are complete
+   - `artifacts[]` shows what files were already created/modified
+
+4. **Determine next action:**
+   - If git checkpoint exists for Phase N → Start from Phase N+1
+   - If no git checkpoint → Start from Phase 1
+   - **DO NOT re-implement phases that already have git commits**
+
+### Recovery Decision Tree:
+
+```
+git log --grep="[TASKX]" exists?
+│
+├─ YES → Last checkpoint is Phase N
+│        → Continue from Phase N+1
+│        → DO NOT redo Phase N work
+│
+└─ NO → No checkpoints found
+        → Start from Phase 1 (beginning)
+        → Read BLUEPRINT.md completely first
+```
+
+### Git Checkpoint Format:
+
+Checkpoints follow this pattern:
+- `[TASKX] Phase 1: Preparation complete`
+- `[TASKX] Phase 2: Core Implementation complete`
+- `[TASKX] Phase 3: Testing complete`
+- `[TASKX] Complete` (final)
+
+### Creating Checkpoints:
+
+After completing each phase gate, create a checkpoint:
+```bash
+git add -A
+git commit -m "[TASKX] Phase N: <phase_name> complete"
+```
+
+This ensures:
+- Progress is permanently tracked
+- Recovery is possible if context is lost
+- Other agents can see what was done
+
+---
+
 ## CONTEXT FILES (READ THESE FIRST)
 
 **CRITICAL: Task folder location:**

@@ -40,6 +40,13 @@ const {
     validateCompletion,
 } = require('./validators');
 
+// Finishing Touches
+const {
+    inferFinishingTouches,
+    applyFinishingTouches,
+    updateBlueprintFinishingTouches,
+} = require('./utils/finishing-touches');
+
 // Prompt Selector
 const { selectPrompt } = require('./prompts/prompt-selector');
 
@@ -141,7 +148,47 @@ const runValidationLayers = async (task, execution, cwd, _executionPath) => {
         }
     }
 
-    // Layer 5: Completion validation
+    // Layer 5: Finishing Touches Inference (non-blocking)
+    logger.info('Inferring finishing touches...');
+    try {
+        const taskDescription = extractTaskDescription(task, state.claudiomiroFolder);
+        const modifiedFiles = execution.artifacts
+            ?.filter(a => a.action === 'created' || a.action === 'modified')
+            ?.map(a => a.path) || [];
+
+        if (modifiedFiles.length > 0) {
+            const touches = await inferFinishingTouches(taskDescription, modifiedFiles, { cwd });
+
+            if (touches.finishingTouches && touches.finishingTouches.length > 0) {
+                logger.info(`[Finishing Touches] Found ${touches.finishingTouches.length} items`);
+
+                const { applied, pending } = await applyFinishingTouches(touches.finishingTouches, {
+                    cwd,
+                    dryRun: false,
+                });
+
+                // Update BLUEPRINT.md with §3.4
+                const blueprintPath = path.join(state.claudiomiroFolder, task, 'BLUEPRINT.md');
+                updateBlueprintFinishingTouches(blueprintPath, { applied, pending });
+
+                // Update execution.json
+                execution.finishingTouches = {
+                    inferred: touches.finishingTouches.length,
+                    applied: applied.length,
+                    pending: pending.length,
+                    items: { applied, pending },
+                };
+
+                if (pending.length > 0) {
+                    logger.warning(`[Finishing Touches] ${pending.length} items need manual review`);
+                }
+            }
+        }
+    } catch (error) {
+        logger.warning(`[Finishing Touches] Inference skipped: ${error.message}`);
+    }
+
+    // Layer 6: Completion validation
     if (validateCompletion(execution)) {
         execution.completion = execution.completion || {};
         execution.completion.status = 'completed';
@@ -152,6 +199,32 @@ const runValidationLayers = async (task, execution, cwd, _executionPath) => {
     }
 
     return { valid: true, failedValidation: null };
+};
+
+/**
+ * Extract task description from BLUEPRINT.md
+ */
+const extractTaskDescription = (task, claudiomiroFolder) => {
+    const blueprintPath = path.join(claudiomiroFolder, task, 'BLUEPRINT.md');
+    if (!fs.existsSync(blueprintPath)) {
+        return task;
+    }
+
+    const content = fs.readFileSync(blueprintPath, 'utf-8');
+
+    // Try to extract "This Task IS:" section
+    const isMatch = content.match(/### This Task IS:?\s*\n([\s\S]*?)(?=\n###|\n##|$)/i);
+    if (isMatch) {
+        return isMatch[1].trim().split('\n')[0]; // First line
+    }
+
+    // Fallback to title
+    const titleMatch = content.match(/^# BLUEPRINT:\s*(.+)$/m);
+    if (titleMatch) {
+        return titleMatch[1].trim();
+    }
+
+    return task;
 };
 
 /**
