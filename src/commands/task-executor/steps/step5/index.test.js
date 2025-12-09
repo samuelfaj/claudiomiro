@@ -41,11 +41,6 @@ jest.mock('../../../../shared/services/context-cache', () => ({
     getContextFilePaths: jest.fn().mockReturnValue([]),
     markTaskCompleted: jest.fn(),
 }));
-jest.mock('./generate-review-checklist', () => ({
-    generateReviewChecklist: jest.fn().mockResolvedValue({ success: true, checklistPath: null, itemCount: 0 }),
-    loadArtifactsFromExecution: jest.fn(),
-    buildChecklistPrompt: jest.fn(),
-}));
 // Mock validators
 jest.mock('./validators', () => ({
     verifyPreConditions: jest.fn().mockResolvedValue({ passed: true, blocked: false }),

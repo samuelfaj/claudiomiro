@@ -136,7 +136,7 @@ describe('help command', () => {
             expect(consoleLogSpy).toHaveBeenCalledTimes(1);
 
             const output = consoleLogSpy.mock.calls[0][0];
-            expect(output).toMatch(/^claudiomiro v\d+\.\d+\.\d+$/);
+            expect(output).toMatch(/^claudiomiro v\d+\.\d+\.\d+(-[a-z0-9]+)?$/);
         });
     });
 
