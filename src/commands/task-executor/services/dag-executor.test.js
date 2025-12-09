@@ -178,11 +178,10 @@ describe('DAGExecutor', () => {
             expect(typeof getDefaultConcurrency).toBe('function');
         });
 
-        test('should cap default concurrency at 10', () => {
-            // With 4 cores: 4 * 2 = 8 (under cap)
-            // With 6+ cores: would hit cap of 10
-            // Since we mock 4 cores, it should be 8
-            expect(DEFAULT_CONCURRENCY).toBeLessThanOrEqual(10);
+        test('should default to cores * 2 without cap', () => {
+            // With 4 cores: 4 * 2 = 8
+            // Default concurrency should equal cores * 2
+            expect(DEFAULT_CONCURRENCY).toBe(8);
         });
     });
 

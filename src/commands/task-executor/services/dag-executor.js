@@ -16,7 +16,7 @@ const CORE_COUNT = Math.max(1, os.cpus().length);
 
 /**
  * Get default concurrency from environment variable or calculated default
- * Default: CPU cores * 2, capped at 10
+ * Default: CPU cores * 2
  * @returns {number} Default concurrency limit
  */
 const getDefaultConcurrency = () => {
@@ -27,8 +27,8 @@ const getDefaultConcurrency = () => {
             return parsed;
         }
     }
-    // Default: CPU cores * 2, capped at 10
-    return Math.min(CORE_COUNT * 2, 10);
+    // Default: CPU cores * 2
+    return CORE_COUNT * 2;
 };
 
 const DEFAULT_CONCURRENCY = getDefaultConcurrency();
@@ -497,7 +497,7 @@ class DAGExecutor {
         } else if (isFromEnv) {
             concurrencySource = ' (from CLAUDIOMIRO_CONCURRENCY)';
         } else {
-            concurrencySource = ` (${coreCount} cores × 2, capped at 10)`;
+            concurrencySource = ` (${coreCount} cores × 2)`;
         }
 
         logger.info(`Starting DAG executor with max ${this.maxConcurrent} concurrent tasks${concurrencySource}`);
@@ -753,7 +753,7 @@ class DAGExecutor {
         } else if (isFromEnv) {
             concurrencySource = ' (from CLAUDIOMIRO_CONCURRENCY)';
         } else {
-            concurrencySource = ` (${coreCount} cores × 2, capped at 10)`;
+            concurrencySource = ` (${coreCount} cores × 2)`;
         }
 
         logger.info(`Starting step 4 (planning) with max ${this.maxConcurrent} concurrent tasks${concurrencySource}`);
