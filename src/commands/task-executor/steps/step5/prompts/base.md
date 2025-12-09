@@ -230,45 +230,84 @@ If you make assumptions during implementation:
 }
 ```
 
-**Step 2.5: Update Review Checklist (CRITICAL - Real-Time)**
+**Step 2.5: Generate Review Items (CRITICAL - IMMEDIATE)**
 
-For EVERY file you create/modify, add review questions to `review-checklist.json`:
+**MANDATORY PROTOCOL:** For EVERY file you create/modify, you MUST:
+
+1. **IMMEDIATELY after the change** (before moving to next step)
+2. **Think like a human reviewer:** "What could go wrong with this change?"
+3. **Append review items** to `review-checklist.json`
 
 **Location:** `{{taskFolder}}/review-checklist.json`
 
+**CRITICAL RULES:**
+- MUST append items IMMEDIATELY after each file change
+- MUST NOT wait until end of execution
+- MUST use file:line references (e.g., "lines 45-50") NOT inline code
+- MUST include `context.action` describing WHAT you did
+- MUST include `context.why` explaining WHY you did it
+- Generate 2-5 items per file change (by function/method/logical change)
+
+**Question Generation Framework:**
+
+After EACH change, ask yourself by function/method/action:
+1. **Compatibility:** Could this function/change break existing callers?
+2. **Edge Cases:** What happens with null/empty/invalid input at these lines?
+3. **Error Handling:** Are failure paths in this method properly handled?
+4. **Data Flow:** Is data transformed correctly in this function?
+5. **Integration:** Does this method interact correctly with dependencies?
+
+**Item Format (v2 schema - REQUIRED):**
 ```json
 {
-  "task": "TASK0",
-  "generatedAt": "2025-12-02T23:45:12.000Z",
-  "items": [
-    {
-      "artifact": "path/to/handler.ext",
-      "type": "modified",
-      "questions": [
-        {
-          "category": "compatibility",
-          "question": "Does the new query return the same data structure?",
-          "why": "Ensures downstream code doesn't break"
-        },
-        {
-          "category": "error-handling",
-          "question": "What happens if the query returns empty array?",
-          "why": "Should gracefully handle no records"
-        }
-      ]
-    }
-  ]
+  "id": "RC<N>",
+  "file": "path/to/file.ext",
+  "lines": [45, 78],
+  "type": "created" | "modified",
+  "description": "Question about specific lines - NO backticks or code",
+  "reviewed": false,
+  "category": "error-handling",
+  "context": {
+    "action": "What action was performed (e.g., Added validation for userId)",
+    "why": "Why this was needed (e.g., Prevent SQL injection)"
+  }
 }
 ```
 
-**Question Categories:**
-- `compatibility` - Will existing callers break? Signature changes?
-- `breaking-change` - API changes that could break other code?
-- `completeness` - All cases handled? No TODOs? All requirements met?
-- `data-flow` - Where does data come from/go to? Correct transformations?
-- `error-handling` - Null/empty/error cases handled gracefully?
-- `integration` - Dependencies used correctly? External APIs work?
-- `testing` - Are tests present? Do they cover the changes?
+**Example (GOOD):**
+```json
+{
+  "id": "RC1",
+  "file": "src/handlers/user.ext",
+  "lines": [45, 50, 55],
+  "type": "modified",
+  "description": "Does the new validation at lines 45-55 handle empty string and null input correctly?",
+  "reviewed": false,
+  "category": "error-handling",
+  "context": {
+    "action": "Added input validation for user registration data",
+    "why": "Prevent invalid data from reaching database and causing integrity issues"
+  }
+}
+```
+
+**Example (BAD - DO NOT DO):**
+```json
+{
+  "description": "Is `validateUser(data)` handling errors?",  // BAD: contains backticks
+  "lines": [],  // BAD: empty lines array
+  "context": {}  // BAD: missing action and why
+}
+```
+
+**Categories:**
+- `compatibility` - Breaking changes, signature changes
+- `breaking-change` - API changes that could break callers
+- `completeness` - All cases handled? Missing logic?
+- `data-flow` - Data transformation correctness
+- `error-handling` - Null/empty/error handling
+- `integration` - Dependency interactions
+- `testing` - Test coverage for this change
 
 ### PHASE 3: VALIDATE
 

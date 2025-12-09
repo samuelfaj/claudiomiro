@@ -34,6 +34,47 @@ This is a **RETRY AFTER ERRORS**. Previous execution(s) failed.
 | `completion` | Artifacts not verified | Run validations, mark verified=true |
 | `pre-conditions` | Required file/method missing | Check if BLUEPRINT.md is correct |
 
+### If pendingFixes includes 'review-checklist':
+
+**Recovery Protocol for Review Checklist:**
+
+1. **Read existing files:**
+   - `review-checklist.json` (check what items already exist)
+   - `execution.json` (get list of artifacts)
+
+2. **Identify artifacts WITHOUT review items:**
+   - Compare artifacts array with checklist items
+   - Note which files have no review questions
+
+3. **For EACH artifact without items:**
+   - Read the actual file
+   - Identify functions/methods/changes made
+   - Generate 2-5 specific review questions PER function/change
+   - Append to `review-checklist.json` with proper v2 format
+
+4. **v2 Format (REQUIRED):**
+```json
+{
+  "id": "RC<N>",
+  "file": "path/to/file.ext",
+  "lines": [45, 78],
+  "type": "created" | "modified",
+  "description": "Question about specific lines - NO backticks or code",
+  "reviewed": false,
+  "category": "error-handling",
+  "context": {
+    "action": "What was done (e.g., Added validation for userId)",
+    "why": "Why it was needed (e.g., Prevent SQL injection)"
+  }
+}
+```
+
+5. **CRITICAL RULES:**
+   - MUST include `context.action` and `context.why`
+   - MUST use file:line references (NO backticks/inline code)
+   - MUST have non-empty `lines` array
+   - Generate questions by function/method/logical change
+
 ### Step 2: Fix ONLY What Failed
 
 **DO NOT restart from scratch!**

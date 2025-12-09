@@ -11,7 +11,15 @@ jest.mock('../../../../shared/config/state', () => ({
 const { analyzeSplit } = require('./analyze-split');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 
-describe('analyze-split', () => {
+/**
+ * Tests for analyze-split.js
+ *
+ * Purpose: Verify FAST model viability analysis behavior
+ * - Only splits tasks if ALL subtasks can use FAST model
+ * - Keeps task intact if ANY part requires medium/hard model
+ * - Subtasks created have @difficulty fast tag
+ */
+describe('analyze-split (FAST model viability)', () => {
     const mockTask = 'TASK1';
     const mockTaskFolder = '/test/.claudiomiro/task-executor/TASK1';
 
@@ -20,7 +28,7 @@ describe('analyze-split', () => {
     });
 
     describe('analyzeSplit', () => {
-        test('should skip when task is subtask (contains ".")', async () => {
+        test('should skip analysis for subtasks (already split)', async () => {
             // Arrange
             const subtask = 'TASK1.1';
 
@@ -34,7 +42,7 @@ describe('analyze-split', () => {
             expect(fs.writeFileSync).not.toHaveBeenCalled();
         });
 
-        test('should skip when split.txt already exists', async () => {
+        test('should skip when task was already analyzed (split.txt exists)', async () => {
             // Arrange
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('split.txt')) return true;
@@ -51,18 +59,20 @@ describe('analyze-split', () => {
             expect(fs.existsSync).toHaveBeenCalledWith(path.join(mockTaskFolder, 'split.txt'));
         });
 
-        test('should execute analysis and create split.txt when BLUEPRINT.md exists after execution', async () => {
+        test('should mark task as analyzed (split.txt) when task was NOT split (FAST not viable)', async () => {
             // Arrange
+            // When BLUEPRINT.md still exists after analysis, it means task was NOT split
+            // (task kept intact because FAST model was not viable for all parts)
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('split.txt')) return false; // Initial check
-                if (filePath.includes('BLUEPRINT.md')) return true;  // After execution
+                if (filePath.includes('BLUEPRINT.md')) return true;  // Task NOT split (kept intact)
                 if (filePath.includes('prompt-split.md')) return true; // Template exists
                 return false;
             });
 
             fs.readFileSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt-split.md')) {
-                    return 'Carefully analyze the task located at: {{taskFolder}}\nEvaluate complexity and parallelism for {{claudiomiroFolder}}';
+                    return 'Analyze FAST viability for task at: {{taskFolder}}\nCheck patterns in {{claudiomiroFolder}}';
                 }
                 return '';
             });
@@ -78,13 +88,14 @@ describe('analyze-split', () => {
                 'utf-8',
             );
             const promptArg = executeClaude.mock.calls[0][0];
-            expect(promptArg).toContain('Carefully analyze the task located at: /test/.claudiomiro/task-executor/TASK1');
-            expect(promptArg).toContain('Evaluate complexity and parallelism for /test/.claudiomiro/task-executor');
+            expect(promptArg).toContain('Analyze FAST viability for task at: /test/.claudiomiro/task-executor/TASK1');
+            expect(promptArg).toContain('Check patterns in /test/.claudiomiro/task-executor');
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
                 expect.objectContaining({ model: 'medium' }),
             );
+            // split.txt is created to mark task as analyzed (even if not split)
             expect(fs.writeFileSync).toHaveBeenCalledWith(
                 path.join(mockTaskFolder, 'split.txt'),
                 '1',
@@ -92,18 +103,20 @@ describe('analyze-split', () => {
             expect(result).toEqual({ success: true });
         });
 
-        test('should execute analysis but skip split.txt creation when task was split (BLUEPRINT.md does not exist)', async () => {
+        test('should NOT create split.txt when task WAS split (FAST viable - subtasks created with @difficulty fast)', async () => {
             // Arrange
+            // When BLUEPRINT.md does NOT exist after analysis, it means task WAS split
+            // into subtasks (TASK1.1, TASK1.2, etc.) with @difficulty fast
             fs.existsSync.mockImplementation((filePath) => {
                 if (filePath.includes('split.txt')) return false; // Initial check
-                if (filePath.includes('BLUEPRINT.md')) return false; // After execution (task was split)
+                if (filePath.includes('BLUEPRINT.md')) return false; // Task WAS split (subtasks created)
                 if (filePath.includes('prompt-split.md')) return true; // Template exists
                 return false;
             });
 
             fs.readFileSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt-split.md')) {
-                    return 'Analyze task at: {{taskFolder}}';
+                    return 'Analyze FAST viability for task at: {{taskFolder}}';
                 }
                 return '';
             });
@@ -115,17 +128,18 @@ describe('analyze-split', () => {
 
             // Assert
             const promptArg = executeClaude.mock.calls[0][0];
-            expect(promptArg).toContain('Analyze task at: /test/.claudiomiro/task-executor/TASK1');
+            expect(promptArg).toContain('Analyze FAST viability for task at: /test/.claudiomiro/task-executor/TASK1');
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
                 expect.objectContaining({ model: 'medium' }),
             );
+            // split.txt is NOT created because original folder was deleted (task was split)
             expect(fs.writeFileSync).not.toHaveBeenCalled();
             expect(result).toEqual({ success: true });
         });
 
-        test('should verify placeholder replacement in prompt', async () => {
+        test('should correctly replace placeholders in FAST viability prompt', async () => {
             // Arrange
             const mockTask2 = 'TASK2';
             const _mockTaskFolder2 = '/test/.claudiomiro/task-executor/TASK2';
@@ -139,7 +153,7 @@ describe('analyze-split', () => {
 
             fs.readFileSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt-split.md')) {
-                    return 'Task folder: {{taskFolder}}\nClaudiomiro folder: {{claudiomiroFolder}}\nAnalyze the task';
+                    return 'Task folder: {{taskFolder}}\nClaudiomiro folder: {{claudiomiroFolder}}\nAnalyze FAST viability';
                 }
                 return '';
             });
@@ -153,7 +167,7 @@ describe('analyze-split', () => {
             const promptArg = executeClaude.mock.calls[0][0];
             expect(promptArg).toContain('Task folder: /test/.claudiomiro/task-executor/TASK2');
             expect(promptArg).toContain('Claudiomiro folder: /test/.claudiomiro/task-executor');
-            expect(promptArg).toContain('Analyze the task');
+            expect(promptArg).toContain('Analyze FAST viability');
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask2,
@@ -165,7 +179,7 @@ describe('analyze-split', () => {
             expect(promptArg).not.toContain('{{claudiomiroFolder}}');
         });
 
-        test('should handle executeClaude failure', async () => {
+        test('should propagate errors when FAST viability analysis fails', async () => {
             // Arrange
             const mockError = new Error('Claude execution failed');
 
@@ -177,7 +191,7 @@ describe('analyze-split', () => {
 
             fs.readFileSync.mockImplementation((filePath) => {
                 if (filePath.includes('prompt-split.md')) {
-                    return 'Analyze task at: {{taskFolder}}';
+                    return 'Analyze FAST viability for task at: {{taskFolder}}';
                 }
                 return '';
             });
@@ -188,12 +202,13 @@ describe('analyze-split', () => {
             await expect(analyzeSplit(mockTask)).rejects.toThrow('Claude execution failed');
 
             const promptArg = executeClaude.mock.calls[0][0];
-            expect(promptArg).toContain('Analyze task at: /test/.claudiomiro/task-executor/TASK1');
+            expect(promptArg).toContain('Analyze FAST viability for task at: /test/.claudiomiro/task-executor/TASK1');
             expect(executeClaude).toHaveBeenCalledWith(
                 expect.any(String),
                 mockTask,
                 expect.objectContaining({ model: 'medium' }),
             );
+            // No split.txt created on error
             expect(fs.writeFileSync).not.toHaveBeenCalled();
         });
 

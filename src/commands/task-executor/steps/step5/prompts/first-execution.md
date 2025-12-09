@@ -10,6 +10,22 @@ This is a **FIRST EXECUTION** - no previous errors, no blockers.
 
 ## 📋 EXECUTION FLOW
 
+### Step 0: Initialize Review Checklist
+
+**IMMEDIATELY** create `{{taskFolder}}/review-checklist.json`:
+```json
+{
+  "$schema": "review-checklist-schema-v2",
+  "task": "<TASKID>",
+  "generated": "<current_timestamp>",
+  "items": []
+}
+```
+
+This file will be appended to after EVERY file modification. Each time you create/modify a file, IMMEDIATELY add review items to this checklist.
+
+---
+
 ### Step 1: Read & Understand (5 min)
 
 **DO NOW:**

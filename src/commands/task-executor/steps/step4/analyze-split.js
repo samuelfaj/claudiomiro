@@ -5,9 +5,21 @@ const { executeClaude } = require('../../../../shared/executors/claude-executor'
 const { getStepModel } = require('../../utils/model-config');
 
 /**
- * Analyzes whether a task should be split into subtasks
- * Evaluates task complexity and determines if splitting would enable
- * meaningful parallelism or reduce cognitive load
+ * Analyzes whether a task can be split into subtasks that the
+ * FAST model (Haiku) can execute with 100% certainty.
+ *
+ * Purpose: Cost optimization through intelligent model selection.
+ *
+ * Decision logic:
+ * - ONLY splits if ALL subtasks can use FAST model
+ * - If ANY subtask requires medium/hard, keeps task intact
+ * - Subtasks created by this split will have @difficulty fast
+ *
+ * Criteria for FAST viability:
+ * - Task follows existing patterns in the codebase
+ * - Scope is well-defined (1-2 files max)
+ * - No architectural decisions needed
+ * - No complex integrations or business logic
  *
  * @param {string} task - Task identifier (e.g., 'TASK1', 'TASK2')
  * @returns {Promise} Result of Claude execution

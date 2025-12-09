@@ -59,9 +59,13 @@ You are not summarizing — you are **preserving structure AND context through d
 
 ---
 
-## Task Scope (Multi-Repository Projects)
+## Task Scope (Frontend and Backend Oriented)
 
-When working with multi-repository projects (backend + frontend), every BLUEPRINT.md MUST include an `@scope` tag on the second line:
+When working with projects that have **distinct frontend and backend layers** (whether in the same repository or separate repositories), every BLUEPRINT.md MUST include an `@scope` tag on the second line.
+
+**CRITICAL:** This applies to:
+- **Multi-repo projects:** Backend and frontend in separate repositories
+- **Mono-repo projects:** Backend and frontend in the same repository but different directories (e.g., `/api` + `/web`, `/server` + `/client`, `/backend` + `/frontend`)
 
 ### Format
 ```markdown
@@ -75,27 +79,182 @@ When working with multi-repository projects (backend + frontend), every BLUEPRIN
 
 ### Valid Scopes
 
-- **@scope backend** - Task modifies only backend repository code
+- **@scope backend** - Task modifies ONLY server-side code
   - API endpoints, database models, server logic
   - Backend tests, backend configuration
+  - CLI tools, background jobs, server utilities
+  - **Mono-repo path examples:** `/api/*`, `/server/*`, `/backend/*`, `/src/server/*`
 
-- **@scope frontend** - Task modifies only frontend repository code
+- **@scope frontend** - Task modifies ONLY client-side code
   - UI components, frontend state, client logic
   - Frontend tests, frontend configuration
+  - Browser utilities, client-side routing
+  - **Mono-repo path examples:** `/web/*`, `/client/*`, `/frontend/*`, `/src/app/*`
 
-- **@scope integration** - Task requires both repositories OR verifies integration
+- **@scope integration** - Task touches BOTH layers OR verifies their interaction
   - API contract verification
-  - End-to-end testing across both repos
-  - Changes that require coordinated updates
+  - End-to-end testing across layers
+  - Changes that require coordinated frontend + backend updates
+  - Shared types, contracts, or DTOs used by both layers
 
 ### Scope Selection Guidelines
 
-1. If a task ONLY touches backend files → `@scope backend`
-2. If a task ONLY touches frontend files → `@scope frontend`
-3. If a task touches BOTH or verifies their interaction → `@scope integration`
-4. When in doubt, prefer `@scope integration`
+1. If a task ONLY touches backend/server files → `@scope backend`
+2. If a task ONLY touches frontend/client files → `@scope frontend`
+3. If a task touches BOTH layers or verifies their interaction → `@scope integration`
+4. If a task creates shared contracts/types used by both → `@scope integration`
+5. When in doubt, prefer `@scope integration`
 
-**Note:** Missing @scope in multi-repo mode will cause task execution to fail.
+**Note:** Missing @scope in frontend+backend projects will cause task execution to fail.
+
+---
+
+## Frontend and Backend Vertical Slicing (Maximum Parallelism)
+
+When working with projects that have **distinct frontend and backend layers**, use **numeric naming convention** to split each feature into parallel tasks.
+
+**This applies to BOTH:**
+- Multi-repo: `/backend-repo/` + `/frontend-repo/`
+- Mono-repo: `/api/` + `/web/`, `/server/` + `/client/`, etc.
+
+### Naming Convention (Always Numeric)
+
+```
+TASK{N}.1 @scope backend     → API/server logic
+TASK{N}.2 @scope frontend    → UI/client logic
+TASK{N}.3 @scope integration → E2E tests / validation (runs AFTER .1 + .2)
+```
+
+### Frontend + Backend Execution Flow
+
+```
+TASK0: Create shared contracts/types
+@dependencies []
+@scope integration
+
+Feature "Login" (TASK1.x):
+┌────────────────────────────────────────┐
+│ TASK1.1              TASK1.2           │
+│ @scope backend       @scope frontend   │
+│ @dependencies [TASK0] @dependencies [TASK0] │
+│                                        │
+│ ← PARALLEL! (backend + frontend) →     │
+└────────────────────────────────────────┘
+                    ↓
+              TASK1.3
+              @scope integration
+              @dependencies [TASK1.1, TASK1.2]
+              (waits for BOTH to finish)
+
+Feature "Register" (TASK2.x):
+┌────────────────────────────────────────┐
+│ TASK2.1              TASK2.2           │
+│ @scope backend       @scope frontend   │
+│ @dependencies [TASK0] @dependencies [TASK0] │
+└────────────────────────────────────────┘
+                    ↓
+              TASK2.3
+              @scope integration
+              @dependencies [TASK2.1, TASK2.2]
+```
+
+**Result:**
+- TASK0 runs first (shared contracts)
+- **6 tasks in PARALLEL!** (TASK1.1, TASK1.2, TASK2.1, TASK2.2, TASK3.1, TASK3.2)
+- Each .3 (integration) runs AFTER .1 + .2 of the same feature
+- Different features run in parallel with each other
+
+### Example: Feature "User Authentication" (Mono-repo)
+
+```
+TASK0: Create auth contracts
+@dependencies []
+@scope integration
+@files [src/shared/types/auth.types.ext, src/shared/contracts/auth.contract.ext]
+@difficulty fast
+
+TASK1.1: Login API endpoint
+@dependencies [TASK0]
+@scope backend
+@files [src/api/auth/login.controller.ext, src/api/auth/login.service.ext]
+@difficulty medium
+
+TASK1.2: Login UI component
+@dependencies [TASK0]
+@scope frontend
+@files [src/web/pages/login/Login.ext, src/web/pages/login/useLogin.ext]
+@difficulty medium
+
+TASK1.3: Login E2E tests
+@dependencies [TASK1.1, TASK1.2]
+@scope integration
+@files [e2e/tests/login.e2e.ext]
+@difficulty medium
+
+TASK2.1: Register API endpoint
+@dependencies [TASK0]
+@scope backend
+@files [src/api/auth/register.controller.ext, src/api/auth/register.service.ext]
+@difficulty medium
+
+TASK2.2: Register UI component
+@dependencies [TASK0]
+@scope frontend
+@files [src/web/pages/register/Register.ext, src/web/pages/register/useRegister.ext]
+@difficulty medium
+
+TASK2.3: Register E2E tests
+@dependencies [TASK2.1, TASK2.2]
+@scope integration
+@files [e2e/tests/register.e2e.ext]
+@difficulty medium
+
+TASKΩ: Full auth integration validation
+@dependencies [TASK1.3, TASK2.3]
+@scope integration
+@files [e2e/tests/auth.complete.e2e.ext]
+@difficulty medium
+```
+
+### Frontend and Backend Rules
+
+1. **Each feature = 3 numeric tasks:**
+   - `TASKN.1` → `@scope backend` → `@dependencies [TASK0]`
+   - `TASKN.2` → `@scope frontend` → `@dependencies [TASK0]`
+   - `TASKN.3` → `@scope integration` → `@dependencies [TASKN.1, TASKN.2]`
+
+2. **Correct dependencies:**
+   - .1 (backend) depends on TASK0 (contracts)
+   - .2 (frontend) depends on TASK0 (contracts)
+   - **.3 (integration) depends on BOTH (.1 + .2 of the same feature)**
+
+3. **TASK0 always defines shared contracts:**
+   - DTOs, interfaces, API contracts
+   - `@scope integration` (accessible by all layers)
+
+4. **Directory structure:**
+   ```
+   .claudiomiro/
+   ├── TASK0/      # Contracts (shared)
+   ├── TASK1.1/    # Login API (backend)
+   ├── TASK1.2/    # Login UI (frontend)
+   ├── TASK1.3/    # Login E2E (integration, waits .1 + .2)
+   ├── TASK2.1/    # Register API (backend)
+   ├── TASK2.2/    # Register UI (frontend)
+   └── TASK2.3/    # Register E2E (integration, waits .1 + .2)
+   ```
+
+### When NOT to Use Frontend+Backend Slicing
+
+**DON'T use this pattern when:**
+- Project is backend-only (API, CLI, server)
+- Project is frontend-only (static site, SPA without API)
+- Task only affects ONE layer (use simple TASK0, TASK1, TASK2...)
+
+**DO use this pattern when:**
+- Feature requires BOTH frontend AND backend changes
+- You want maximum parallelism between layers
+- Integration testing is required after both layers are complete
 
 ---
 
@@ -160,69 +319,171 @@ TASK2: @files [src/api/users/update.js]     @dependencies []
 
 ## Granular Decomposition for Parallelism
 
-**CRITICAL:** Maximize parallelism by decomposing tasks by RESPONSIBILITY, not by difficulty.
+**CRITICAL:** Use **Vertical Slicing** to maximize parallelism. Avoid Horizontal Slicing (layer-by-layer decomposition).
 
-### Principle: Divide by Responsibility, Not Difficulty
+### 🚨 FUNDAMENTAL RULE: Vertical Slicing for Maximum Parallelism
 
-**WRONG**: Take a complex task and force `@difficulty fast`
-**RIGHT**: Divide a complex task into sub-tasks that are NATURALLY simple
+#### Horizontal Slicing (❌ AVOID - creates dependency chains)
 
-### Decomposition Strategy by Layers
+**Problem:** Decomposing by LAYER (model → service → controller → test) creates sequential dependencies.
 
-A complex feature should be divided into responsibility layers:
-
-| Sub-task | Type | Typical @difficulty | Justification |
-|----------|------|---------------------|---------------|
-| Create model/schema | Structure | fast | Follow existing pattern |
-| Create validations | Validation | fast | Follow existing validators |
-| Create service | Logic | medium/hard | Depends on complexity |
-| Create controller/API | Interface | fast | Follow existing pattern |
-| Create unit tests | Tests | fast | Follow test patterns |
-| Create integration tests | Tests | medium | May have edge cases |
-
-### Example: Feature "User Authentication"
-
-**BEFORE (1 complex task):**
 ```
-TASK1: Implement user authentication
-@difficulty hard
-@files [src/models/user.js, src/services/authService.js, src/routes/auth.js, src/middleware/authMiddleware.js, tests/auth.test.js]
+TASK0: Create User model          @dependencies []
+TASK1: Create AuthService         @dependencies [TASK0]  ← waits!
+TASK2: Create AuthController      @dependencies [TASK1]  ← waits!
+TASK3: Create tests               @dependencies [TASK2]  ← waits!
 ```
 
-**AFTER (5 granular tasks):**
+**Result:** Chain execution, almost no parallelism. Each task waits for the previous one.
+
+#### Vertical Slicing (✅ USE - maximizes parallelism)
+
+**Solution:** Decompose by FEATURE. Each task is a complete "slice" (model+service+controller+test for ONE feature).
+
 ```
-TASK1: Create User model with password hash field
-@difficulty fast
-@files [src/models/user.js, src/models/user.test.js]
+TASK0: Create interfaces/types/schemas
 @dependencies []
+@files [types/user.types.ext, types/auth.types.ext]
 
-TASK2: Create password validation utils
-@difficulty fast
-@files [src/validators/passwordValidator.js, src/validators/passwordValidator.test.js]
+TASK1: Implement login feature (complete slice)
+@dependencies [TASK0]
+@files [features/login/login.service.ext, features/login/login.controller.ext, features/login/login.test.ext]
+
+TASK2: Implement register feature (complete slice)
+@dependencies [TASK0]
+@files [features/register/register.service.ext, features/register/register.controller.ext, features/register/register.test.ext]
+
+TASK3: Implement password-reset feature (complete slice)
+@dependencies [TASK0]
+@files [features/password-reset/*.ext]
+
+TASKΩ: Integration validation
+@dependencies [TASK1, TASK2, TASK3]
+```
+
+**Result:** TASK1, TASK2, TASK3 run ALL IN PARALLEL!
+
+### 3-Layer Strategy for Maximum Parallelism
+
+**Layer 0: Foundation (1 task)**
+- Create interfaces, types, schemas, contracts
+- @dependencies []
+- Does NOT implement logic, only defines structures
+
+**Layer 1: Feature Slices (N parallel tasks)**
+- Each task implements ONE complete feature
+- @dependencies [TASK0] ONLY
+- EXCLUSIVE files per task (avoids conflicts)
+
+**Layer Ω: Integration (1 task)**
+- Validates that all slices work together
+- @dependencies [TASK1, TASK2, ..., TASKN]
+
+### Vertical Slicing Rules
+
+1. **TASK0 defines contracts:** interfaces, types, schemas that other tasks use
+2. **Feature tasks are self-contained:** Each includes model+service+controller+test for ONE feature
+3. **Feature tasks depend ONLY on TASK0:** Enables maximum parallelism
+4. **Exclusive files per task:** Prevents conflicts between parallel tasks
+5. **Integration task validates cohesion:** Depends on ALL feature tasks
+
+### Example: Feature "User Authentication" (Vertical Slicing)
+
+**BEFORE (Horizontal - dependency chain):**
+```
+TASK1: Create User model          @dependencies []
+TASK3: Implement auth service     @dependencies [TASK1, TASK2]
+TASK4: Create login endpoints     @dependencies [TASK3]
+```
+
+**AFTER (Vertical - maximum parallelism):**
+```
+TASK0: Create auth types and interfaces
 @dependencies []
+@files [types/auth.types.ext, interfaces/auth.interface.ext]
+@difficulty fast
 
-TASK3: Implement auth service with JWT logic
+TASK1: Implement login feature (vertical slice)
+@dependencies [TASK0]
+@files [features/login/service.ext, features/login/controller.ext, features/login/test.ext]
 @difficulty medium
-@files [src/services/authService.js, src/services/authService.test.js]
-@dependencies [TASK1, TASK2]
 
-TASK4: Create login/logout API endpoints
-@difficulty fast
-@files [src/routes/auth.js, src/routes/auth.test.js]
-@dependencies [TASK3]
+TASK2: Implement register feature (vertical slice)
+@dependencies [TASK0]
+@files [features/register/service.ext, features/register/controller.ext, features/register/test.ext]
+@difficulty medium
 
-TASK5: Create auth middleware + integration tests
+TASK3: Implement logout feature (vertical slice)
+@dependencies [TASK0]
+@files [features/logout/service.ext, features/logout/controller.ext, features/logout/test.ext]
 @difficulty fast
-@files [src/middleware/authMiddleware.js, tests/auth.integration.test.js]
-@dependencies [TASK3]
+
+TASK4: Implement password-reset feature (vertical slice)
+@dependencies [TASK0]
+@files [features/password-reset/service.ext, features/password-reset/controller.ext, features/password-reset/test.ext]
+@difficulty medium
+
+TASKΩ: Auth integration validation
+@dependencies [TASK1, TASK2, TASK3, TASK4]
+@files [tests/auth.integration.test.ext]
+@difficulty medium
 ```
 
 **Result:**
-- 4 tasks can use Haiku legitimately (genuine simplicity)
-- TASK1, TASK2 run in parallel (Layer 0)
-- TASK4, TASK5 run in parallel (Layer 2)
-- Maximum parallelism achieved
-- No file conflicts (exclusive @files)
+- TASK1, TASK2, TASK3, TASK4 run ALL IN PARALLEL
+- Only TASK0 runs first (creates interfaces)
+- TASKΩ runs last (validates integration)
+- Zero file conflicts (each feature has its own files)
+
+### Practical Example: "Add product search with filters"
+
+**BEFORE (Horizontal Slicing - dependency chain):**
+```
+TASK1: Add searchable fields to Product model  @dependencies []
+TASK2: Implement search service with filters   @dependencies [TASK1]
+TASK3: Create search API endpoint              @dependencies [TASK2]
+TASK4: Add search integration tests            @dependencies [TASK3]
+```
+**Time:** TASK1 → wait → TASK2 → wait → TASK3 → wait → TASK4 (sequential)
+
+**AFTER (Vertical Slicing - MAXIMUM PARALLELISM):**
+```
+TASK0: Create search types and interfaces
+@dependencies []
+@files [types/search.types.ext, interfaces/search.interface.ext]
+@difficulty fast
+
+TASK1: Implement "search by name" feature (vertical slice)
+@dependencies [TASK0]
+@files [features/search-name/service.ext, features/search-name/controller.ext, features/search-name/test.ext]
+@difficulty medium
+
+TASK2: Implement "search by category" feature (vertical slice)
+@dependencies [TASK0]
+@files [features/search-category/service.ext, features/search-category/controller.ext, features/search-category/test.ext]
+@difficulty medium
+
+TASK3: Implement "search by price range" feature (vertical slice)
+@dependencies [TASK0]
+@files [features/search-price/service.ext, features/search-price/controller.ext, features/search-price/test.ext]
+@difficulty medium
+
+TASK4: Implement "combined filters" feature (vertical slice)
+@dependencies [TASK0]
+@files [features/search-combined/service.ext, features/search-combined/controller.ext, features/search-combined/test.ext]
+@difficulty medium
+
+TASKΩ: Search integration validation
+@dependencies [TASK1, TASK2, TASK3, TASK4]
+@files [tests/search.integration.test.ext]
+@difficulty medium
+```
+
+**Result:**
+- TASK0 runs first (creates interfaces)
+- **TASK1, TASK2, TASK3, TASK4 run ALL IN PARALLEL** (4x faster!)
+- TASKΩ runs last (validates integration)
+- Zero file conflicts
 
 ### Task Size Targets
 
@@ -819,7 +1080,7 @@ Identify prohibitions for this specific task (inherited from AI_PROMPT.md + task
 ```markdown
 <!-- BLUEPRINT: Read-only after creation -->
 @dependencies [Tasks]  // Task name MUST BE COMPLETE AND FOLLOW THE PATTERN "TASK{number}"
-@scope [backend|frontend|integration]  // Only required for multi-repo projects
+@scope [backend|frontend|integration]  // Required for frontend+backend projects (mono or multi-repo)
 @difficulty [fast|medium|hard]  // Task complexity for model selection
 @files [path/to/file1.ext, path/to/file2.ext]  // ALL files this task will create/modify
 
@@ -979,7 +1240,7 @@ LOW confidence on critical decision → BLOCKED (do not proceed with guesses)
 🚨 CRITICAL BLUEPRINT RULES:
 - First line must be `<!-- BLUEPRINT: Read-only after creation -->`
 - Second line must be `@dependencies [...]`
-- Third line is `@scope [...]` for multi-repo projects only
+- Third line is `@scope [...]` for frontend+backend projects (mono or multi-repo)
 - `@difficulty [fast|medium|hard]` must follow @scope (or @dependencies if no @scope) - REQUIRED for model selection
 - `@files [...]` must list ALL files this task will create/modify - REQUIRED for conflict prevention
 - All 6 sections (IDENTITY, CONTEXT CHAIN, EXECUTION CONTRACT, IMPLEMENTATION STRATEGY, UNCERTAINTY LOG, INTEGRATION IMPACT) are REQUIRED

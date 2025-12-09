@@ -300,21 +300,8 @@ const step5 = async (task) => {
     try {
         const result = await executeTask(task, taskFolder, cwd);
 
-        // Generate review checklist for step6
-        try {
-            const { generateReviewChecklist } = require('./generate-review-checklist');
-            const checklistResult = await generateReviewChecklist(task, { cwd });
-            if (checklistResult.success) {
-                logger.info(`Generated review-checklist.json: ${checklistResult.itemCount} items`);
-            }
-        } catch (error) {
-            // Silently skip in UI mode
-            const ParallelStateManager = require('../../../../shared/executors/parallel-state-manager');
-            const stateManager = ParallelStateManager.getInstance();
-            if (!stateManager?.isUIRendererActive()) {
-                logger.warning(`Review checklist skipped: ${error.message}`);
-            }
-        }
+        // Note: Review checklist is now generated in real-time during task execution
+        // via the Step 2.5 protocol in the execution prompt (review-checklist-schema-v2)
 
         // Reflection hook
         try {

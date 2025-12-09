@@ -1,4 +1,4 @@
-const { validateReviewChecklist } = require('./review-checklist');
+const { validateReviewChecklist, validateItemFormat } = require('./review-checklist');
 const fs = require('fs');
 
 // Mock dependencies
@@ -399,5 +399,331 @@ describe('validate-review-checklist', () => {
                 reason: 'Missing from review-checklist.json',
             });
         });
+    });
+});
+
+describe('validateItemFormat (v2 schema)', () => {
+    test('should pass with valid v2 item', () => {
+        const validItem = {
+            id: 'RC1',
+            file: 'src/handler.ext',
+            lines: [45, 50],
+            type: 'modified',
+            description: 'Does the validation at lines 45-50 handle empty strings correctly?',
+            reviewed: false,
+            category: 'error-handling',
+            context: {
+                action: 'Added input validation for user data',
+                why: 'Prevent invalid data from reaching database',
+            },
+        };
+
+        const issues = validateItemFormat(validItem);
+        expect(issues).toEqual([]);
+    });
+
+    test('should fail if item missing context object', () => {
+        const item = {
+            id: 'RC1',
+            file: 'src/handler.ext',
+            lines: [45],
+            description: 'Does the validation handle empty strings?',
+            // Missing context
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC1 missing context object');
+    });
+
+    test('should fail if context.action is missing', () => {
+        const item = {
+            id: 'RC2',
+            file: 'src/handler.ext',
+            lines: [45],
+            description: 'Does the validation handle empty strings?',
+            context: {
+                why: 'Prevent invalid data',
+                // Missing action
+            },
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC2 missing or too short context.action (min 5 chars)');
+    });
+
+    test('should fail if context.action is too short', () => {
+        const item = {
+            id: 'RC3',
+            file: 'src/handler.ext',
+            lines: [45],
+            description: 'Does the validation handle empty strings?',
+            context: {
+                action: 'Add', // Too short (< 5 chars)
+                why: 'Prevent invalid data',
+            },
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC3 missing or too short context.action (min 5 chars)');
+    });
+
+    test('should fail if context.why is missing', () => {
+        const item = {
+            id: 'RC4',
+            file: 'src/handler.ext',
+            lines: [45],
+            description: 'Does the validation handle empty strings?',
+            context: {
+                action: 'Added input validation',
+                // Missing why
+            },
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC4 missing or too short context.why (min 5 chars)');
+    });
+
+    test('should fail if context.why is too short', () => {
+        const item = {
+            id: 'RC5',
+            file: 'src/handler.ext',
+            lines: [45],
+            description: 'Does the validation handle empty strings?',
+            context: {
+                action: 'Added input validation',
+                why: 'Fix', // Too short (< 5 chars)
+            },
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC5 missing or too short context.why (min 5 chars)');
+    });
+
+    test('should fail if description contains backticks (inline code)', () => {
+        const item = {
+            id: 'RC6',
+            file: 'src/handler.ext',
+            lines: [45],
+            description: 'Is `validateUser(data)` handling errors correctly?', // Contains backticks
+            context: {
+                action: 'Added user validation function',
+                why: 'Prevent invalid user data',
+            },
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC6 contains inline code (backticks) - use file:line references only');
+    });
+
+    test('should fail if lines array is empty', () => {
+        const item = {
+            id: 'RC7',
+            file: 'src/handler.ext',
+            lines: [], // Empty array
+            description: 'Does the validation handle empty strings correctly?',
+            context: {
+                action: 'Added input validation',
+                why: 'Prevent invalid data',
+            },
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC7 missing line number references (lines array empty or missing)');
+    });
+
+    test('should fail if lines is missing', () => {
+        const item = {
+            id: 'RC8',
+            file: 'src/handler.ext',
+            // Missing lines
+            description: 'Does the validation handle empty strings correctly?',
+            context: {
+                action: 'Added input validation',
+                why: 'Prevent invalid data',
+            },
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC8 missing line number references (lines array empty or missing)');
+    });
+
+    test('should fail if description is too short', () => {
+        const item = {
+            id: 'RC9',
+            file: 'src/handler.ext',
+            lines: [45],
+            description: 'Is it correct?', // Too short (< 20 chars)
+            context: {
+                action: 'Added input validation',
+                why: 'Prevent invalid data',
+            },
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues).toContain('Item RC9 description too short (min 20 chars)');
+    });
+
+    test('should report multiple issues at once', () => {
+        const item = {
+            id: 'RC10',
+            file: 'src/handler.ext',
+            lines: [], // Empty
+            description: '`code`?', // Too short and has backticks
+            context: {}, // Missing action and why
+        };
+
+        const issues = validateItemFormat(item);
+        expect(issues.length).toBeGreaterThanOrEqual(4);
+        expect(issues).toContain('Item RC10 missing line number references (lines array empty or missing)');
+        expect(issues).toContain('Item RC10 contains inline code (backticks) - use file:line references only');
+        expect(issues).toContain('Item RC10 description too short (min 20 chars)');
+    });
+});
+
+describe('validateReviewChecklist (v2 schema)', () => {
+    beforeEach(() => {
+        jest.clearAllMocks();
+    });
+
+    test('should detect v2 schema and validate format', async () => {
+        fs.existsSync.mockReturnValue(true);
+
+        fs.readFileSync.mockImplementation((path) => {
+            if (path.includes('execution.json')) {
+                return JSON.stringify({
+                    artifacts: [{ path: 'src/handler.ext', type: 'modified' }],
+                });
+            }
+            if (path.includes('review-checklist.json')) {
+                return JSON.stringify({
+                    $schema: 'review-checklist-schema-v2',
+                    task: 'TASK0',
+                    generated: '2025-12-02T23:45:12.000Z',
+                    items: [
+                        {
+                            id: 'RC1',
+                            file: 'src/handler.ext',
+                            lines: [45, 50],
+                            type: 'modified',
+                            description: 'Does the new validation at lines 45-50 handle empty string input?',
+                            reviewed: false,
+                            category: 'error-handling',
+                            context: {
+                                action: 'Added input validation for user data',
+                                why: 'Prevent invalid data from reaching database',
+                            },
+                        },
+                    ],
+                });
+            }
+        });
+
+        const result = await validateReviewChecklist('TASK0', {
+            claudiomiroFolder: '/.claudiomiro',
+        });
+
+        expect(result.valid).toBe(true);
+        expect(result.schemaVersion).toBe('v2');
+        expect(result.formatIssues).toEqual([]);
+    });
+
+    test('should fail v2 validation if items have format issues', async () => {
+        fs.existsSync.mockReturnValue(true);
+
+        fs.readFileSync.mockImplementation((path) => {
+            if (path.includes('execution.json')) {
+                return JSON.stringify({
+                    artifacts: [{ path: 'src/handler.ext', type: 'modified' }],
+                });
+            }
+            if (path.includes('review-checklist.json')) {
+                return JSON.stringify({
+                    $schema: 'review-checklist-schema-v2',
+                    task: 'TASK0',
+                    generated: '2025-12-02T23:45:12.000Z',
+                    items: [
+                        {
+                            id: 'RC1',
+                            file: 'src/handler.ext',
+                            lines: [], // Empty - should fail
+                            type: 'modified',
+                            description: 'Is `validateUser()` working?', // Has backticks - should fail
+                            reviewed: false,
+                            category: 'error-handling',
+                            context: {
+                                action: 'Fix', // Too short - should fail
+                                why: 'Bug', // Too short - should fail
+                            },
+                        },
+                    ],
+                });
+            }
+        });
+
+        const result = await validateReviewChecklist('TASK0', {
+            claudiomiroFolder: '/.claudiomiro',
+        });
+
+        expect(result.valid).toBe(false);
+        expect(result.schemaVersion).toBe('v2');
+        expect(result.formatIssues.length).toBeGreaterThan(0);
+    });
+
+    test('should use file field for v2 schema (not artifact)', async () => {
+        fs.existsSync.mockReturnValue(true);
+
+        fs.readFileSync.mockImplementation((path) => {
+            if (path.includes('execution.json')) {
+                return JSON.stringify({
+                    artifacts: [
+                        { path: 'src/handler.ext', type: 'modified' },
+                        { path: 'src/validator.ext', type: 'created' },
+                    ],
+                });
+            }
+            if (path.includes('review-checklist.json')) {
+                return JSON.stringify({
+                    $schema: 'review-checklist-schema-v2',
+                    task: 'TASK0',
+                    generated: '2025-12-02T23:45:12.000Z',
+                    items: [
+                        {
+                            id: 'RC1',
+                            file: 'src/handler.ext', // Uses 'file' not 'artifact'
+                            lines: [45],
+                            type: 'modified',
+                            description: 'Does the validation at line 45 handle empty strings?',
+                            reviewed: false,
+                            category: 'error-handling',
+                            context: {
+                                action: 'Added input validation',
+                                why: 'Prevent invalid data',
+                            },
+                        },
+                        {
+                            id: 'RC2',
+                            file: 'src/validator.ext', // Uses 'file' not 'artifact'
+                            lines: [10, 20],
+                            type: 'created',
+                            description: 'Does the validator correctly check all required fields?',
+                            reviewed: false,
+                            category: 'completeness',
+                            context: {
+                                action: 'Created validator module',
+                                why: 'Centralize validation logic',
+                            },
+                        },
+                    ],
+                });
+            }
+        });
+
+        const result = await validateReviewChecklist('TASK0', {
+            claudiomiroFolder: '/.claudiomiro',
+        });
+
+        expect(result.valid).toBe(true);
+        expect(result.missing).toEqual([]);
+        expect(result.totalChecklistItems).toBe(2);
     });
 });

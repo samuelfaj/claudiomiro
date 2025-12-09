@@ -4,48 +4,183 @@
 - Do not include explanations that don't contribute to the solution
 - When running terminal commands, prefer silent versions (--silent, --quiet, -q) except when verbose output is needed for diagnosis
 
-Carefully analyze the task located at: {{taskFolder}}
-1. Evaluate complexity and parallelism
-	•	If this task can be divided into independent and asynchronous subtasks, perform this division in a logical and cohesive manner.
-	•	Each subtask should represent a clear functional unit, with a well-defined beginning and end.
+---
 
-## Split Decision (only if it truly helps)
-- If this task is **small, straightforward, or fast to implement**, **do NOT split**. Keep it as a single unit.
-- Split **only** when it enables **meaningful parallelism** or clarifies complex, interdependent work.
+## OBJECTIVE
 
-If you choose **NOT** to split:
-- Make **no** changes to the folder structure.
+Analyze whether the task at `{{taskFolder}}` can be split into subtasks that the **FAST model (Haiku)** can execute with **100% certainty**.
 
-## 2) When splitting is justified
-  If you determine splitting is beneficial:
-  - Delete the original folder:
-    {{taskFolder}}
+**CRITICAL RULE:** Only split if ALL subtasks can use FAST. If ANY subtask requires medium/hard model, keep the task intact.
 
-  - Create numbered subtask folders (contiguous numbering):
-    - {{taskFolder}}.1
-    - {{taskFolder}}.2
-    - {{taskFolder}}.3
-    (Create only as many as are logically necessary. Do not create empty subtasks.)
+**Purpose:** Cost optimization through intelligent model selection, not parallelization.
 
-  - You MUST update all BLUEPRINT.md files inside {{claudiomiroFolder}} with the new dependencies and numbering.
+---
 
-### Required structure for EACH subtask
-  You MUST create for each subtask:
-  - BLUEPRINT.md   → task definition with identity, context chain, scope, implementation strategy
+## PHASE 1: Pattern Analysis
 
-Example:
-  {{taskFolder}}.1
-    └─ BLUEPRINT.md
+Read the BLUEPRINT.md at `{{taskFolder}}` and analyze:
 
-CRITICAL: First line of EACH BLUEPRINT.md MUST be the updated dependencies list:
-`@dependencies [LIST]`
+### 1.1 Identify Known Patterns
+Search the codebase for similar implementations:
+- Does this task follow an existing pattern in the project?
+- Are there reference files that demonstrate the expected approach?
+- Is the scope clearly defined with specific files to modify?
 
-CRITICAL: If you split a task: You MUST update all BLUEPRINT.md files inside {{claudiomiroFolder}} with the new dependencies and numbering.
+### 1.2 Complexity Assessment
+For each logical part of the task, evaluate:
 
-### Dependency & coherence rules
-- Each subtask must be independently executable and testable.
-- Avoid artificial fragmentation (don't split trivial steps).
+| Part | Description | Files | Complexity |
+|------|-------------|-------|------------|
+| 1 | [what it does] | [files] | LOW/MEDIUM/HIGH |
+| 2 | [what it does] | [files] | LOW/MEDIUM/HIGH |
 
-## 4) Quality bar
-- Split only if it **reduces cycle time** or **reduces cognitive load** without harming cohesion.
-- Keep naming, numbering, and dependencies consistent and minimal.
+**Complexity Criteria:**
+- **LOW:** Single file, <100 LOC, follows existing pattern exactly
+- **MEDIUM:** 2-3 files, some adaptation of existing pattern needed
+- **HIGH:** Multiple files, new pattern required, architectural decisions
+
+---
+
+## PHASE 2: FAST Viability Check
+
+For EACH part identified in Phase 1, verify ALL criteria:
+
+### Positive Criteria (MUST have at least ONE)
+- [ ] **Simple CRUD** - Create/Read/Update/Delete following existing project pattern
+- [ ] **Simple unit tests** - Tests following existing describe/test/expect pattern
+- [ ] **Configuration change** - Modification in config files with clear structure
+- [ ] **Localized rename/refactor** - Rename variable/function in limited scope
+- [ ] **Add field/property** - Following existing model structure
+- [ ] **Trivial fix** - Typo correction, obvious bug fix, clear solution
+
+### Negative Criteria (MUST NOT have ANY)
+- [ ] **Architectural decisions** - Needs to choose between approaches
+- [ ] **Multiple integrations** - Touches 3+ modules that communicate with each other
+- [ ] **Complex business logic** - Rules with many edge cases
+- [ ] **Uncertainties** - BLUEPRINT shows LOW confidence in any aspect
+- [ ] **New pattern creation** - Something not following existing codebase patterns
+- [ ] **External service integration** - API calls, webhooks, third-party services
+
+### Viability Decision
+
+```
+IF all parts have:
+  - At least ONE positive criterion ✅
+  - ZERO negative criteria ✅
+THEN → FAST VIABLE (proceed to split)
+
+IF any part has:
+  - Any negative criterion ❌
+  - OR no positive criteria ❌
+THEN → NOT FAST VIABLE (keep intact)
+```
+
+---
+
+## PHASE 3: Action
+
+### Option A: FAST is Viable for ALL Parts → SPLIT
+
+If you determined FAST is viable for ALL parts:
+
+1. **Delete the original folder:**
+   ```
+   {{taskFolder}}
+   ```
+
+2. **Create numbered subtask folders:**
+   - `{{taskFolder}}.1`
+   - `{{taskFolder}}.2`
+   - `{{taskFolder}}.3`
+   (Create only as many as needed)
+
+3. **For EACH subtask, create BLUEPRINT.md with:**
+
+   **CRITICAL - First lines MUST be:**
+   ```markdown
+   @dependencies [LIST]
+   @difficulty fast
+   ```
+
+   The `@difficulty fast` tag is MANDATORY for all subtasks created by this split.
+
+4. **Update all BLUEPRINT.md files** in `{{claudiomiroFolder}}` with new dependencies and numbering.
+
+### Required Structure for Each Subtask
+
+```
+{{taskFolder}}.1/
+  └─ BLUEPRINT.md
+     - First line: @dependencies [...]
+     - Second line: @difficulty fast
+     - Task identity and scope
+     - Implementation strategy following existing pattern
+```
+
+### Option B: NOT FAST Viable → KEEP INTACT
+
+If ANY part failed the viability check:
+
+1. **Make NO changes** to the folder structure
+2. **Do NOT create subtask folders**
+3. The original task will be executed with its original @difficulty tag by step5
+
+---
+
+## DECISION EXAMPLES
+
+### Example 1: SPLIT ✅
+**Task:** "Add `lastLogin` field to User model and display in profile"
+
+**Analysis:**
+| Part | Description | Positive | Negative |
+|------|-------------|----------|----------|
+| 1 | Add field to User model | Add field/property ✅ | None |
+| 2 | Update profile component | Simple CRUD (display) ✅ | None |
+
+**Decision:** Split into 2 subtasks, both with `@difficulty fast`
+
+---
+
+### Example 2: KEEP INTACT ❌
+**Task:** "Implement caching system for products API"
+
+**Analysis:**
+| Part | Description | Positive | Negative |
+|------|-------------|----------|----------|
+| 1 | Choose cache strategy | None | Architectural decision ❌ |
+| 2 | Implement invalidation | None | Complex logic ❌ |
+
+**Decision:** Keep intact (step5 will use medium/hard based on original @difficulty)
+
+---
+
+### Example 3: KEEP INTACT ❌
+**Task:** "Add email validation and send notification"
+
+**Analysis:**
+| Part | Description | Positive | Negative |
+|------|-------------|----------|----------|
+| 1 | Email validation | Simple validation ✅ | None |
+| 2 | Send notification | None | External service ❌ |
+
+**Decision:** Keep intact (Part 2 is not FAST-viable, so entire task stays intact)
+
+---
+
+## QUALITY RULES
+
+### Conservatism Over Optimism
+- **When in doubt, DO NOT split**
+- It's better to use medium/hard model on a simple task than to use FAST on a complex task
+- Only split when you have **100% certainty** that FAST will succeed
+
+### Dependency Rules
+- Each subtask must be independently executable
+- Update dependencies in ALL affected BLUEPRINT.md files in `{{claudiomiroFolder}}`
+- Subtask numbering must be contiguous (.1, .2, .3 - no gaps)
+
+### Scope Rules
+- Each subtask should touch 1-2 files maximum
+- No subtask should require architectural decisions
+- All subtasks must follow existing patterns (no new pattern creation)

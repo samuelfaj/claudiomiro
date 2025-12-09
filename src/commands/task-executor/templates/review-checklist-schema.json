@@ -1,14 +1,14 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "review-checklist-schema-v1",
-  "title": "Review Checklist Schema",
-  "description": "JSON Schema for review-checklist.json - contextual review questions for code review",
+  "$id": "review-checklist-schema-v2",
+  "title": "Review Checklist Schema (Real-Time Generation)",
+  "description": "JSON Schema for review-checklist.json - contextual review questions generated in real-time during task execution",
   "type": "object",
   "required": ["$schema", "task", "generated", "items"],
   "properties": {
     "$schema": {
       "type": "string",
-      "const": "review-checklist-schema-v1",
+      "const": "review-checklist-schema-v2",
       "description": "Schema identifier"
     },
     "task": {
@@ -19,14 +19,14 @@
     "generated": {
       "type": "string",
       "format": "date-time",
-      "description": "ISO timestamp when checklist was generated"
+      "description": "ISO timestamp when checklist was initialized"
     },
     "items": {
       "type": "array",
-      "description": "Review checklist items",
+      "description": "Review checklist items - generated in real-time as files are created/modified",
       "items": {
         "type": "object",
-        "required": ["id", "file", "type", "description", "reviewed", "category"],
+        "required": ["id", "file", "lines", "type", "description", "reviewed", "category", "context"],
         "properties": {
           "id": {
             "type": "string",
@@ -43,7 +43,8 @@
               "type": "integer",
               "minimum": 1
             },
-            "description": "Specific line numbers to review (optional)"
+            "minItems": 1,
+            "description": "Specific line numbers to review (REQUIRED - use file:line references)"
           },
           "type": {
             "type": "string",
@@ -52,8 +53,9 @@
           },
           "description": {
             "type": "string",
-            "minLength": 10,
-            "description": "Review question or verification item"
+            "minLength": 20,
+            "pattern": "^[^`]*$",
+            "description": "Review question - must use file:line references, NO inline code (backticks)"
           },
           "reviewed": {
             "type": "boolean",
@@ -72,6 +74,24 @@
               "testing"
             ],
             "description": "Category of review concern"
+          },
+          "context": {
+            "type": "object",
+            "required": ["action", "why"],
+            "description": "Context about what was done and why - captures implementation intent",
+            "properties": {
+              "action": {
+                "type": "string",
+                "minLength": 5,
+                "description": "What action was performed (e.g., 'Added input validation for userId')"
+              },
+              "why": {
+                "type": "string",
+                "minLength": 5,
+                "description": "Why this action was needed (e.g., 'Prevent SQL injection')"
+              }
+            },
+            "additionalProperties": false
           }
         },
         "additionalProperties": false
