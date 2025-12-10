@@ -1,7 +1,7 @@
 const logger = require('../utils/logger');
 const state = require('../config/state');
 const { executeClaude } = require('../executors/claude-executor');
-const { commitOrFix, generateCommitMessageLocally: _generateCommitMessageLocally, smartCommit } = require('./git-commit');
+const { commitOrFix, collectRichContext, generateCommitMessageLocally: _generateCommitMessageLocally, smartCommit } = require('./git-commit');
 const { getLocalLLMService } = require('./local-llm');
 
 // Mock modules
@@ -535,10 +535,13 @@ describe('git-commit', () => {
                 await smartCommit({ taskName: 'TASK1' });
 
                 expect(executeClaude).toHaveBeenCalledWith(
-                    expect.stringContaining('git add . and git commit'),
+                    expect.stringContaining('git add'),
                     'TASK1',
                     expect.objectContaining({ cwd: '/test' }),
                 );
+                // Verify new detailed prompt format
+                const calledPrompt = executeClaude.mock.calls[0][0];
+                expect(calledPrompt).toContain('DETAILED commit message');
             });
         });
 
@@ -642,10 +645,13 @@ describe('git-commit', () => {
                 await smartCommit({ cwd: '/custom/repo' });
 
                 expect(executeClaude).toHaveBeenCalledWith(
-                    expect.stringContaining('git add . and git commit'),
+                    expect.stringContaining('git add'),
                     null,
                     expect.objectContaining({ cwd: '/custom/repo' }),
                 );
+                // Verify new detailed prompt format
+                const calledPrompt = executeClaude.mock.calls[0][0];
+                expect(calledPrompt).toContain('DETAILED commit message');
             });
 
             test('should pass custom cwd through all git operations', async () => {
@@ -713,6 +719,132 @@ describe('git-commit', () => {
                     expect.objectContaining({ cwd: '/state/folder' }),
                 );
             });
+        });
+    });
+
+    describe('collectRichContext', () => {
+        beforeEach(() => {
+            jest.clearAllMocks();
+            state.folder = '/test';
+            state.claudiomiroFolder = '/test/.claudiomiro/task-executor';
+        });
+
+        test('should collect changed files from git', () => {
+            execSync.mockImplementation((cmd) => {
+                if (cmd.includes('git diff --name-only')) {
+                    return 'src/file1.js\nsrc/file2.js\n';
+                }
+                if (cmd.includes('git diff --stat')) {
+                    return ' src/file1.js | 10 ++++\n src/file2.js | 5 ++\n';
+                }
+                return '';
+            });
+            fs.existsSync.mockReturnValue(false);
+
+            const context = collectRichContext();
+
+            expect(context.changedFiles).toContain('src/file1.js');
+            expect(context.changedFiles).toContain('src/file2.js');
+            expect(context.diffSummary).toContain('10 ++++');
+        });
+
+        test('should collect CODE_REVIEW.md content from tasks', () => {
+            execSync.mockReturnValue('');
+            fs.existsSync.mockImplementation((path) => {
+                if (path === '/test/.claudiomiro/task-executor') return true;
+                if (path.includes('CODE_REVIEW.md')) return true;
+                if (path.includes('TASK.md')) return true;
+                return false;
+            });
+            fs.readdirSync.mockReturnValue(['TASK1', 'TASK2']);
+            fs.readFileSync.mockImplementation((path) => {
+                if (path.includes('CODE_REVIEW.md')) {
+                    return 'Code review passed. All tests pass.';
+                }
+                if (path.includes('TASK.md')) {
+                    return 'Implement feature X with validation';
+                }
+                return '';
+            });
+
+            const context = collectRichContext();
+
+            expect(context.codeReviews).toContain('TASK1');
+            expect(context.codeReviews).toContain('Code review passed');
+            expect(context.taskDescriptions).toContain('Implement feature X');
+        });
+
+        test('should collect INITIAL_PROMPT.md content', () => {
+            execSync.mockReturnValue('');
+            fs.existsSync.mockImplementation((path) => {
+                if (path === '/test/.claudiomiro/task-executor') return true;
+                if (path.includes('INITIAL_PROMPT.md')) return true;
+                return false;
+            });
+            fs.readdirSync.mockReturnValue([]);
+            fs.readFileSync.mockImplementation((path) => {
+                if (path.includes('INITIAL_PROMPT.md')) {
+                    return 'Build a user authentication system with JWT';
+                }
+                return '';
+            });
+
+            const context = collectRichContext();
+
+            expect(context.initialPrompt).toContain('user authentication');
+        });
+
+        test('should handle missing claudiomiroFolder gracefully', () => {
+            execSync.mockReturnValue('');
+            fs.existsSync.mockReturnValue(false);
+
+            const context = collectRichContext();
+
+            expect(context.changedFiles).toBe('');
+            expect(context.codeReviews).toBe('');
+            expect(context.taskDescriptions).toBe('');
+            expect(context.initialPrompt).toBe('');
+        });
+
+        test('should handle git errors gracefully', () => {
+            execSync.mockImplementation(() => {
+                throw new Error('Git not available');
+            });
+            fs.existsSync.mockReturnValue(false);
+
+            const context = collectRichContext();
+
+            expect(context.changedFiles).toBe('');
+            expect(context.diffSummary).toBe('');
+        });
+
+        test('should use custom cwd when provided', () => {
+            execSync.mockReturnValue('custom/file.js\n');
+            fs.existsSync.mockReturnValue(false);
+
+            collectRichContext('/custom/repo');
+
+            expect(execSync).toHaveBeenCalledWith(
+                expect.any(String),
+                expect.objectContaining({ cwd: '/custom/repo' }),
+            );
+        });
+
+        test('should truncate long content', () => {
+            const longContent = 'x'.repeat(2000);
+            execSync.mockReturnValue('');
+            fs.existsSync.mockImplementation((path) => {
+                if (path === '/test/.claudiomiro/task-executor') return true;
+                if (path.includes('CODE_REVIEW.md')) return true;
+                return false;
+            });
+            fs.readdirSync.mockReturnValue(['TASK1']);
+            fs.readFileSync.mockReturnValue(longContent);
+
+            const context = collectRichContext();
+
+            // CODE_REVIEW.md content should be limited to 1000 chars per task
+            expect(context.codeReviews.length).toBeLessThan(longContent.length);
         });
     });
 });

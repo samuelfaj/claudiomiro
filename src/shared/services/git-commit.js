@@ -7,6 +7,89 @@ const { executeClaude } = require('../executors/claude-executor');
 const { getLocalLLMService } = require('./local-llm');
 
 /**
+ * Collects rich context for commit messages and PR descriptions
+ * Gathers information from git diff, CODE_REVIEW.md files, TASK.md files, and INITIAL_PROMPT.md
+ * @param {string|null} cwd - Working directory for git operations (defaults to state.folder)
+ * @returns {{changedFiles: string, diffSummary: string, codeReviews: string, taskDescriptions: string, initialPrompt: string}}
+ */
+const collectRichContext = (cwd = null) => {
+    const workDir = cwd || state.folder;
+    const claudiomiroPath = state.claudiomiroFolder;
+
+    let changedFiles = '';
+    let diffSummary = '';
+    let codeReviews = '';
+    let taskDescriptions = '';
+    let initialPrompt = '';
+
+    try {
+        // Get changed files list
+        changedFiles = execSync('git diff --name-only HEAD 2>/dev/null || git diff --name-only --staged 2>/dev/null || git status --porcelain', {
+            cwd: workDir,
+            encoding: 'utf-8',
+            maxBuffer: 100 * 1024,
+        }).trim();
+
+        // Get diff summary (stats)
+        diffSummary = execSync('git diff --stat HEAD 2>/dev/null || git diff --stat --staged 2>/dev/null || echo ""', {
+            cwd: workDir,
+            encoding: 'utf-8',
+            maxBuffer: 100 * 1024,
+        }).trim();
+    } catch (e) {
+        // Git operations failed
+    }
+
+    // Collect CODE_REVIEW.md summaries from tasks
+    if (claudiomiroPath && fs.existsSync(claudiomiroPath)) {
+        try {
+            const taskDirs = fs.readdirSync(claudiomiroPath).filter(d => d.startsWith('TASK'));
+            const reviews = [];
+            const tasks = [];
+
+            for (const taskDir of taskDirs) {
+                // Collect CODE_REVIEW.md
+                const reviewPath = path.join(claudiomiroPath, taskDir, 'CODE_REVIEW.md');
+                if (fs.existsSync(reviewPath)) {
+                    const content = fs.readFileSync(reviewPath, 'utf-8');
+                    reviews.push(`### ${taskDir}\n${content.slice(0, 1000)}`);
+                }
+
+                // Collect TASK.md descriptions
+                const taskPath = path.join(claudiomiroPath, taskDir, 'TASK.md');
+                if (fs.existsSync(taskPath)) {
+                    const content = fs.readFileSync(taskPath, 'utf-8');
+                    tasks.push(`### ${taskDir}\n${content.slice(0, 500)}`);
+                }
+            }
+
+            codeReviews = reviews.join('\n\n---\n\n');
+            taskDescriptions = tasks.join('\n\n');
+        } catch (e) {
+            // Failed to read task files
+        }
+
+        // Get initial prompt
+        const initialPromptPath = path.join(claudiomiroPath, 'INITIAL_PROMPT.md');
+        if (fs.existsSync(initialPromptPath)) {
+            try {
+                initialPrompt = fs.readFileSync(initialPromptPath, 'utf-8').slice(0, 1000);
+            } catch (e) {
+                // Failed to read initial prompt
+            }
+        }
+    }
+
+    return {
+        changedFiles,
+        diffSummary,
+        codeReviews,
+        taskDescriptions,
+        initialPrompt,
+    };
+};
+
+/**
  * Generates a commit message using Local LLM (if available)
  * Falls back to a generic message if LLM is not available
  * @param {string} taskDescription - Description of the task/changes
@@ -295,6 +378,7 @@ const _tryCreatePRViaShell = async (cwd = null) => {
 
 /**
  * Internal helper: Falls back to Claude for git operations
+ * Collects rich context to generate detailed commit messages and PR descriptions
  * @param {string|null} taskName - Task identifier
  * @param {boolean} shouldPush - Whether to push changes
  * @param {boolean} createPR - Whether to create a pull request
@@ -305,9 +389,91 @@ const _tryCreatePRViaShell = async (cwd = null) => {
 const _fallbackToClaude = async (taskName, shouldPush, createPR, reason, cwd = null) => {
     logger.info(`🤖 Using Claude for git operations (${reason})`);
 
-    let prompt = 'git add . and git commit';
-    if (shouldPush) prompt += ' and git push';
-    if (createPR) prompt += ' and create pull request';
+    // Collect rich context for detailed commit/PR
+    const context = collectRichContext(cwd);
+
+    let prompt = 'Execute the following git operations:\n\n';
+    prompt += '1. git add . (stage all changes)\n';
+    prompt += '2. git commit with a DETAILED commit message\n';
+    if (shouldPush) prompt += '3. git push\n';
+    if (createPR) prompt += `${shouldPush ? '4' : '3'}. Create a pull request with DETAILED description\n`;
+
+    // Add rich context for better commit messages
+    prompt += '\n## CONTEXT FOR COMMIT MESSAGE AND PR\n\n';
+
+    if (context.initialPrompt) {
+        prompt += `### Original Request\n${context.initialPrompt}\n\n`;
+    }
+
+    if (context.taskDescriptions) {
+        prompt += `### Tasks Implemented\n${context.taskDescriptions}\n\n`;
+    }
+
+    if (context.changedFiles) {
+        prompt += `### Changed Files\n\`\`\`\n${context.changedFiles}\n\`\`\`\n\n`;
+    }
+
+    if (context.diffSummary) {
+        prompt += `### Diff Summary\n\`\`\`\n${context.diffSummary}\n\`\`\`\n\n`;
+    }
+
+    if (context.codeReviews) {
+        prompt += `### Code Review Summaries\n${context.codeReviews}\n\n`;
+    }
+
+    // Instructions for commit message
+    prompt += `## COMMIT MESSAGE REQUIREMENTS
+
+Write a commit message that:
+- Uses conventional commits format (feat:, fix:, refactor:, etc.)
+- Has a clear, descriptive title (max 72 chars)
+- Has a body explaining WHAT was changed and WHY
+- Lists the main changes/features implemented
+- Does NOT mention AI or automation
+
+Example format:
+\`\`\`
+feat: implement user authentication with JWT
+
+- Add login/logout endpoints with session management
+- Implement JWT token generation and validation
+- Add password hashing with bcrypt
+- Create auth middleware for protected routes
+- Add unit tests for auth service
+\`\`\`
+`;
+
+    // Instructions for PR if needed
+    if (createPR) {
+        prompt += `
+## PR DESCRIPTION REQUIREMENTS
+
+Create a PR with:
+- Clear title summarizing all changes
+- Body with sections:
+  - ## Summary (2-3 sentences explaining the PR)
+  - ## Changes (bullet list of what was done)
+  - ## Testing (how to test the changes)
+
+Example format:
+\`\`\`
+## Summary
+This PR implements the user authentication system, including login, logout, and session management using JWT tokens.
+
+## Changes
+- Added authentication endpoints (POST /login, POST /logout)
+- Implemented JWT token generation with 24h expiration
+- Created auth middleware for protected routes
+- Added password hashing using bcrypt
+- Included comprehensive unit tests
+
+## Testing
+1. Run \`npm test\` to execute unit tests
+2. Test login endpoint with valid/invalid credentials
+3. Verify protected routes require valid JWT
+\`\`\`
+`;
+    }
 
     try {
         await commitOrFix(prompt, taskName, cwd);
@@ -378,4 +544,4 @@ const commitOrFix = async (prompt, taskName = null, cwd = null) => {
     }
 };
 
-module.exports = { commitOrFix, generateCommitMessageLocally, generatePRDescriptionLocally, smartCommit };
+module.exports = { commitOrFix, collectRichContext, generateCommitMessageLocally, generatePRDescriptionLocally, smartCommit };

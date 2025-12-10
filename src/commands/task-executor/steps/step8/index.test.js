@@ -8,7 +8,16 @@ jest.spyOn(process, 'exit').mockImplementation(mockExit);
 // Mock all dependencies
 jest.mock('fs');
 jest.mock('child_process');
-jest.mock('../../../../shared/services/git-commit');
+jest.mock('../../../../shared/services/git-commit', () => ({
+    smartCommit: jest.fn(),
+    collectRichContext: jest.fn().mockReturnValue({
+        changedFiles: 'src/file1.js\nsrc/file2.js',
+        diffSummary: ' src/file1.js | 10 ++++\n',
+        codeReviews: 'Code review passed',
+        taskDescriptions: 'Implement feature X',
+        initialPrompt: 'Build user authentication',
+    }),
+}));
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro/task-executor',
     workspaceClaudiomiroFolder: '/test/.claudiomiro/task-executor',
