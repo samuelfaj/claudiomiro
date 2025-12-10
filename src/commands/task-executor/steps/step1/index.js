@@ -191,10 +191,9 @@ const runRefinementLoop = async (maxIterations) => {
  * Transforms user request + clarification answers into complete AI_PROMPT.md
  * Then runs refinement loop to ensure 100% completeness
  *
- * @param {boolean} sameBranch - Whether to use the same branch
  * @param {number} maxIterations - Maximum refinement iterations (default: 20)
  */
-const step1 = async (sameBranch = false, maxIterations = 20) => {
+const step1 = async (maxIterations = 20) => {
     const folder = (file) => path.join(state.claudiomiroFolder, file);
 
     const aiPromptPath = folder('AI_PROMPT.md');
@@ -204,10 +203,8 @@ const step1 = async (sameBranch = false, maxIterations = 20) => {
         logger.newline();
         logger.startSpinner('Generating AI_PROMPT.md with clarifications...');
 
-        // In multi-repo mode, branches are already created programmatically in step0
-        const branchStep = (sameBranch || state.isMultiRepo())
-            ? ''
-            : '## FIRST STEP: \n\nCreate a git branch for this task\n\n';
+        // Branch creation is handled by cli.js before step0 runs
+        // We no longer ask Claude to create branches - the user's chosen branch name is used directly
 
         const taskContent = fs.existsSync(folder('INITIAL_PROMPT.md'))
             ? fs.readFileSync(folder('INITIAL_PROMPT.md'), 'utf-8')
@@ -222,7 +219,7 @@ const step1 = async (sameBranch = false, maxIterations = 20) => {
         const legacyContext = generateLegacySystemContext();
 
         // Main AI_PROMPT.md generation - use step1 model (default: hard)
-        await executeClaude(replace(branchStep + prompt + multiRepoContext + legacyContext), null, { model: getStepModel(1) });
+        await executeClaude(replace(prompt + multiRepoContext + legacyContext), null, { model: getStepModel(1) });
 
         logger.stopSpinner();
 

@@ -58,7 +58,7 @@ describe('step1', () => {
             });
 
             // Act
-            await step1(false);
+            await step1();
 
             // Assert
             expect(executeClaude).not.toHaveBeenCalled();
@@ -95,13 +95,14 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(false);
+            await step1();
 
             // Assert
             expect(logger.newline).toHaveBeenCalled();
             expect(logger.startSpinner).toHaveBeenCalledWith('Generating AI_PROMPT.md with clarifications...');
+            // Branch creation is now handled by cli.js, so step1 should NOT include branch step
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.stringContaining('## FIRST STEP: \n\nCreate a git branch for this task\n\n'),
+                expect.not.stringContaining('## FIRST STEP:'),
                 null,
                 expect.objectContaining({ model: 'hard' }),
             );
@@ -145,7 +146,7 @@ describe('step1', () => {
             expect(logger.error).toHaveBeenCalledWith('AI_PROMPT.md was not created');
         });
 
-        test('should handle branch step parameter (sameBranch = true)', async () => {
+        test('should never include branch step (branch creation handled by cli.js)', async () => {
             // Arrange
             let existsCallCount = 0;
             fs.existsSync.mockImplementation((filePath) => {
@@ -170,8 +171,8 @@ describe('step1', () => {
 
             executeClaude.mockResolvedValue({ success: true });
 
-            // Act
-            await step1(true);
+            // Act - sameBranch parameter is now ignored (deprecated)
+            await step1();
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
@@ -179,9 +180,10 @@ describe('step1', () => {
                 null,
                 expect.objectContaining({ model: 'hard' }),
             );
-            // Verify that the prompt does NOT contain the branch step text
+            // Branch creation is handled by cli.js, NOT by step1
+            // So step1 should NEVER include branch step regardless of sameBranch parameter
             expect(executeClaude).toHaveBeenCalledWith(
-                expect.not.stringContaining('## FIRST STEP: \n\nCreate a git branch for this task\n\n'),
+                expect.not.stringContaining('## FIRST STEP:'),
                 null,
                 expect.objectContaining({ model: 'hard' }),
             );
@@ -212,7 +214,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(false);
+            await step1();
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
@@ -313,7 +315,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(true);
+            await step1();
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
@@ -362,7 +364,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(true);
+            await step1();
 
             // Assert
             expect(executeClaude).toHaveBeenCalledWith(
@@ -405,7 +407,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(true);
+            await step1();
 
             // Assert
             expect(generateLegacySystemContext).toHaveBeenCalled();
@@ -446,7 +448,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(true);
+            await step1();
 
             // Assert
             expect(generateLegacySystemContext).toHaveBeenCalled();
@@ -485,7 +487,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(true);
+            await step1();
 
             // Assert - legacy context appears AFTER multi-repo context
             const promptArg = executeClaude.mock.calls[0][0];
@@ -524,7 +526,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(true);
+            await step1();
 
             // Assert - both contexts are present
             expect(executeClaude).toHaveBeenCalledWith(
@@ -829,7 +831,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(true, 10);
+            await step1(10);
 
             // Assert
             expect(executeClaude).toHaveBeenCalled();
@@ -849,7 +851,7 @@ describe('step1', () => {
             });
 
             // Act & Assert
-            await expect(step1(true, 15)).rejects.toThrow('refinement-prompt.md not found');
+            await expect(step1(15)).rejects.toThrow('refinement-prompt.md not found');
         });
     });
 
@@ -917,7 +919,7 @@ describe('step1', () => {
             executeClaude.mockResolvedValue({ success: true });
 
             // Act
-            await step1(true, 10);
+            await step1(10);
 
             // Assert
             expect(fs.unlinkSync).toHaveBeenCalledWith(

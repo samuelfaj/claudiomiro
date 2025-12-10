@@ -1,6 +1,6 @@
 {
   "name": "claudiomiro",
-  "version": "2.8.0",
+  "version": "2.8.1",
   "main": "index.js",
   "bin": {
     "claudiomiro": "./index.js"

@@ -10,6 +10,7 @@ const { detectGitConfiguration } = require('../../shared/services/git-detector')
 const { getMultilineInput, getSimpleInput } = require('../../shared/services/prompt-reader');
 const { createBranches, getCurrentBranch } = require('../../shared/services/git-manager');
 const { parseFilesTag } = require('./services/file-conflict-detector');
+const { executeClaude } = require('../../shared/executors/claude-executor');
 
 // Uses execution.json to check if task is completed and approved
 const isTaskApproved = (taskName) => {
@@ -433,7 +434,42 @@ const chooseAction = async (i, args) => {
 
             // Only create a new branch if user entered something
             if (userBranchName.trim()) {
-                createBranches(userBranchName.trim());
+                const branchResult = createBranches(userBranchName.trim());
+
+                // Fallback to Claude if shell command failed
+                if (!branchResult.success) {
+                    logger.warning(`Shell branch creation failed: ${branchResult.error}`);
+                    logger.info('Falling back to Claude for branch creation...');
+
+                    const gitMode = state.getGitMode();
+
+                    if (gitMode === 'separate') {
+                        // Multi-repo with separate git roots: create branch in each repo
+                        const backendPath = state.getRepository('backend');
+                        const frontendPath = state.getRepository('frontend');
+
+                        logger.info('Creating branch in backend repository...');
+                        await executeClaude(
+                            `Create and checkout a new git branch named "${userBranchName.trim()}" in the repository at "${backendPath}". If it already exists, just checkout to it.`,
+                            null,
+                            { model: 'fast' },
+                        );
+
+                        logger.info('Creating branch in frontend repository...');
+                        await executeClaude(
+                            `Create and checkout a new git branch named "${userBranchName.trim()}" in the repository at "${frontendPath}". If it already exists, just checkout to it.`,
+                            null,
+                            { model: 'fast' },
+                        );
+                    } else {
+                        // Single repo or monorepo: create branch in current folder
+                        await executeClaude(
+                            `Create and checkout a new git branch named "${userBranchName.trim()}". If it already exists, just checkout to it.`,
+                            null,
+                            { model: 'fast' },
+                        );
+                    }
+                }
             } else {
                 logger.info(`Using current branch: ${currentBranch || '(default)'}`);
             }
@@ -463,7 +499,7 @@ const chooseAction = async (i, args) => {
                 return { done: true };
             }
             const maxRefinementIterations = noLimit ? Infinity : maxAttemptsPerTask;
-            return { step: step1(sameBranch, maxRefinementIterations) };
+            return { step: step1(maxRefinementIterations) };
         }
 
         // If AI_PROMPT.md exists but no tasks yet, run step2
@@ -499,7 +535,42 @@ const chooseAction = async (i, args) => {
 
             // Only create a new branch if user entered something
             if (userBranchName.trim()) {
-                createBranches(userBranchName.trim());
+                const branchResult = createBranches(userBranchName.trim());
+
+                // Fallback to Claude if shell command failed
+                if (!branchResult.success) {
+                    logger.warning(`Shell branch creation failed: ${branchResult.error}`);
+                    logger.info('Falling back to Claude for branch creation...');
+
+                    const gitMode = state.getGitMode();
+
+                    if (gitMode === 'separate') {
+                        // Multi-repo with separate git roots: create branch in each repo
+                        const backendPath = state.getRepository('backend');
+                        const frontendPath = state.getRepository('frontend');
+
+                        logger.info('Creating branch in backend repository...');
+                        await executeClaude(
+                            `Create and checkout a new git branch named "${userBranchName.trim()}" in the repository at "${backendPath}". If it already exists, just checkout to it.`,
+                            null,
+                            { model: 'fast' },
+                        );
+
+                        logger.info('Creating branch in frontend repository...');
+                        await executeClaude(
+                            `Create and checkout a new git branch named "${userBranchName.trim()}" in the repository at "${frontendPath}". If it already exists, just checkout to it.`,
+                            null,
+                            { model: 'fast' },
+                        );
+                    } else {
+                        // Single repo or monorepo: create branch in current folder
+                        await executeClaude(
+                            `Create and checkout a new git branch named "${userBranchName.trim()}". If it already exists, just checkout to it.`,
+                            null,
+                            { model: 'fast' },
+                        );
+                    }
+                }
             } else {
                 logger.info(`Using current branch: ${currentBranch || '(default)'}`);
             }
