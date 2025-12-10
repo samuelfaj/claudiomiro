@@ -6,6 +6,9 @@ jest.mock('../../../../shared/executors/claude-executor');
 jest.mock('../../../../shared/config/state', () => ({
     claudiomiroFolder: '/test/.claudiomiro/task-executor',
     folder: '/test/project',
+    isMultiRepo: jest.fn().mockReturnValue(false),
+    getRepository: jest.fn().mockReturnValue(null),
+    getGitMode: jest.fn().mockReturnValue(null),
 }));
 jest.mock('../../../../shared/utils/logger', () => ({
     newline: jest.fn(),
@@ -38,6 +41,7 @@ const { step2, cleanupDecompositionArtifacts } = require('./index');
 const { runValidation } = require('./decomposition-json-validator');
 const { executeClaude } = require('../../../../shared/executors/claude-executor');
 const logger = require('../../../../shared/utils/logger');
+const state = require('../../../../shared/config/state');
 const { buildOptimizedContextAsync } = require('../../../../shared/services/context-cache/context-collector');
 const { generateLegacySystemContext } = require('../../../../shared/services/legacy-system/context-generator');
 
@@ -612,6 +616,87 @@ describe('step2', () => {
                 expect.stringContaining('DECOMPOSITION_ANALYSIS.json'),
             );
             expect(logger.info).toHaveBeenCalledWith('DECOMPOSITION_ANALYSIS.json preserved for debugging');
+        });
+    });
+
+    describe('multi-repo mode', () => {
+        test('should include multi-repo context in prompt when isMultiRepo returns true', async () => {
+            // Arrange
+            state.isMultiRepo.mockReturnValue(true);
+            state.getRepository.mockImplementation((scope) => {
+                if (scope === 'backend') return '/test/backend';
+                if (scope === 'frontend') return '/test/frontend';
+                return null;
+            });
+            state.getGitMode.mockReturnValue('monorepo');
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return '{{multiRepoContext}}Create tasks';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step2();
+
+            // Assert
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('MULTI-REPO MODE ACTIVE'),
+                null,
+                expect.anything(),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('@scope'),
+                null,
+                expect.anything(),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('/test/backend'),
+                null,
+                expect.anything(),
+            );
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.stringContaining('/test/frontend'),
+                null,
+                expect.anything(),
+            );
+        });
+
+        test('should NOT include multi-repo context when isMultiRepo returns false', async () => {
+            // Arrange
+            state.isMultiRepo.mockReturnValue(false);
+
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                return false;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return '{{multiRepoContext}}Create tasks';
+                }
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step2();
+
+            // Assert
+            expect(executeClaude).toHaveBeenCalledWith(
+                expect.not.stringContaining('MULTI-REPO MODE ACTIVE'),
+                null,
+                expect.anything(),
+            );
         });
     });
 });

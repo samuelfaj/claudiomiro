@@ -37,11 +37,38 @@ const step2 = async () => {
         logger.debug(`[Step2] Context building failed: ${error.message}`);
     }
 
+    // Build multi-repo context if enabled
+    let multiRepoContext = '';
+    if (state.isMultiRepo()) {
+        const repos = [];
+        const backendPath = state.getRepository('backend');
+        const frontendPath = state.getRepository('frontend');
+        if (backendPath) repos.push(`- **Backend:** \`${backendPath}\``);
+        if (frontendPath) repos.push(`- **Frontend:** \`${frontendPath}\``);
+
+        multiRepoContext = `
+## 🚨 MULTI-REPO MODE ACTIVE 🚨
+
+**THIS PROJECT IS IN MULTI-REPO MODE.** Every BLUEPRINT.md MUST include an \`@scope\` tag.
+
+**Configured repositories:**
+${repos.join('\n')}
+**Git mode:** ${state.getGitMode() || 'unknown'}
+
+**MANDATORY:** Add \`@scope backend\`, \`@scope frontend\`, or \`@scope integration\` to EVERY BLUEPRINT.md file.
+
+**Failure to add @scope will cause task execution to fail.**
+
+---
+`;
+    }
+
     const replace = (text) => {
         return text
             .replaceAll('{{claudiomiroFolder}}', `${state.claudiomiroFolder}`)
             .replaceAll('{{legacySystemContext}}', legacyContext || 'None - no legacy systems configured')
-            .replaceAll('{{optimizedContext}}', optimizedContext || '');
+            .replaceAll('{{optimizedContext}}', optimizedContext || '')
+            .replaceAll('{{multiRepoContext}}', multiRepoContext);
     };
 
     const prompt = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf-8');

@@ -59,6 +59,8 @@ You are not summarizing — you are **preserving structure AND context through d
 
 ---
 
+{{multiRepoContext}}
+
 ## Task Scope (Frontend and Backend Oriented)
 
 When working with projects that have **distinct frontend and backend layers** (whether in the same repository or separate repositories), every BLUEPRINT.md MUST include an `@scope` tag on the second line.
