@@ -44,7 +44,12 @@ const getTaskNames = (claudiomiroFolder) => {
             const fullPath = path.join(claudiomiroFolder, f);
             return f.startsWith('TASK') && fs.statSync(fullPath).isDirectory();
         })
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+        .sort((a, b) => {
+            // TASKΩ should always be last
+            if (a.includes('Ω')) return 1;
+            if (b.includes('Ω')) return -1;
+            return a.localeCompare(b, undefined, { numeric: true });
+        });
 };
 
 /**

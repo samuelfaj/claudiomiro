@@ -17,8 +17,8 @@
     },
     "task": {
       "type": "string",
-      "pattern": "^TASK\\d+$",
-      "description": "Task identifier (e.g., TASK0, TASK1)"
+      "pattern": "^TASK(\\d+|Ω)$",
+      "description": "Task identifier (e.g., TASK0, TASK1, TASKΩ)"
     },
     "title": {
       "type": "string",

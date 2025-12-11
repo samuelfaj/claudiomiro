@@ -485,7 +485,12 @@ const chooseAction = async (i, args) => {
             // Only include task folders (TASK0, TASK1, TASKΩ, etc.), exclude cache and other directories
             return fs.statSync(fullPath).isDirectory() && /^TASK(\d+|Ω)/.test(name);
         })
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        .sort((a, b) => {
+            // TASKΩ should always be last
+            if (a.includes('Ω')) return 1;
+            if (b.includes('Ω')) return -1;
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
 
     if (tasks.length === 0) {
         // Check if we need to run step1 (generate AI_PROMPT.md)
@@ -827,7 +832,12 @@ const allHasExecution = () => {
             // Only include task folders (TASK0, TASK1, TASKΩ, etc.), exclude cache and other directories
             return fs.statSync(fullPath).isDirectory() && /^TASK(\d+|Ω)/.test(name);
         })
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        .sort((a, b) => {
+            // TASKΩ should always be last
+            if (a.includes('Ω')) return 1;
+            if (b.includes('Ω')) return -1;
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
 
     if (tasks.length === 0) {
         return null;
@@ -862,7 +872,12 @@ const buildTaskGraph = () => {
             // Only include task folders (TASK0, TASK1, TASKΩ, etc.), exclude cache and other directories
             return fs.statSync(fullPath).isDirectory() && /^TASK(\d+|Ω)/.test(name);
         })
-        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+        .sort((a, b) => {
+            // TASKΩ should always be last
+            if (a.includes('Ω')) return 1;
+            if (b.includes('Ω')) return -1;
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        });
 
     if (tasks.length === 0) {
         return null;

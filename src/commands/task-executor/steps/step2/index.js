@@ -137,7 +137,12 @@ const validateDecompositionWithLLM = async () => {
         // Collect all tasks
         const taskFolders = fs.readdirSync(state.claudiomiroFolder)
             .filter(f => f.startsWith('TASK') && fs.statSync(path.join(state.claudiomiroFolder, f)).isDirectory())
-            .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+            .sort((a, b) => {
+                // TASKΩ should always be last
+                if (a.includes('Ω')) return 1;
+                if (b.includes('Ω')) return -1;
+                return a.localeCompare(b, undefined, { numeric: true });
+            });
 
         if (taskFolders.length < 2) return; // No validation needed for single task
 

@@ -300,6 +300,41 @@ describe('step3', () => {
             );
             expect(fs.readdirSync).toHaveBeenCalledWith('/test/.claudiomiro/task-executor');
         });
+
+        test('should sort TASKΩ to be last', async () => {
+            // Arrange - TASKΩ should always come last
+            const unsortedTasks = ['TASKΩ', 'TASK2', 'TASK1'];
+            const _expectedSortedOrder = ['TASK1', 'TASK2', 'TASKΩ'];
+
+            fs.readdirSync.mockReturnValue(unsortedTasks);
+            fs.statSync.mockReturnValue({ isDirectory: () => true });
+            fs.existsSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) return true;
+                return true;
+            });
+
+            fs.readFileSync.mockImplementation((filePath) => {
+                if (filePath.includes('prompt.md')) {
+                    return '# Analysis\n\nAnalyze {{taskCount}} tasks ({{taskList}})\n\n{{taskDescriptions}}';
+                }
+                if (filePath.includes('TASK1/BLUEPRINT.md')) return '### TASK1\n\nTask 1';
+                if (filePath.includes('TASK1/PROMPT.md')) return 'Prompt 1';
+                if (filePath.includes('TASK2/BLUEPRINT.md')) return '### TASK2\n\nTask 2';
+                if (filePath.includes('TASK2/PROMPT.md')) return 'Prompt 2';
+                if (filePath.includes('TASKΩ/BLUEPRINT.md')) return '### TASKΩ\n\nFinal validation';
+                if (filePath.includes('TASKΩ/PROMPT.md')) return 'Prompt Ω';
+                return '';
+            });
+
+            executeClaude.mockResolvedValue({ success: true });
+
+            // Act
+            await step3();
+
+            // Assert - TASKΩ should be last in the task list
+            const promptArg = executeClaude.mock.calls[0][0];
+            expect(promptArg).toMatch(/TASK1.*TASK2.*TASKΩ/s);
+        });
     });
 
     describe('Error handling', () => {

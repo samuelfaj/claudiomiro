@@ -159,8 +159,9 @@ class ParallelUIRenderer {
         if (taskStates && typeof taskStates === 'object') {
             const taskNames = Object.keys(taskStates).sort((a, b) => {
                 // Extract numbers from task names (e.g., "TASK10" -> 10)
-                const numA = parseInt(a.match(/\d+/)?.[0] || '0', 10);
-                const numB = parseInt(b.match(/\d+/)?.[0] || '0', 10);
+                // TASKΩ should always be last (use Infinity for sorting)
+                const numA = a.includes('Ω') ? Infinity : parseInt(a.match(/\d+/)?.[0] || '0', 10);
+                const numB = b.includes('Ω') ? Infinity : parseInt(b.match(/\d+/)?.[0] || '0', 10);
                 return numA - numB;
             });
             if (taskNames.length > 0) {
