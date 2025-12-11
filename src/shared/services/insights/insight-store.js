@@ -175,7 +175,7 @@ const PROJECT_PATH_PATTERNS = [
     /`[^`]*\/[^`]*`/,
     /\b(?:src|lib|apps|packages|services|modules|server|client|api|config|tests?)[/\\][\w./-]+/,
     /\b[\w-]+\.(?:js|jsx|ts|tsx|py|go|java|rb|php|cs|rs|swift|c|cpp|h|hpp)\b/,
-    /\bTASK\d+(?:\.\d+)?\b/i,
+    /\bTASK(?:\d+|Ω)(?:\.\d+)?\b/i,
 ];
 
 const hasProjectIndicators = (text, tags) => {

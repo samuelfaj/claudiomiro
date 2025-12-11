@@ -11,8 +11,8 @@ const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
  * @returns {string} - Task ID in format TASK# (e.g., 'TASK1', 'TASK2')
  */
 const extractTaskId = (task) => {
-    // Handle subtask format (e.g., 'TASK2.1' -> 'TASK2')
-    const match = task.match(/^(TASK\d+)/);
+    // Handle subtask format (e.g., 'TASK2.1' -> 'TASK2') and special TASKΩ
+    const match = task.match(/^(TASK(?:\d+|Ω))/);
     return match ? match[1] : task;
 };
 

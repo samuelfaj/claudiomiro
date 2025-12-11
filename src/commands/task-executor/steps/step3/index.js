@@ -18,8 +18,8 @@ const step3 = async () => {
         .readdirSync(state.claudiomiroFolder)
         .filter(name => {
             const fullPath = path.join(state.claudiomiroFolder, name);
-            // Only include task folders (TASK0, TASK1, etc.), exclude cache and other directories
-            return fs.statSync(fullPath).isDirectory() && /^TASK\d+/.test(name);
+            // Only include task folders (TASK0, TASK1, TASKΩ, etc.), exclude cache and other directories
+            return fs.statSync(fullPath).isDirectory() && /^TASK(\d+|Ω)/.test(name);
         })
         .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
 

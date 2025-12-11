@@ -295,7 +295,7 @@ class State {
                 if (entry === 'task-executor') {
                     return false;
                 }
-                if (/^TASK\d+/.test(entry)) {
+                if (/^TASK(\d+|Ω)/.test(entry)) {
                     return true;
                 }
                 if (legacyFiles.has(entry) || legacyDirectories.has(entry)) {

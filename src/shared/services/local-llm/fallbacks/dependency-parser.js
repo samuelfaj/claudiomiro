@@ -29,7 +29,7 @@ function parseDependencies(content) {
         const deps = depsString
             .split(/[,\s]+/)
             .map(d => d.trim())
-            .filter(d => d && /^TASK\d+/i.test(d));
+            .filter(d => d && /^TASK(\d+|Ω)/i.test(d));
 
         return deps;
     }
@@ -61,7 +61,7 @@ function parseDependsOn(content) {
     for (const pattern of patterns) {
         const match = content.match(pattern);
         if (match && match[1]) {
-            const taskRefs = match[1].match(/TASK\d+(?:\.\d+)?/gi) || [];
+            const taskRefs = match[1].match(/TASK(?:\d+|Ω)(?:\.\d+)?/gi) || [];
             deps.push(...taskRefs);
         }
     }
@@ -79,8 +79,8 @@ function extractTaskReferences(content) {
         return [];
     }
 
-    // Find all TASK references
-    const taskPattern = /TASK\d+(?:\.\d+)?/gi;
+    // Find all TASK references (including TASKΩ)
+    const taskPattern = /TASK(?:\d+|Ω)(?:\.\d+)?/gi;
     const matches = content.match(taskPattern) || [];
 
     return [...new Set(matches)];
