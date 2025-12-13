@@ -600,6 +600,86 @@ describe('Codex Executor', () => {
         });
     });
 
+    describe('Model tier functionality', () => {
+        test('should use medium model and reasoning by default', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeCodex('test prompt');
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
+        });
+
+        test('should use low reasoning for fast model tier', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeCodex('test prompt', null, { model: 'fast' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort low')], expect.any(Object));
+        });
+
+        test('should use medium reasoning for medium model tier', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeCodex('test prompt', null, { model: 'medium' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
+        });
+
+        test('should use high reasoning for hard model tier', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeCodex('test prompt', null, { model: 'hard' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort high')], expect.any(Object));
+        });
+
+        test('should fallback to medium for invalid model tier', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeCodex('test prompt', null, { model: 'invalid-tier' });
+
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
+        });
+
+        test('should log command with correct model and reasoning', async () => {
+            mockChildProcess.on.mockImplementation((event, handler) => {
+                if (event === 'close') {
+                    setTimeout(() => handler(0), 0);
+                }
+            });
+
+            await executeCodex('test prompt', null, { model: 'hard' });
+
+            expect(logger.command).toHaveBeenCalledWith(expect.stringContaining('--model gpt-5.1-codex-max'));
+            expect(logger.command).toHaveBeenCalledWith(expect.stringContaining('--reasoning-effort high'));
+        });
+    });
+
     describe('Codex-specific functionality', () => {
         test('should handle different Codex event types', async () => {
             const testCases = [

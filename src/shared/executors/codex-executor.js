@@ -14,6 +14,14 @@ try {
     // ParallelStateManager not available in shared context - this is expected
 }
 
+// Model mapping: fast/medium/hard to reasoning effort levels
+// Using gpt-5.1-codex-max with different reasoning_effort values
+const MODEL_MAP = {
+    fast: { model: 'gpt-5.1-codex-max', reasoning: 'low' },
+    medium: { model: 'gpt-5.1-codex-max', reasoning: 'medium' },
+    hard: { model: 'gpt-5.1-codex-max', reasoning: 'high' },
+};
+
 const overwriteBlock = (lines) => {
     process.stdout.write(`\x1b[${lines}A`);
     for (let i = 0; i < lines; i++) {
@@ -23,7 +31,7 @@ const overwriteBlock = (lines) => {
     process.stdout.write(`\x1b[${lines}A`);
 };
 
-const executeCodex = (text, taskName = null) => {
+const executeCodex = (text, taskName = null, options = {}) => {
     return new Promise((resolve, reject) => {
         const stateManager = taskName ? ParallelStateManager.getInstance() : null;
         const suppressStreamingLogs = Boolean(taskName) && stateManager && typeof stateManager.isUIRendererActive === 'function' && stateManager.isUIRendererActive();
@@ -34,11 +42,15 @@ const executeCodex = (text, taskName = null) => {
         const tmpFile = path.join(os.tmpdir(), `claudiomiro-codex-${Date.now()}.txt`);
         fs.writeFileSync(tmpFile, text, 'utf-8');
 
-        const command = `codex exec --json --full-auto --sandbox danger-full-access "$(cat '${tmpFile}')"`;
+        // Determine model and reasoning from options (default: medium)
+        const modelLevel = options.model || 'medium';
+        const modelConfig = MODEL_MAP[modelLevel] || MODEL_MAP.medium;
+
+        const command = `codex exec --json --full-auto --sandbox danger-full-access --model ${modelConfig.model} --reasoning-effort ${modelConfig.reasoning} "$(cat '${tmpFile}')"`;
 
         if (!suppressStreamingLogs) {
             logger.stopSpinner();
-            logger.command('codex exec --json --full-auto --sandbox danger-full-access ...');
+            logger.command(`codex exec --json --full-auto --sandbox danger-full-access --model ${modelConfig.model} --reasoning-effort ${modelConfig.reasoning} ...`);
             logger.separator();
             logger.newline();
         }

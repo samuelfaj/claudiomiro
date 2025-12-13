@@ -247,7 +247,7 @@ const executeClaude = (text, taskName = null, options = {}) => {
 
     if (state.executorType === 'codex') {
         const { executeCodex } = require('./codex-executor');
-        return executeCodex(text, taskName);
+        return executeCodex(text, taskName, options);
     }
 
     if (state.executorType === 'deep-seek') {
