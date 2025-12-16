@@ -15,7 +15,7 @@ try {
 }
 
 // Model mapping: fast/medium/hard to reasoning effort levels
-// Using gpt-5.1-codex-max with different reasoning_effort values
+// Using gpt-5.2 with different reasoning_effort values
 const MODEL_MAP = {
     fast: { model: 'gpt-5.2', reasoning: 'low' },
     medium: { model: 'gpt-5.2', reasoning: 'medium' },

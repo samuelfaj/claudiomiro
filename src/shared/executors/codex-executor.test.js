@@ -33,7 +33,7 @@ describe('Codex Executor', () => {
     let mockStateManager;
 
     beforeEach(() => {
-    // Reset all mocks
+        // Reset all mocks
         jest.clearAllMocks();
 
         // Setup default mocks
@@ -92,7 +92,7 @@ describe('Codex Executor', () => {
             configurable: true,
         });
 
-    // Date.now is already mocked at the top of the file
+        // Date.now is already mocked at the top of the file
     });
 
     afterEach(() => {
@@ -610,7 +610,7 @@ describe('Codex Executor', () => {
 
             await executeCodex('test prompt');
 
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
         });
 
@@ -623,7 +623,7 @@ describe('Codex Executor', () => {
 
             await executeCodex('test prompt', null, { model: 'fast' });
 
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort low')], expect.any(Object));
         });
 
@@ -636,7 +636,7 @@ describe('Codex Executor', () => {
 
             await executeCodex('test prompt', null, { model: 'medium' });
 
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
         });
 
@@ -649,7 +649,7 @@ describe('Codex Executor', () => {
 
             await executeCodex('test prompt', null, { model: 'hard' });
 
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort high')], expect.any(Object));
         });
 
@@ -662,7 +662,7 @@ describe('Codex Executor', () => {
 
             await executeCodex('test prompt', null, { model: 'invalid-tier' });
 
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.1-codex-max')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
         });
 
@@ -675,7 +675,7 @@ describe('Codex Executor', () => {
 
             await executeCodex('test prompt', null, { model: 'hard' });
 
-            expect(logger.command).toHaveBeenCalledWith(expect.stringContaining('--model gpt-5.1-codex-max'));
+            expect(logger.command).toHaveBeenCalledWith(expect.stringContaining('--model gpt-5.2'));
             expect(logger.command).toHaveBeenCalledWith(expect.stringContaining('--reasoning-effort high'));
         });
     });
