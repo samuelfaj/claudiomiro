@@ -17,9 +17,9 @@ try {
 // Model mapping: fast/medium/hard to reasoning effort levels
 // Using gpt-5.1-codex-max with different reasoning_effort values
 const MODEL_MAP = {
-    fast: { model: 'gpt-5.1-codex-max', reasoning: 'low' },
-    medium: { model: 'gpt-5.1-codex-max', reasoning: 'medium' },
-    hard: { model: 'gpt-5.1-codex-max', reasoning: 'high' },
+    fast: { model: 'gpt-5.2', reasoning: 'low' },
+    medium: { model: 'gpt-5.2', reasoning: 'medium' },
+    hard: { model: 'gpt-5.2', reasoning: 'high' },
 };
 
 const overwriteBlock = (lines) => {
