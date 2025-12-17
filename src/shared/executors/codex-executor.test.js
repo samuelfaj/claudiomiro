@@ -611,7 +611,7 @@ describe('Codex Executor', () => {
             await executeCodex('test prompt');
 
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--config model_reasoning_effort=medium')], expect.any(Object));
         });
 
         test('should use low reasoning for fast model tier', async () => {
@@ -624,7 +624,7 @@ describe('Codex Executor', () => {
             await executeCodex('test prompt', null, { model: 'fast' });
 
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort low')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--config model_reasoning_effort=low')], expect.any(Object));
         });
 
         test('should use medium reasoning for medium model tier', async () => {
@@ -637,7 +637,7 @@ describe('Codex Executor', () => {
             await executeCodex('test prompt', null, { model: 'medium' });
 
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--config model_reasoning_effort=medium')], expect.any(Object));
         });
 
         test('should use high reasoning for hard model tier', async () => {
@@ -650,7 +650,7 @@ describe('Codex Executor', () => {
             await executeCodex('test prompt', null, { model: 'hard' });
 
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort high')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--config model_reasoning_effort=high')], expect.any(Object));
         });
 
         test('should fallback to medium for invalid model tier', async () => {
@@ -663,7 +663,7 @@ describe('Codex Executor', () => {
             await executeCodex('test prompt', null, { model: 'invalid-tier' });
 
             expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--model gpt-5.2')], expect.any(Object));
-            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--reasoning-effort medium')], expect.any(Object));
+            expect(spawn).toHaveBeenCalledWith('sh', ['-c', expect.stringContaining('--config model_reasoning_effort=medium')], expect.any(Object));
         });
 
         test('should log command with correct model and reasoning', async () => {
@@ -676,7 +676,7 @@ describe('Codex Executor', () => {
             await executeCodex('test prompt', null, { model: 'hard' });
 
             expect(logger.command).toHaveBeenCalledWith(expect.stringContaining('--model gpt-5.2'));
-            expect(logger.command).toHaveBeenCalledWith(expect.stringContaining('--reasoning-effort high'));
+            expect(logger.command).toHaveBeenCalledWith(expect.stringContaining('--config model_reasoning_effort=high'));
         });
     });
 

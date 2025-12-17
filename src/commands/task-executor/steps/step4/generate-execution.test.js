@@ -12,6 +12,7 @@ jest.mock('../../../../shared/utils/logger', () => ({
     info: jest.fn(),
     warning: jest.fn(),
     error: jest.fn(),
+    success: jest.fn(),
 }));
 jest.mock('../../utils/schema-validator');
 jest.mock('../../utils/scope-parser');
@@ -19,7 +20,7 @@ jest.mock('../../utils/scope-parser');
 // Import after mocks
 const { generateExecution } = require('./generate-execution');
 const { validateExecutionJson } = require('../../utils/schema-validator');
-const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const { parseTaskScope, validateScopeWithAutoFix } = require('../../utils/scope-parser');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 
@@ -31,7 +32,7 @@ describe('generate-execution', () => {
 
         // Default mock implementations
         parseTaskScope.mockReturnValue(null);
-        validateScope.mockReturnValue(true);
+        validateScopeWithAutoFix.mockResolvedValue({ valid: true, scope: null, autoFixed: false });
         validateExecutionJson.mockReturnValue({ valid: true, errors: [] });
 
         // Default fs mocks - BLUEPRINT.md must exist
@@ -254,28 +255,43 @@ describe('generate-execution', () => {
         });
 
         describe('multi-repo mode', () => {
-            test('should throw error when scope is missing in multi-repo mode', async () => {
+            test('should throw error when scope is missing and auto-fix fails in multi-repo mode', async () => {
                 state.isMultiRepo.mockReturnValue(true);
-                validateScope.mockImplementation(() => {
-                    throw new Error('@scope tag is required in multi-repo mode');
-                });
+                parseTaskScope.mockReturnValue(null);
+                validateScopeWithAutoFix.mockResolvedValue({ valid: false, scope: null, autoFixed: false });
 
                 fs.readFileSync.mockReturnValue('# Task without scope');
 
-                await expect(generateExecution(mockTask)).rejects.toThrow('@scope tag is required');
+                await expect(generateExecution(mockTask)).rejects.toThrow(
+                    '@scope tag is required in multi-repo mode',
+                );
             });
 
-            test('should parse scope from content', async () => {
+            test('should parse scope from content and skip auto-fix when scope exists', async () => {
                 state.isMultiRepo.mockReturnValue(true);
                 parseTaskScope.mockReturnValue('backend');
-                validateScope.mockReturnValue(true);
 
                 fs.readFileSync.mockReturnValue('@scope backend\n# Backend task');
 
                 await generateExecution(mockTask);
 
                 expect(parseTaskScope).toHaveBeenCalled();
-                expect(validateScope).toHaveBeenCalledWith('backend', true);
+                // validateScopeWithAutoFix should not be called when scope already exists
+                expect(validateScopeWithAutoFix).not.toHaveBeenCalled();
+            });
+
+            test('should auto-fix scope when missing in multi-repo mode', async () => {
+                state.isMultiRepo.mockReturnValue(true);
+                parseTaskScope.mockReturnValue(null);
+                validateScopeWithAutoFix.mockResolvedValue({ valid: true, scope: 'frontend', autoFixed: true });
+
+                fs.readFileSync.mockReturnValue('# Task without scope');
+
+                await generateExecution(mockTask);
+
+                expect(validateScopeWithAutoFix).toHaveBeenCalledWith(null, true, mockTask);
+                expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('attempting auto-fix'));
+                expect(logger.success).toHaveBeenCalledWith(expect.stringContaining('Auto-fixed @scope'));
             });
         });
 

@@ -3,7 +3,7 @@ const path = require('path');
 const state = require('../../../../shared/config/state');
 const logger = require('../../../../shared/utils/logger');
 const { validateExecutionJson } = require('../../utils/schema-validator');
-const { parseTaskScope, validateScope } = require('../../utils/scope-parser');
+const { parseTaskScope, validateScopeWithAutoFix } = require('../../utils/scope-parser');
 
 /**
  * Extracts the task ID from task folder or task identifier
@@ -100,8 +100,26 @@ const generateExecution = async (task) => {
     const content = fs.readFileSync(blueprintPath, 'utf-8');
 
     // Determine working directory based on scope (multi-repo support)
-    const scope = parseTaskScope(content);
-    validateScope(scope, state.isMultiRepo()); // Throws if scope missing in multi-repo mode
+    let scope = parseTaskScope(content);
+
+    // Validate scope with auto-fix capability
+    if (state.isMultiRepo() && !scope) {
+        logger.info(`[Step4] @scope missing for ${task} in multi-repo mode, attempting auto-fix...`);
+        const result = await validateScopeWithAutoFix(scope, state.isMultiRepo(), task);
+
+        if (!result.valid) {
+            throw new Error(
+                '@scope tag is required in multi-repo mode. ' +
+                'Auto-fix failed. Add "@scope backend", "@scope frontend", or "@scope integration" to BLUEPRINT.md manually.',
+            );
+        }
+
+        scope = result.scope;
+
+        if (result.autoFixed) {
+            logger.success(`[Step4] Auto-fixed @scope to "${scope}" for ${task}`);
+        }
+    }
 
     // Extract task information
     const taskId = extractTaskId(task);

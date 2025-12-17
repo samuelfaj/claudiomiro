@@ -26,4 +26,35 @@ const validateScope = (scope, isMultiRepo) => {
     return true;
 };
 
-module.exports = { parseTaskScope, validateScope };
+/**
+ * Validates scope with auto-fix capability
+ * If scope is missing in multi-repo mode, attempts to auto-fix using AI
+ * @param {string|null} scope - Extracted scope or null
+ * @param {boolean} isMultiRepo - Whether in multi-repo mode
+ * @param {string} task - Task identifier (e.g., 'TASK1')
+ * @returns {Promise<{valid: boolean, scope: string|null, autoFixed: boolean}>}
+ */
+const validateScopeWithAutoFix = async (scope, isMultiRepo, task) => {
+    // Non multi-repo mode - always valid
+    if (!isMultiRepo) {
+        return { valid: true, scope, autoFixed: false };
+    }
+
+    // Scope already exists - valid
+    if (scope) {
+        return { valid: true, scope, autoFixed: false };
+    }
+
+    // Attempt auto-fix
+    const { autoFixScope } = require('./scope-fixer');
+    const fixedScope = await autoFixScope(task);
+
+    if (fixedScope) {
+        return { valid: true, scope: fixedScope, autoFixed: true };
+    }
+
+    // Auto-fix failed
+    return { valid: false, scope: null, autoFixed: false };
+};
+
+module.exports = { parseTaskScope, validateScope, validateScopeWithAutoFix };

@@ -14,8 +14,8 @@ try {
     // ParallelStateManager not available in shared context - this is expected
 }
 
-// Model mapping: fast/medium/hard to reasoning effort levels
-// Using gpt-5.2 with different reasoning_effort values
+// Model mapping: fast/medium/hard to reasoning effort levels.
+// Codex CLI sets this via config override: `-c model_reasoning_effort=<level>`.
 const MODEL_MAP = {
     fast: { model: 'gpt-5.2', reasoning: 'low' },
     medium: { model: 'gpt-5.2', reasoning: 'medium' },
@@ -46,11 +46,11 @@ const executeCodex = (text, taskName = null, options = {}) => {
         const modelLevel = options.model || 'medium';
         const modelConfig = MODEL_MAP[modelLevel] || MODEL_MAP.medium;
 
-        const command = `codex exec --json --full-auto --sandbox danger-full-access --model ${modelConfig.model} --reasoning-effort ${modelConfig.reasoning} "$(cat '${tmpFile}')"`;
+        const command = `codex exec --json --full-auto --sandbox danger-full-access --model ${modelConfig.model} --config model_reasoning_effort=${modelConfig.reasoning} "$(cat '${tmpFile}')"`;
 
         if (!suppressStreamingLogs) {
             logger.stopSpinner();
-            logger.command(`codex exec --json --full-auto --sandbox danger-full-access --model ${modelConfig.model} --reasoning-effort ${modelConfig.reasoning} ...`);
+            logger.command(`codex exec --json --full-auto --sandbox danger-full-access --model ${modelConfig.model} --config model_reasoning_effort=${modelConfig.reasoning} ...`);
             logger.separator();
             logger.newline();
         }
