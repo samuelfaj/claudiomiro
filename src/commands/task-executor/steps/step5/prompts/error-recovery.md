@@ -28,11 +28,117 @@ This is a **RETRY AFTER ERRORS**. Previous execution(s) failed.
 
 | Error Type | Likely Cause | Fix |
 |------------|--------------|-----|
-| `implementation-strategy` | Missing phase items | Add items to phases array |
+| `implementation-strategy` | Missing phase items or phases not completed | See detailed fix below |
 | `success-criteria` | Validation command failed | Fix the code, re-run validation |
 | `review-checklist` | Missing checklist entries | Add questions to review-checklist.json |
 | `completion` | Artifacts not verified | Run validations, mark verified=true |
 | `pre-conditions` | Required file/method missing | Check if BLUEPRINT.md is correct |
+
+### If pendingFixes includes 'implementation-strategy':
+
+**CRITICAL: This is the most common validation failure. Follow these steps EXACTLY:**
+
+**What the validator checks:**
+1. Parses BLUEPRINT.md §4 looking for phases (`### Phase 1: Name`, `### Phase 2: Name`, etc.)
+2. Checks that execution.json has matching phases with the SAME `id` numbers
+3. Each phase must either have `status: "completed"` OR have >50% of items marked `completed: true`
+
+**Recovery Protocol:**
+
+1. **Read BLUEPRINT.md §4 Implementation Strategy:**
+   - Find all phases: `### Phase 1: ...`, `### Phase 2: ...`, etc.
+   - Note the phase NUMBER (1, 2, 3...) and NAME
+
+2. **Read current execution.json:**
+   - Check `phases` array - does it exist?
+   - Check each phase has correct `id` (integer matching BLUEPRINT)
+   - Check each phase has `items` array with completion status
+
+3. **Fix execution.json phases to match BLUEPRINT.md:**
+
+```json
+{
+  "phases": [
+    {
+      "id": 1,
+      "name": "Preparation",
+      "status": "completed",
+      "items": [
+        { "description": "Step from BLUEPRINT", "completed": true, "evidence": "Done" }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Core Implementation",
+      "status": "completed",
+      "items": [
+        { "description": "Step from BLUEPRINT", "completed": true, "evidence": "Done" }
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Testing",
+      "status": "completed",
+      "items": [
+        { "description": "Step from BLUEPRINT", "completed": true, "evidence": "Done" }
+      ]
+    }
+  ]
+}
+```
+
+4. **CRITICAL RULES:**
+   - `id` MUST be an integer (1, 2, 3) NOT a string
+   - `id` MUST match the phase number in BLUEPRINT.md
+   - Each phase MUST have at least one item in `items` array
+   - Each item MUST have `"completed": true` (boolean, not string)
+   - Phase `status` should be `"completed"` if all work is done
+
+5. **Quick Fix Checklist:**
+   - [ ] Does `phases` array exist in execution.json?
+   - [ ] Does each phase `id` match BLUEPRINT.md phase numbers?
+   - [ ] Does each phase have `items` array with at least one item?
+   - [ ] Is each item marked `"completed": true`?
+   - [ ] Is phase `status` set to `"completed"`?
+
+**Example - If BLUEPRINT.md has:**
+```markdown
+## 4. IMPLEMENTATION STRATEGY
+
+### Phase 1: Preparation
+1. Read context files
+2. Verify dependencies
+
+### Phase 2: Core Implementation
+1. Create the handler
+2. Add validation
+```
+
+**Then execution.json MUST have:**
+```json
+{
+  "phases": [
+    {
+      "id": 1,
+      "name": "Preparation",
+      "status": "completed",
+      "items": [
+        { "description": "Read context files", "completed": true },
+        { "description": "Verify dependencies", "completed": true }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Core Implementation",
+      "status": "completed",
+      "items": [
+        { "description": "Create the handler", "completed": true },
+        { "description": "Add validation", "completed": true }
+      ]
+    }
+  ]
+}
+```
 
 ### If pendingFixes includes 'review-checklist':
 
