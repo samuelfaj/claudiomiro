@@ -9,8 +9,18 @@ const { validateReviewChecklist } = require('./review-checklist');
 const { verifyChanges, getGitModifiedFiles } = require('./git-changes');
 const { validateCompletion } = require('./completion');
 const { verifyPreConditions } = require('./pre-conditions');
+const {
+    validateArtifactsExist,
+    markArtifactsForRecreation,
+    checkReviewChecklistBlocked,
+} = require('./artifacts-exist');
 
 module.exports = {
+    // Artifact Existence (Hallucination Detection)
+    validateArtifactsExist,
+    markArtifactsForRecreation,
+    checkReviewChecklistBlocked,
+
     // Implementation Strategy
     validateImplementationStrategy,
     parseImplementationStrategy,

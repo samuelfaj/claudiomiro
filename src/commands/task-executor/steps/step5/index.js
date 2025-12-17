@@ -38,6 +38,9 @@ const {
     verifyChanges,
     validateReviewChecklist,
     validateCompletion,
+    validateArtifactsExist,
+    markArtifactsForRecreation,
+    checkReviewChecklistBlocked,
 } = require('./validators');
 
 // Finishing Touches
@@ -259,6 +262,50 @@ const executeTask = async (task, taskFolder, cwd) => {
         logger.info(`Pending fixes from last attempt: ${pendingFixes.join(', ')}`);
         if (lastError) {
             logger.info(`Last error: ${lastError}`);
+        }
+    }
+
+    // 3.5 LAYER 0: Artifact Existence Validation (Hallucination Detection)
+    // This MUST run before Claude to detect files the AI claimed to create but didn't
+    logger.info('Validating artifact existence on filesystem...');
+    const artifactValidation = validateArtifactsExist(execution, { cwd, claudiomiroFolder: state.claudiomiroFolder });
+
+    if (!artifactValidation.valid) {
+        logger.warning(`[Hallucination Detected] ${artifactValidation.missingCount} files claimed but not created`);
+
+        // Apply recovery: reset phases and mark artifacts for re-creation
+        const recovery = markArtifactsForRecreation(execution, artifactValidation.missing);
+
+        logger.info(`[Recovery] Reset ${recovery.resetPhases.length} phases, marked ${recovery.markedForRecreation.length} files for re-creation`);
+
+        // Add to pending fixes so the prompt tells Claude what to fix
+        if (!execution.pendingFixes) {
+            execution.pendingFixes = [];
+        }
+        if (!execution.pendingFixes.includes('artifact-recreation')) {
+            execution.pendingFixes.push('artifact-recreation');
+        }
+
+        // Update completion to track the issue
+        execution.completion = execution.completion || {};
+        execution.completion.lastError = `Hallucination detected: ${artifactValidation.missingCount} files missing`;
+        execution.completion.missingArtifacts = artifactValidation.missing.map(m => m.path);
+
+        // Save the recovered state before continuing
+        saveExecution(executionPath, execution);
+
+        logger.info('[Recovery] Continuing with Claude execution to re-create missing files...');
+    }
+
+    // 3.6 Check if review-checklist is blocked (additional hallucination indicator)
+    const checklistBlocked = checkReviewChecklistBlocked(task, { claudiomiroFolder: state.claudiomiroFolder });
+    if (checklistBlocked.blocked) {
+        logger.warning(`[Review Checklist Blocked] ${checklistBlocked.reason}`);
+
+        // Ensure execution knows about this
+        if (!execution.pendingFixes?.includes('review-checklist')) {
+            execution.pendingFixes = execution.pendingFixes || [];
+            execution.pendingFixes.push('review-checklist');
         }
     }
 

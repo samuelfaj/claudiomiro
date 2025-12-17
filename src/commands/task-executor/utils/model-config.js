@@ -74,16 +74,24 @@ const parseDifficultyTag = (blueprintContent) => {
  * Determine model for Step 5 based on task complexity
  *
  * Priority:
- * 1. Global/env override
- * 2. @difficulty tag in BLUEPRINT.md (set by step2)
- * 3. Fallback heuristics (phases, artifacts, etc.)
+ * 1. High attempt count override (>= 5 attempts forces 'hard')
+ * 2. Global/env override
+ * 3. @difficulty tag in BLUEPRINT.md (set by step2)
+ * 4. Fallback heuristics (phases, artifacts, etc.)
  *
  * @param {Object} execution - execution.json content
  * @param {string} blueprintContent - BLUEPRINT.md content
  * @returns {string} - Model name: 'fast', 'medium', or 'hard'
  */
 const determineStep5Model = (execution, blueprintContent) => {
-    // Check global/env override first
+    // HIGH ATTEMPT COUNT OVERRIDE: >= 5 attempts forces 'hard' model
+    // This is a last-resort escalation to ensure task completion
+    const attemptCount = execution?.attempts || 0;
+    if (attemptCount >= 5) {
+        return 'hard';
+    }
+
+    // Check global/env override
     const envModel = getStepModel(5);
     if (envModel !== 'dynamic') {
         return envModel;
@@ -99,7 +107,7 @@ const determineStep5Model = (execution, blueprintContent) => {
     const phaseCount = execution?.phases?.length || 0;
     const artifactCount = execution?.artifacts?.length || 0;
     const hasUncertainties = (execution?.uncertainties?.length || 0) > 0;
-    const attemptCount = execution?.attempts || 0;
+    // Note: attemptCount already declared at the start of function
     const blueprintLines = blueprintContent ? blueprintContent.split('\n').length : 0;
 
     // High complexity indicators

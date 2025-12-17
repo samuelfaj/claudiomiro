@@ -49,6 +49,9 @@ jest.mock('./validators', () => ({
     verifyChanges: jest.fn().mockResolvedValue({ valid: true, undeclared: [], missing: [] }),
     validateReviewChecklist: jest.fn().mockResolvedValue({ valid: true, missing: [], totalChecklistItems: 0 }),
     validateCompletion: jest.fn().mockReturnValue(true),
+    validateArtifactsExist: jest.fn().mockReturnValue({ valid: true, missing: [], existingCount: 0, totalCount: 0 }),
+    markArtifactsForRecreation: jest.fn().mockReturnValue({ actionsTaken: 0, resetPhases: [] }),
+    checkReviewChecklistBlocked: jest.fn().mockReturnValue({ blocked: false, reason: null }),
 }));
 // Mock utils - use a simple inline implementation
 jest.mock('./utils/execution-io', () => ({

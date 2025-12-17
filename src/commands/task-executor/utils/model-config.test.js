@@ -158,9 +158,43 @@ More content
     });
 
     describe('determineStep5Model', () => {
-        test('should prioritize @difficulty tag over heuristics', () => {
+        describe('high attempt count override (>= 5)', () => {
+            test('should return hard when attempts >= 5, overriding @difficulty tag', () => {
+                const execution = { phases: [], artifacts: [], attempts: 5 };
+                const blueprint = '@difficulty fast\n# Simple blueprint';
+                expect(determineStep5Model(execution, blueprint)).toBe('hard');
+            });
+
+            test('should return hard when attempts >= 5, overriding env var', () => {
+                process.env.CLAUDIOMIRO_STEP5_MODEL = 'fast';
+                const execution = { phases: [], artifacts: [], attempts: 5 };
+                const blueprint = 'Simple blueprint';
+                expect(determineStep5Model(execution, blueprint)).toBe('hard');
+            });
+
+            test('should return hard when attempts > 5', () => {
+                const execution = { phases: [], artifacts: [], attempts: 8 };
+                const blueprint = '@difficulty fast\nSimple';
+                expect(determineStep5Model(execution, blueprint)).toBe('hard');
+            });
+
+            test('should NOT force hard when attempts < 5', () => {
+                const execution = { phases: [], artifacts: [], attempts: 4 };
+                const blueprint = '@difficulty fast\nSimple';
+                expect(determineStep5Model(execution, blueprint)).toBe('fast');
+            });
+
+            test('should return hard when attempts = 5 exactly', () => {
+                const execution = { phases: [], artifacts: [], attempts: 5 };
+                const blueprint = '@difficulty medium\nSimple';
+                expect(determineStep5Model(execution, blueprint)).toBe('hard');
+            });
+        });
+
+        test('should prioritize @difficulty tag over heuristics (when attempts < 5)', () => {
             // Complex execution that would normally be "hard" based on heuristics
-            const execution = { phases: [1, 2, 3, 4, 5], artifacts: [1, 2, 3, 4, 5, 6], attempts: 5 };
+            // but attempts < 5 so @difficulty tag should win
+            const execution = { phases: [1, 2, 3, 4, 5], artifacts: [1, 2, 3, 4, 5, 6], attempts: 4 };
             const blueprint = '@difficulty fast\n' + '\n'.repeat(500);
             expect(determineStep5Model(execution, blueprint)).toBe('fast');
         });
