@@ -17,9 +17,9 @@ try {
 // Model mapping: fast/medium/hard to reasoning effort levels.
 // Codex CLI sets this via config override: `-c model_reasoning_effort=<level>`.
 const MODEL_MAP = {
-    fast: { model: 'gpt-5.2', reasoning: 'low' },
-    medium: { model: 'gpt-5.2', reasoning: 'medium' },
-    hard: { model: 'gpt-5.2', reasoning: 'high' },
+    fast: { model: 'gpt-5.2', reasoning: 'medium' },
+    medium: { model: 'gpt-5.2', reasoning: 'high' },
+    hard: { model: 'gpt-5.2', reasoning: 'xhigh' },
 };
 
 const overwriteBlock = (lines) => {
