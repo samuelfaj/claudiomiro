@@ -5,6 +5,7 @@ const { loadExecution, saveExecution, recordError } = require('./execution-io');
 jest.mock('fs');
 jest.mock('../../../utils/schema-validator', () => ({
     validateExecutionJson: jest.fn(),
+    safeJsonParse: jest.fn((str) => JSON.parse(str)),
 }));
 jest.mock('./security', () => ({
     isCriticalError: jest.fn(),

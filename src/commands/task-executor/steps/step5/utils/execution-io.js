@@ -4,7 +4,7 @@
  */
 
 const fs = require('fs');
-const { validateExecutionJson } = require('../../../utils/schema-validator');
+const { validateExecutionJson, safeJsonParse } = require('../../../utils/schema-validator');
 const { isCriticalError } = require('./security');
 
 /**
@@ -28,7 +28,8 @@ const loadExecution = (executionPath, options = {}) => {
 
     let execution;
     try {
-        execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
+        // Use safeJsonParse to handle control characters in AI-generated JSON
+        execution = safeJsonParse(fs.readFileSync(executionPath, 'utf8'));
     } catch (err) {
         throw new Error(`Failed to parse execution.json: ${err.message}`);
     }
@@ -109,7 +110,8 @@ const recordError = (executionPath, error, options = {}) => {
     }
 
     try {
-        const execution = JSON.parse(fs.readFileSync(executionPath, 'utf8'));
+        // Use safeJsonParse to handle control characters in AI-generated JSON
+        const execution = safeJsonParse(fs.readFileSync(executionPath, 'utf8'));
 
         // Initialize error tracking if needed
         if (!execution.errorHistory) {

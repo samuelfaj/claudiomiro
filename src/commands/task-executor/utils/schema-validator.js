@@ -3,6 +3,117 @@ const path = require('path');
 const Ajv = require('ajv');
 const addFormats = require('ajv-formats');
 
+/**
+ * Sanitizes a JSON string by escaping control characters inside string literals.
+ * This handles cases where AI-generated JSON contains unescaped newlines, tabs, etc.
+ *
+ * Control characters that need escaping in JSON strings:
+ * - \x00-\x1F (ASCII control characters)
+ * - Specifically: \b, \f, \n, \r, \t need to be escaped
+ *
+ * @param {string} jsonString - Raw JSON string that may contain unescaped control characters
+ * @returns {string} Sanitized JSON string safe for JSON.parse()
+ */
+const sanitizeJsonString = (jsonString) => {
+    if (typeof jsonString !== 'string') {
+        return jsonString;
+    }
+
+    // Track if we're inside a string literal
+    let result = '';
+    let inString = false;
+    let escapeNext = false;
+
+    for (let i = 0; i < jsonString.length; i++) {
+        const char = jsonString[i];
+        const charCode = jsonString.charCodeAt(i);
+
+        if (escapeNext) {
+            // Previous char was backslash, this char is escaped
+            result += char;
+            escapeNext = false;
+            continue;
+        }
+
+        if (char === '\\' && inString) {
+            // Escape character inside string
+            result += char;
+            escapeNext = true;
+            continue;
+        }
+
+        if (char === '"' && !escapeNext) {
+            // Toggle string mode
+            inString = !inString;
+            result += char;
+            continue;
+        }
+
+        if (inString && charCode < 32) {
+            // Control character inside string - escape it
+            switch (char) {
+                case '\n':
+                    result += '\\n';
+                    break;
+                case '\r':
+                    result += '\\r';
+                    break;
+                case '\t':
+                    result += '\\t';
+                    break;
+                case '\b':
+                    result += '\\b';
+                    break;
+                case '\f':
+                    result += '\\f';
+                    break;
+                default:
+                    // Other control characters - use Unicode escape
+                    result += '\\u' + charCode.toString(16).padStart(4, '0');
+                    break;
+            }
+        } else {
+            result += char;
+        }
+    }
+
+    return result;
+};
+
+/**
+ * Safely parses a JSON string, automatically sanitizing control characters.
+ * Falls back to original parsing if sanitization fails.
+ *
+ * @param {string} jsonString - JSON string to parse
+ * @returns {object} Parsed JSON object
+ * @throws {Error} If JSON is fundamentally invalid (not just control character issues)
+ */
+const safeJsonParse = (jsonString) => {
+    // First, try normal parsing (most common case)
+    try {
+        return JSON.parse(jsonString);
+    } catch (originalError) {
+        // Check if this is a control character error
+        if (
+            originalError.message.includes('control character') ||
+            originalError.message.includes('Bad control') ||
+            originalError.message.includes('Unexpected token')
+        ) {
+            // Try with sanitization
+            try {
+                const sanitized = sanitizeJsonString(jsonString);
+                return JSON.parse(sanitized);
+            } catch (_sanitizedError) {
+                // Sanitization didn't help, throw original error with more context
+                throw new Error(`${originalError.message} (sanitization attempted but failed)`);
+            }
+        }
+
+        // Not a control character issue, throw original error
+        throw originalError;
+    }
+};
+
 // Lazy-loaded schema and validator (cached after first load)
 let cachedValidator = null;
 let schemaLoadError = null;
@@ -757,6 +868,9 @@ module.exports = {
     resetValidatorCache,
     sanitizeData,
     repairExecutionJson,
+    // JSON sanitization for control characters
+    sanitizeJsonString,
+    safeJsonParse,
     // Repair sub-functions exported for testing
     repairPhase,
     repairPreCondition,

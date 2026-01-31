@@ -988,4 +988,111 @@ describe('schema-validator', () => {
             expect(result.repairedData).toBeUndefined();
         });
     });
+
+    describe('sanitizeJsonString', () => {
+        test('should return non-string input unchanged', () => {
+            expect(schemaValidator.sanitizeJsonString(null)).toBeNull();
+            expect(schemaValidator.sanitizeJsonString(undefined)).toBeUndefined();
+            expect(schemaValidator.sanitizeJsonString(123)).toBe(123);
+        });
+
+        test('should not modify valid JSON without control characters', () => {
+            const validJson = '{"name": "test", "value": 123}';
+            expect(schemaValidator.sanitizeJsonString(validJson)).toBe(validJson);
+        });
+
+        test('should escape newline characters inside strings', () => {
+            // JSON with unescaped newline inside a string value
+            const invalidJson = '{"message": "line1\nline2"}';
+            const result = schemaValidator.sanitizeJsonString(invalidJson);
+            expect(result).toBe('{"message": "line1\\nline2"}');
+        });
+
+        test('should escape carriage return characters inside strings', () => {
+            const invalidJson = '{"message": "line1\rline2"}';
+            const result = schemaValidator.sanitizeJsonString(invalidJson);
+            expect(result).toBe('{"message": "line1\\rline2"}');
+        });
+
+        test('should escape tab characters inside strings', () => {
+            const invalidJson = '{"message": "col1\tcol2"}';
+            const result = schemaValidator.sanitizeJsonString(invalidJson);
+            expect(result).toBe('{"message": "col1\\tcol2"}');
+        });
+
+        test('should escape multiple control characters', () => {
+            const invalidJson = '{"message": "line1\n\tindented\r\nend"}';
+            const result = schemaValidator.sanitizeJsonString(invalidJson);
+            expect(result).toBe('{"message": "line1\\n\\tindented\\r\\nend"}');
+        });
+
+        test('should not escape control characters outside strings', () => {
+            // Newlines/whitespace outside of string values are valid in JSON
+            const validJson = '{\n  "name": "test"\n}';
+            expect(schemaValidator.sanitizeJsonString(validJson)).toBe(validJson);
+        });
+
+        test('should preserve already-escaped characters', () => {
+            const validJson = '{"message": "line1\\nline2"}';
+            expect(schemaValidator.sanitizeJsonString(validJson)).toBe(validJson);
+        });
+
+        test('should handle complex nested JSON with control characters', () => {
+            const invalidJson = '{"outer": {"inner": "value\nwith\nnewlines"}}';
+            const result = schemaValidator.sanitizeJsonString(invalidJson);
+            expect(result).toBe('{"outer": {"inner": "value\\nwith\\nnewlines"}}');
+        });
+
+        test('should handle backspace and form feed characters', () => {
+            const invalidJson = '{"message": "text\b\fmore"}';
+            const result = schemaValidator.sanitizeJsonString(invalidJson);
+            expect(result).toBe('{"message": "text\\b\\fmore"}');
+        });
+
+        test('should escape other control characters using unicode', () => {
+            // ASCII control character 0x01 (SOH)
+            const invalidJson = '{"message": "text\x01end"}';
+            const result = schemaValidator.sanitizeJsonString(invalidJson);
+            expect(result).toBe('{"message": "text\\u0001end"}');
+        });
+    });
+
+    describe('safeJsonParse', () => {
+        test('should parse valid JSON normally', () => {
+            const validJson = '{"name": "test", "value": 123}';
+            const result = schemaValidator.safeJsonParse(validJson);
+            expect(result).toEqual({ name: 'test', value: 123 });
+        });
+
+        test('should parse JSON with control characters after sanitization', () => {
+            const invalidJson = '{"message": "line1\nline2"}';
+            const result = schemaValidator.safeJsonParse(invalidJson);
+            expect(result).toEqual({ message: 'line1\nline2' });
+        });
+
+        test('should throw for fundamentally invalid JSON', () => {
+            const badJson = '{"name": test}'; // unquoted value
+            expect(() => schemaValidator.safeJsonParse(badJson)).toThrow();
+        });
+
+        test('should handle complex execution.json with control characters', () => {
+            // Simulates the real error case
+            const invalidJson = `{
+                "task": "TASK1",
+                "title": "Test Task",
+                "errorHistory": [
+                    {"message": "Error with\nnewline in it"}
+                ]
+            }`;
+            const result = schemaValidator.safeJsonParse(invalidJson);
+            expect(result.task).toBe('TASK1');
+            expect(result.errorHistory[0].message).toBe('Error with\nnewline in it');
+        });
+
+        test('should throw descriptive error when sanitization also fails', () => {
+            // This is a case where the JSON is fundamentally broken beyond control characters
+            const terribleJson = '{{{invalid json';
+            expect(() => schemaValidator.safeJsonParse(terribleJson)).toThrow();
+        });
+    });
 });

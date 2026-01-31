@@ -5,6 +5,7 @@ const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
 const { step4, step5, step6, step7 } = require('../steps');
 const { isCompletedFromExecution, isEffectivelyBlocked, hasApprovedCodeReview, canProceedWithBlockedCriteria } = require('../utils/validation');
+const { safeJsonParse } = require('../utils/schema-validator');
 const ParallelStateManager = require('../../../shared/executors/parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
@@ -404,7 +405,8 @@ class DAGExecutor {
                 let currentExecution = null;
                 if (fs.existsSync(executionPath)) {
                     try {
-                        currentExecution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                        // Use safeJsonParse to handle control characters in AI-generated JSON
+                        currentExecution = safeJsonParse(fs.readFileSync(executionPath, 'utf-8'));
                     } catch (parseError) {
                         logger.warning(`${taskName}: Could not parse execution.json: ${parseError.message}`);
                     }
@@ -534,7 +536,8 @@ class DAGExecutor {
                 // This allows criteria to be marked as "blocked" with documentation
                 if (attempts > AUTO_ADJUST_THRESHOLD && fs.existsSync(executionPath)) {
                     try {
-                        const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                        // Use safeJsonParse to handle control characters in AI-generated JSON
+                        const execution = safeJsonParse(fs.readFileSync(executionPath, 'utf-8'));
                         if (!execution.autoAdjustMode) {
                             const updatedExecution = prepareExecutionForAutoAdjust(execution, attempts);
                             fs.writeFileSync(executionPath, JSON.stringify(updatedExecution, null, 2), 'utf-8');
@@ -565,7 +568,8 @@ class DAGExecutor {
                         // Record error in execution.json for strategy analysis
                         if (fs.existsSync(executionPath)) {
                             try {
-                                const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                                // Use safeJsonParse to handle control characters in AI-generated JSON
+                                const execution = safeJsonParse(fs.readFileSync(executionPath, 'utf-8'));
                                 execution.errorHistory = execution.errorHistory || [];
                                 execution.errorHistory.push({
                                     message: error.message,
@@ -609,7 +613,8 @@ class DAGExecutor {
 
                             // Reset the completion status in execution.json so step5 re-executes
                             try {
-                                const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                                // Use safeJsonParse to handle control characters in AI-generated JSON
+                                const execution = safeJsonParse(fs.readFileSync(executionPath, 'utf-8'));
                                 execution.status = 'in_progress';
                                 if (execution.completion) {
                                     execution.completion.status = 'pending_validation';
@@ -654,7 +659,8 @@ class DAGExecutor {
             // Generate LIMITATIONS.md if there are blocked criteria
             try {
                 if (fs.existsSync(executionPath)) {
-                    const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                    // Use safeJsonParse to handle control characters in AI-generated JSON
+                    const execution = safeJsonParse(fs.readFileSync(executionPath, 'utf-8'));
                     if (shouldGenerateLimitations(execution)) {
                         const result = generateLimitations(execution, taskPath);
                         if (result.generated) {
