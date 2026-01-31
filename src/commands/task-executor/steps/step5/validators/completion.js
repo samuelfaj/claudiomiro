@@ -1,7 +1,13 @@
 /**
  * Completion validator for step5
  * Validates that all phases, items, artifacts, and cleanup are completed
+ *
+ * Now supports "blocked" criteria with proper documentation:
+ * - passed === true: Criterion passed normally
+ * - status === 'blocked' with blockReason and workaround: Accepted as complete
  */
+
+const { isCriterionComplete } = require('./criteria-relaxation');
 
 /**
  * Validate completion rules
@@ -43,23 +49,46 @@ const validateCompletion = (execution) => {
         }
     }
 
-    // Check all success criteria passed (if they exist)
+    // Check all success criteria passed or properly blocked
+    // Accepts: passed === true OR status === 'blocked' with documentation
+    let blockedCount = 0;
     for (const criterion of execution.successCriteria || []) {
-        if (criterion.passed !== true) {
-            logger.info(`Completion validation: failed - success criterion not passed: ${criterion.criterion}`);
+        const result = isCriterionComplete(criterion);
+
+        if (!result.complete) {
+            logger.info(`Completion validation: failed - success criterion not complete: ${criterion.criterion} (reason: ${result.reason})`);
             return false;
+        }
+
+        // Track blocked criteria for logging
+        if (result.reason === 'blocked-with-documentation') {
+            blockedCount++;
+            logger.warning(`Criterion blocked with workaround: ${criterion.criterion}`);
         }
     }
 
-    // Check beyondTheBasics cleanup flags
+    if (blockedCount > 0) {
+        logger.info(`Completion validation: ${blockedCount} criteria blocked with documented workarounds`);
+    }
+
+    // Check beyondTheBasics cleanup flags (REQUIRED for step6 code review)
     const cleanup = execution.beyondTheBasics?.cleanup;
-    if (cleanup) {
-        if (cleanup.debugLogsRemoved === false ||
-            cleanup.formattingConsistent === false ||
-            cleanup.deadCodeRemoved === false) {
-            logger.info('Completion validation: failed - cleanup not complete');
-            return false;
-        }
+    if (!cleanup) {
+        logger.info('Completion validation: failed - missing beyondTheBasics.cleanup');
+        return false;
+    }
+
+    if (cleanup.debugLogsRemoved !== true) {
+        logger.info('Completion validation: failed - cleanup.debugLogsRemoved is not true');
+        return false;
+    }
+    if (cleanup.formattingConsistent !== true) {
+        logger.info('Completion validation: failed - cleanup.formattingConsistent is not true');
+        return false;
+    }
+    if (cleanup.deadCodeRemoved !== true) {
+        logger.info('Completion validation: failed - cleanup.deadCodeRemoved is not true');
+        return false;
     }
 
     logger.info('Completion validation: passed');

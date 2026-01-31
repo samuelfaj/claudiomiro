@@ -4,13 +4,20 @@ const os = require('os');
 const logger = require('../../../shared/utils/logger');
 const state = require('../../../shared/config/state');
 const { step4, step5, step6, step7 } = require('../steps');
-const { isCompletedFromExecution, hasApprovedCodeReview } = require('../utils/validation');
+const { isCompletedFromExecution, isEffectivelyBlocked, hasApprovedCodeReview, canProceedWithBlockedCriteria } = require('../utils/validation');
 const ParallelStateManager = require('../../../shared/executors/parallel-state-manager');
 const ParallelUIRenderer = require('./parallel-ui-renderer');
 const TerminalRenderer = require('../utils/terminal-renderer');
 const { calculateProgress } = require('../utils/progress-calculator');
 const { resolveDeadlock } = require('./deadlock-resolver');
 const { detectFileConflicts, autoResolveConflicts } = require('./file-conflict-detector');
+const { AUTO_ADJUST_THRESHOLD, prepareExecutionForAutoAdjust, getStrategyGuidance } = require('../utils/adaptive-retry');
+const { generateLimitations, shouldGenerateLimitations } = require('../steps/step5/utils/limitations-generator');
+
+// New resilient execution services
+const { checkProgress, determineAction, createSnapshot, GuardianAction } = require('./progress-guardian');
+const { getCurrentStrategy, shouldSwitchStrategy, applyStrategySwitch, getStrategyInstructions, StrategyType } = require('./strategy-manager');
+const { shouldSplitTask, splitTaskMidExecution } = require('./task-splitter');
 
 const CORE_COUNT = Math.max(1, os.cpus().length);
 
@@ -384,20 +391,193 @@ class DAGExecutor {
             let attempts = 0;
             let lastStep5Error = null;
 
+            // Resilient execution state tracking
+            let stuckCount = 0;
+            let lastExecutionSnapshot = null;
+            let samePhaseAttempts = 0;
+            let lastPhaseId = null;
+
             while (attempts < maxAttempts) {
                 attempts++;
 
-                // Step 5: Implementation
+                // Load current execution state for progress tracking
+                let currentExecution = null;
+                if (fs.existsSync(executionPath)) {
+                    try {
+                        currentExecution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                    } catch (parseError) {
+                        logger.warning(`${taskName}: Could not parse execution.json: ${parseError.message}`);
+                    }
+                }
+
+                // Check progress using Progress Guardian (after first attempt)
+                if (lastExecutionSnapshot && currentExecution) {
+                    const progressCheck = checkProgress(lastExecutionSnapshot, currentExecution);
+
+                    if (!progressCheck.madeProgress) {
+                        stuckCount++;
+                        logger.warning(`${taskName}: No progress detected (stuck count: ${stuckCount})`);
+
+                        // Track same phase attempts
+                        const currentPhase = currentExecution.phases?.find(p => p.status === 'in_progress');
+                        if (currentPhase && currentPhase.id === lastPhaseId) {
+                            samePhaseAttempts++;
+                        } else {
+                            samePhaseAttempts = 1;
+                            lastPhaseId = currentPhase?.id;
+                        }
+
+                        // Determine action based on stuck count
+                        const action = determineAction(currentExecution, stuckCount);
+
+                        switch (action.type) {
+                            case GuardianAction.SWITCH_STRATEGY: {
+                            // Check if we should switch strategy
+                                const switchCheck = shouldSwitchStrategy(currentExecution);
+                                if (switchCheck.shouldSwitch && switchCheck.toStrategy) {
+                                    logger.info(`${taskName}: Switching strategy from ${getCurrentStrategy(currentExecution)} to ${switchCheck.toStrategy}`);
+                                    const updatedExecution = applyStrategySwitch(currentExecution, switchCheck.toStrategy);
+
+                                    // Add strategy instructions to execution
+                                    updatedExecution.strategyInstructions = getStrategyInstructions(switchCheck.toStrategy);
+
+                                    fs.writeFileSync(executionPath, JSON.stringify(updatedExecution, null, 2), 'utf-8');
+                                    stuckCount = 0; // Reset stuck count after strategy switch
+                                    logger.info(`${taskName}: Strategy switched successfully. Instructions: ${updatedExecution.strategyInstructions.substring(0, 100)}...`);
+                                }
+                                break;
+                            }
+                            case GuardianAction.SPLIT_TASK: {
+                            // Check if task should be split
+                                const splitCheck = shouldSplitTask(currentExecution, { samePhaseAttempts });
+                                if (splitCheck.shouldSplit && splitCheck.splitPlan) {
+                                    logger.info(`${taskName}: Splitting task - ${splitCheck.reason}`);
+                                    const splitResult = splitTaskMidExecution(
+                                        taskName,
+                                        currentExecution,
+                                        splitCheck.splitPlan,
+                                        { claudiomiroFolder: state.claudiomiroFolder },
+                                    );
+
+                                    if (splitResult.success) {
+                                        logger.success(`${taskName}: Task split into subtasks: ${splitResult.subtasks.join(', ')}`);
+                                        // Mark parent task as completed (split)
+                                        this.stateManager.updateTaskStatus(taskName, 'completed');
+                                        this.markComplete(taskName, 'completed');
+                                        return; // Subtasks will be picked up by DAG
+                                    } else {
+                                        logger.warning(`${taskName}: Task split failed: ${splitResult.error}`);
+                                    }
+                                }
+                                break;
+                            }
+                            case GuardianAction.PARTIAL_COMPLETE: {
+                            // Mark completed phases and document incomplete ones
+                                logger.info(`${taskName}: Attempting partial completion`);
+                                if (currentExecution) {
+                                    currentExecution.partialCompletion = {
+                                        enabledAt: new Date().toISOString(),
+                                        completedPhases: currentExecution.phases?.filter(p => p.status === 'completed').length || 0,
+                                        totalPhases: currentExecution.phases?.length || 0,
+                                    };
+                                    fs.writeFileSync(executionPath, JSON.stringify(currentExecution, null, 2), 'utf-8');
+                                }
+                                break;
+                            }
+                            case GuardianAction.NOTIFY_USER:
+                                logger.error(`${taskName}: STUCK - Task has not made progress in ${stuckCount} attempts`);
+                                logger.error(`${taskName}: Manual intervention may be required`);
+                                // Don't throw yet, let it continue to maxAttempts
+                                break;
+                            default:
+                            // CONTINUE - do nothing special
+                                break;
+                        }
+                    } else {
+                        // Progress was made! Reset stuck counter
+                        stuckCount = 0;
+                        if (progressCheck.progressTypes.length > 0) {
+                            logger.info(`${taskName}: Progress detected - ${progressCheck.progressTypes.join(', ')}`);
+                        }
+                    }
+                }
+
+                // Create snapshot for next iteration comparison
+                if (currentExecution) {
+                    lastExecutionSnapshot = createSnapshot(currentExecution);
+                }
+
+                // Check if task is effectively blocked (after 3 attempts to give Claude a chance)
+                if (attempts >= 3) {
+                    const blockedCheck = isEffectivelyBlocked(executionPath);
+                    if (blockedCheck.blocked) {
+                        // Check if we can proceed despite blocked status (criteria with workarounds)
+                        const canProceed = canProceedWithBlockedCriteria(executionPath);
+
+                        if (canProceed.canProceed) {
+                            // Task has blocked criteria but they are properly documented
+                            logger.info(`${taskName}: Task has ${canProceed.blockedCount} blocked criteria with workarounds, continuing...`);
+                        } else if (blockedCheck.reason === 'status is blocked' && attempts <= AUTO_ADJUST_THRESHOLD) {
+                            // Status is blocked but we haven't reached auto-adjust threshold yet
+                            // Don't throw - give auto-adjust mode a chance to kick in
+                            logger.warning(`${taskName}: Task blocked at attempt ${attempts}, will enable auto-adjust at attempt ${AUTO_ADJUST_THRESHOLD + 1}`);
+                        } else {
+                            // Truly blocked - no way to proceed
+                            this.stateManager.updateTaskStatus(taskName, 'failed');
+                            this.markComplete(taskName, 'failed');
+                            throw new Error(`${taskName} is blocked and cannot proceed: ${blockedCheck.reason}`);
+                        }
+                    }
+                }
+
+                // Enable auto-adjust mode after threshold attempts
+                // This allows criteria to be marked as "blocked" with documentation
+                if (attempts > AUTO_ADJUST_THRESHOLD && fs.existsSync(executionPath)) {
+                    try {
+                        const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                        if (!execution.autoAdjustMode) {
+                            const updatedExecution = prepareExecutionForAutoAdjust(execution, attempts);
+                            fs.writeFileSync(executionPath, JSON.stringify(updatedExecution, null, 2), 'utf-8');
+                            logger.info(`${taskName}: Auto-adjust mode enabled after ${attempts} attempts (threshold: ${AUTO_ADJUST_THRESHOLD})`);
+
+                            // Log strategy guidance for debugging
+                            const guidance = getStrategyGuidance(attempts, lastStep5Error?.message);
+                            logger.info(`${taskName}: Strategy phase: ${guidance.phase}`);
+                        }
+                    } catch (autoAdjustError) {
+                        logger.warning(`${taskName}: Could not enable auto-adjust mode: ${autoAdjustError.message}`);
+                    }
+                }
+
+                // Step 5: Implementation (with current strategy)
                 const completionCheck = isCompletedFromExecution(executionPath);
                 if (!fs.existsSync(executionPath) || !completionCheck.completed) {
                     try {
-                        this.stateManager.updateTaskStep(taskName, `Step 5 - Implementing tasks (attempt ${attempts})`);
+                        const strategy = currentExecution ? getCurrentStrategy(currentExecution) : StrategyType.ORIGINAL;
+                        this.stateManager.updateTaskStep(taskName, `Step 5 - Implementing (attempt ${attempts}, strategy: ${strategy})`);
                         await step5(taskName);
                         lastStep5Error = null; // Clear any previous error on success
                     } catch (error) {
                         // If step5 fails, we should continue the loop to retry
                         lastStep5Error = error;
                         logger.warning(`${taskName} Step 5 failed (attempt ${attempts}): ${error.message}`);
+
+                        // Record error in execution.json for strategy analysis
+                        if (fs.existsSync(executionPath)) {
+                            try {
+                                const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                                execution.errorHistory = execution.errorHistory || [];
+                                execution.errorHistory.push({
+                                    message: error.message,
+                                    attempt: attempts,
+                                    timestamp: new Date().toISOString(),
+                                });
+                                fs.writeFileSync(executionPath, JSON.stringify(execution, null, 2), 'utf-8');
+                            } catch (_recordError) {
+                                // Ignore error recording failures
+                            }
+                        }
+
                         // Add a small delay before retry to avoid rapid failures
                         await new Promise(resolve => setTimeout(resolve, 1000));
                         continue;
@@ -469,6 +649,21 @@ class DAGExecutor {
                     ? `Maximum attempts (${maxAttempts}) reached for ${taskName}. Last error: ${lastStep5Error.message}`
                     : `Maximum attempts (${maxAttempts}) reached for ${taskName}`;
                 throw new Error(errorMessage);
+            }
+
+            // Generate LIMITATIONS.md if there are blocked criteria
+            try {
+                if (fs.existsSync(executionPath)) {
+                    const execution = JSON.parse(fs.readFileSync(executionPath, 'utf-8'));
+                    if (shouldGenerateLimitations(execution)) {
+                        const result = generateLimitations(execution, taskPath);
+                        if (result.generated) {
+                            logger.warning(`${taskName}: Generated LIMITATIONS.md with ${result.blockedCount} blocked criteria`);
+                        }
+                    }
+                }
+            } catch (limitationsError) {
+                logger.warning(`${taskName}: Could not generate LIMITATIONS.md: ${limitationsError.message}`);
             }
 
             this.stateManager.updateTaskStatus(taskName, 'completed');

@@ -1,7 +1,18 @@
 const fs = require('fs');
-const { isCompletedFromExecution, hasApprovedCodeReview } = require('./validation');
+const {
+    isCompletedFromExecution,
+    isEffectivelyBlocked,
+    hasApprovedCodeReview,
+    canProceedWithBlockedCriteria,
+    shouldEnableAutoAdjustMode,
+} = require('./validation');
 
 jest.mock('fs');
+
+// Mock the criteria-relaxation module
+jest.mock('../steps/step5/validators/criteria-relaxation', () => ({
+    canProceedWithBlockedCriteria: jest.fn(),
+}));
 
 describe('validation', () => {
     afterEach(() => {
@@ -273,6 +284,210 @@ describe('validation', () => {
             fs.readFileSync.mockReturnValue('## Status\n\n');
 
             expect(hasApprovedCodeReview('/test/CODE_REVIEW.md')).toBe(false);
+        });
+    });
+
+    describe('isEffectivelyBlocked', () => {
+        test('should return blocked:false when file does not exist', () => {
+            fs.existsSync.mockReturnValue(false);
+
+            const result = isEffectivelyBlocked('/test/execution.json');
+
+            expect(result).toEqual({ blocked: false, reason: null });
+        });
+
+        test('should return blocked:true when status is blocked', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                status: 'blocked',
+            }));
+
+            const result = isEffectivelyBlocked('/test/execution.json');
+
+            expect(result).toEqual({ blocked: true, reason: 'status is blocked' });
+        });
+
+        test('should return blocked:true when completion.summary contains BLOCKED', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                status: 'in_progress',
+                completion: {
+                    summary: ['TASK8 BLOCKED: Repository mismatch'],
+                },
+            }));
+
+            const result = isEffectivelyBlocked('/test/execution.json');
+
+            expect(result.blocked).toBe(true);
+            expect(result.reason).toContain('completion summary');
+        });
+
+        test('should return blocked:true when there is HIGH confidence repository mismatch', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                status: 'in_progress',
+                uncertainties: [{
+                    topic: 'Repository mismatch',
+                    assumption: 'Task designed for repo A but running in repo B',
+                    confidence: 'HIGH',
+                }],
+            }));
+
+            const result = isEffectivelyBlocked('/test/execution.json');
+
+            expect(result.blocked).toBe(true);
+            expect(result.reason).toContain('repository mismatch');
+        });
+
+        test('should return blocked:true when all phase items have Skipped evidence', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                status: 'in_progress',
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Phase 1',
+                        items: [
+                            { description: 'Item 1', completed: true, evidence: 'Skipped - repository mismatch' },
+                            { description: 'Item 2', completed: true, evidence: 'Skipped - cannot proceed' },
+                        ],
+                    },
+                    {
+                        id: 2,
+                        name: 'Phase 2',
+                        items: [
+                            { description: 'Item 3', completed: true, evidence: 'Skipped - wrong repo' },
+                        ],
+                    },
+                ],
+            }));
+
+            const result = isEffectivelyBlocked('/test/execution.json');
+
+            expect(result.blocked).toBe(true);
+            expect(result.reason).toContain('all phase items were skipped');
+        });
+
+        test('should return blocked:false when phases have real work done', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                status: 'in_progress',
+                phases: [
+                    {
+                        id: 1,
+                        name: 'Phase 1',
+                        items: [
+                            { description: 'Item 1', completed: true, evidence: 'Created file.js' },
+                            { description: 'Item 2', completed: true, evidence: 'Modified config.json' },
+                        ],
+                    },
+                ],
+            }));
+
+            const result = isEffectivelyBlocked('/test/execution.json');
+
+            expect(result).toEqual({ blocked: false, reason: null });
+        });
+
+        test('should return blocked:false for normal in_progress task', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                status: 'in_progress',
+                phases: [],
+            }));
+
+            const result = isEffectivelyBlocked('/test/execution.json');
+
+            expect(result).toEqual({ blocked: false, reason: null });
+        });
+
+        test('should return blocked:false on JSON parse error', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('invalid json');
+
+            const result = isEffectivelyBlocked('/test/execution.json');
+
+            expect(result).toEqual({ blocked: false, reason: null });
+        });
+    });
+
+    describe('canProceedWithBlockedCriteria', () => {
+        const mockCriteriaRelaxation = require('../steps/step5/validators/criteria-relaxation');
+
+        test('should return canProceed:false when file does not exist', () => {
+            fs.existsSync.mockReturnValue(false);
+
+            const result = canProceedWithBlockedCriteria('/test/execution.json');
+
+            expect(result.canProceed).toBe(false);
+            expect(result.summary).toBe('execution.json not found');
+        });
+
+        test('should call criteria-relaxation module with parsed execution', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({
+                successCriteria: [{ criterion: 'Test', passed: true }],
+            }));
+            mockCriteriaRelaxation.canProceedWithBlockedCriteria.mockReturnValue({
+                canProceed: true,
+                passedCount: 1,
+                blockedCount: 0,
+                summary: 'All 1 criteria passed',
+            });
+
+            const result = canProceedWithBlockedCriteria('/test/execution.json');
+
+            expect(mockCriteriaRelaxation.canProceedWithBlockedCriteria).toHaveBeenCalled();
+            expect(result.canProceed).toBe(true);
+        });
+
+        test('should handle JSON parse errors', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue('invalid json');
+
+            const result = canProceedWithBlockedCriteria('/test/execution.json');
+
+            expect(result.canProceed).toBe(false);
+            expect(result.summary).toContain('Failed to check criteria');
+        });
+
+        test('should handle module errors', () => {
+            fs.existsSync.mockReturnValue(true);
+            fs.readFileSync.mockReturnValue(JSON.stringify({ successCriteria: [] }));
+            mockCriteriaRelaxation.canProceedWithBlockedCriteria.mockImplementation(() => {
+                throw new Error('Module error');
+            });
+
+            const result = canProceedWithBlockedCriteria('/test/execution.json');
+
+            expect(result.canProceed).toBe(false);
+            expect(result.summary).toContain('Failed to check criteria');
+        });
+    });
+
+    describe('shouldEnableAutoAdjustMode', () => {
+        test('should return false for attempts <= threshold', () => {
+            expect(shouldEnableAutoAdjustMode(1)).toBe(false);
+            expect(shouldEnableAutoAdjustMode(3)).toBe(false);
+            expect(shouldEnableAutoAdjustMode(5)).toBe(false);
+        });
+
+        test('should return true for attempts > threshold', () => {
+            expect(shouldEnableAutoAdjustMode(6)).toBe(true);
+            expect(shouldEnableAutoAdjustMode(10)).toBe(true);
+            expect(shouldEnableAutoAdjustMode(20)).toBe(true);
+        });
+
+        test('should use custom threshold', () => {
+            expect(shouldEnableAutoAdjustMode(3, 2)).toBe(true);
+            expect(shouldEnableAutoAdjustMode(3, 5)).toBe(false);
+            expect(shouldEnableAutoAdjustMode(10, 10)).toBe(false);
+            expect(shouldEnableAutoAdjustMode(11, 10)).toBe(true);
+        });
+
+        test('should use default threshold of 5', () => {
+            expect(shouldEnableAutoAdjustMode(5)).toBe(false);
+            expect(shouldEnableAutoAdjustMode(6)).toBe(true);
         });
     });
 });
